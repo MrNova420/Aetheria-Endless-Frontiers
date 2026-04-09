@@ -23,8 +23,7 @@ import { SpaceScene }         from './space.js';
 import { Inventory }          from './inventory.js';
 import { CraftingSystem }     from './crafting.js';
 import { AudioManager }       from './audio.js';
-import { GameHUD }             from './ui.js';
-import { getAssets }           from './assets.js';
+import { GameHUD }            from './ui.js';
 
 // ─── Game states ──────────────────────────────────────────────────────────────
 const GS = {
@@ -62,22 +61,15 @@ class Game {
     this._hud.init();
     this._setLoad(35, 'Generating galaxy…');
     this._galaxy = new Galaxy(12345);
-    this._setLoad(40, 'Loading asset manifest…');
-    this._assets = getAssets();
-    await this._assets.loadManifest();
-    this._setLoad(50, 'Downloading game assets…');
-    await this._assets.preloadAll((pct, msg) => {
-      this._setLoad(50 + Math.floor(pct * 0.2), msg);
-    });
-    this._setLoad(70, 'Creating systems…');
+    this._setLoad(45, 'Creating systems…');
     this._inventory    = new Inventory(48);
     this._crafting     = new CraftingSystem(this._inventory);
     this._audio        = new AudioManager();
-    this._setLoad(75, 'Loading star systems…');
+    this._setLoad(55, 'Loading star systems…');
     this._currentSystem = this._galaxy.getSystems()[0];
-    this._setLoad(80, 'Generating planet…');
+    this._setLoad(65, 'Generating planet…');
     this._currentPlanet = PlanetGenerator.generate(this._currentSystem.id * 7 + 0);
-    this._setLoad(87, 'Building terrain…');
+    this._setLoad(75, 'Building terrain…');
     this._setupSurface(this._currentPlanet);
     this._setLoad(90, 'Spawning player…');
     this._setupPlayer();

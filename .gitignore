@@ -1,0 +1,9 @@
+node_modules/
+tmp/
+android/
+ios/
+*.zip
+.DS_Store
+Thumbs.db
+dist/
+.env

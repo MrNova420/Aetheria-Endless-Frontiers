@@ -2,17 +2,22 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#0a0a1a" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#050d18" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="description" content="Aetheria: Endless Frontiers – Browser-based No Man's Sky inspired AAA 3D game" />
   <title>AETHERIA: Endless Frontiers</title>
   <link rel="stylesheet" href="css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet" />
 
-  <!-- Three.js r160 + addons via importmap (no build step required) -->
   <script type="importmap">
   {
     "imports": {
-      "three":                          "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-      "three/addons/":                  "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      "three":               "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+      "three/addons/":       "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
     }
   }
   </script>
@@ -21,100 +26,159 @@
 
 <!-- ═══════════════════════════ LOADING SCREEN ═══════════════════════════ -->
 <div id="loading-screen">
-  <div class="load-logo">
-    <div class="load-glyph">⬡</div>
-    <h1 class="load-title">AETHERIA</h1>
-    <p class="load-sub">ENDLESS FRONTIERS</p>
+  <div class="load-bg"></div>
+  <div class="load-content">
+    <div class="load-hexgrid"></div>
+    <div class="load-logo">
+      <div class="load-glyph">⬡</div>
+      <h1 class="load-title">AETHERIA</h1>
+      <div class="load-sub-wrap">
+        <span class="load-line"></span>
+        <p class="load-sub">ENDLESS FRONTIERS</p>
+        <span class="load-line"></span>
+      </div>
+    </div>
+    <div class="load-bar-container">
+      <div class="load-bar-track">
+        <div class="load-bar" id="loading-bar"></div>
+        <div class="load-bar-glow"></div>
+      </div>
+      <p class="load-msg" id="loading-msg">Initialising universe…</p>
+    </div>
+    <div class="load-version">v1.0.0 | Three.js r162 | WebGL2</div>
   </div>
-  <div class="load-bar-wrap">
-    <div class="load-bar" id="loading-bar"></div>
-  </div>
-  <p class="load-msg" id="loading-msg">Initialising universe…</p>
 </div>
 
 <!-- ════════════════════════════ MAIN MENU ═══════════════════════════════ -->
 <div id="main-menu" class="hidden">
-  <div class="mm-backdrop"></div>
+  <div class="mm-bg"></div>
+  <div class="mm-particles" id="mm-particles"></div>
   <div class="mm-content">
+
     <div class="mm-logo">
-      <div class="mm-glyph">⬡</div>
-      <h1>AETHERIA</h1>
-      <p>ENDLESS FRONTIERS</p>
+      <div class="mm-glyph-ring">
+        <div class="mm-glyph">⬡</div>
+      </div>
+      <h1 class="mm-title">AETHERIA</h1>
+      <p class="mm-subtitle">ENDLESS FRONTIERS</p>
+      <div class="mm-tagline">Explore. Survive. Transcend.</div>
     </div>
 
     <!-- Class selection -->
     <div id="class-select" class="hidden">
       <h2 class="menu-heading">CHOOSE YOUR PATH</h2>
       <div class="class-cards">
+
         <div class="class-card" data-class="runekeeper">
+          <div class="class-glow runekeeper-glow"></div>
           <div class="class-icon">⚔</div>
           <h3>RUNEKEEPER</h3>
-          <p>Balanced warrior-mage. Melee runic blades fused with elemental arcana.</p>
-          <ul>
-            <li>⚡ Runic Slash</li><li>🔥 Arcane Bolt</li>
-            <li>🛡 Mana Shield</li><li>🌊 Ley Surge</li>
+          <p class="class-desc">Balanced warrior-mage fusing runic steel with elemental arcana. Versatile at any range.</p>
+          <div class="class-stats">
+            <div class="stat-bar-row"><span>COMBAT</span><div class="stat-bar"><div style="width:85%"></div></div></div>
+            <div class="stat-bar-row"><span>TECH</span><div class="stat-bar"><div style="width:50%"></div></div></div>
+            <div class="stat-bar-row"><span>SURVIVAL</span><div class="stat-bar"><div style="width:70%"></div></div></div>
+          </div>
+          <ul class="class-skills">
+            <li><span class="sk-key">Q</span> Runic Slash</li>
+            <li><span class="sk-key">E</span> Arcane Bolt</li>
+            <li><span class="sk-key">R</span> Mana Shield</li>
+            <li><span class="sk-key">F</span> Ley Surge</li>
           </ul>
-          <button class="btn-select" onclick="window.game.selectClass('runekeeper')">SELECT</button>
+          <button class="btn-select" onclick="window.game&&window.game.selectClass('runekeeper')">SELECT</button>
         </div>
-        <div class="class-card" data-class="technomancer">
+
+        <div class="class-card featured" data-class="technomancer">
+          <div class="class-glow technomancer-glow"></div>
+          <div class="class-badge">RECOMMENDED</div>
           <div class="class-icon">⚙</div>
           <h3>TECHNOMANCER</h3>
-          <p>Magitech engineer. Commands drones, overcharges systems, rewrites reality.</p>
-          <ul>
-            <li>🤖 Deploy Drone</li><li>⚡ EMP Pulse</li>
-            <li>🔋 Overcharge</li><li>🛸 Orbital Strike</li>
+          <p class="class-desc">Magitech engineer commanding drones and overcharging ancient systems. Master of the tech-wasteland.</p>
+          <div class="class-stats">
+            <div class="stat-bar-row"><span>COMBAT</span><div class="stat-bar"><div style="width:65%"></div></div></div>
+            <div class="stat-bar-row"><span>TECH</span><div class="stat-bar"><div style="width:95%"></div></div></div>
+            <div class="stat-bar-row"><span>SURVIVAL</span><div class="stat-bar"><div style="width:80%"></div></div></div>
+          </div>
+          <ul class="class-skills">
+            <li><span class="sk-key">Q</span> Deploy Drone</li>
+            <li><span class="sk-key">E</span> EMP Pulse</li>
+            <li><span class="sk-key">R</span> Overcharge</li>
+            <li><span class="sk-key">F</span> Orbital Strike</li>
           </ul>
-          <button class="btn-select" onclick="window.game.selectClass('technomancer')">SELECT</button>
+          <button class="btn-select" onclick="window.game&&window.game.selectClass('technomancer')">SELECT</button>
         </div>
+
         <div class="class-card" data-class="voidhunter">
+          <div class="class-glow voidhunter-glow"></div>
           <div class="class-icon">🌑</div>
           <h3>VOIDHUNTER</h3>
-          <p>Shadow assassin. Teleports through void rifts, harvests entropy.</p>
-          <ul>
-            <li>👁 Shadow Step</li><li>💀 Void Trap</li>
-            <li>🌀 Phase Shift</li><li>⚫ Singularity</li>
+          <p class="class-desc">Shadow assassin who teleports through void rifts and harvests entropy to fuel impossible power.</p>
+          <div class="class-stats">
+            <div class="stat-bar-row"><span>COMBAT</span><div class="stat-bar"><div style="width:95%"></div></div></div>
+            <div class="stat-bar-row"><span>TECH</span><div class="stat-bar"><div style="width:40%"></div></div></div>
+            <div class="stat-bar-row"><span>SURVIVAL</span><div class="stat-bar"><div style="width:55%"></div></div></div>
+          </div>
+          <ul class="class-skills">
+            <li><span class="sk-key">Q</span> Shadow Step</li>
+            <li><span class="sk-key">E</span> Void Trap</li>
+            <li><span class="sk-key">R</span> Phase Shift</li>
+            <li><span class="sk-key">F</span> Singularity</li>
           </ul>
-          <button class="btn-select" onclick="window.game.selectClass('voidhunter')">SELECT</button>
+          <button class="btn-select" onclick="window.game&&window.game.selectClass('voidhunter')">SELECT</button>
         </div>
-      </div>
-    </div>
 
-    <!-- Buttons -->
+      </div><!-- .class-cards -->
+      <button class="mm-btn back-btn" onclick="document.getElementById('class-select').classList.add('hidden');document.getElementById('main-buttons').classList.remove('hidden')">← BACK</button>
+    </div><!-- #class-select -->
+
+    <!-- Main buttons -->
     <div id="main-buttons">
-      <button class="mm-btn primary" id="btn-new-game">NEW GAME</button>
-      <button class="mm-btn" id="btn-controls">CONTROLS</button>
+      <button class="mm-btn primary" id="btn-new-game">▶  NEW GAME</button>
+      <button class="mm-btn" id="btn-controls">⌨  CONTROLS</button>
     </div>
 
-    <!-- Controls info -->
+    <!-- Controls panel -->
     <div id="controls-panel" class="hidden">
       <h2 class="menu-heading">CONTROLS</h2>
       <div class="controls-grid">
-        <div class="ctrl-row"><span>W A S D</span><span>Move</span></div>
-        <div class="ctrl-row"><span>Mouse</span><span>Look / Aim</span></div>
-        <div class="ctrl-row"><span>Left Click</span><span>Basic Attack</span></div>
-        <div class="ctrl-row"><span>Q</span><span>Ability 1</span></div>
-        <div class="ctrl-row"><span>E</span><span>Ability 2</span></div>
-        <div class="ctrl-row"><span>R</span><span>Ability 3</span></div>
-        <div class="ctrl-row"><span>F</span><span>Ultimate</span></div>
-        <div class="ctrl-row"><span>Space</span><span>Jump</span></div>
-        <div class="ctrl-row"><span>Shift</span><span>Sprint</span></div>
-        <div class="ctrl-row"><span>Tab</span><span>Inventory</span></div>
-        <div class="ctrl-row"><span>C</span><span>Character</span></div>
-        <div class="ctrl-row"><span>Escape</span><span>Pause / Menu</span></div>
-        <div class="ctrl-row"><span>Touch L</span><span>Move Joystick</span></div>
-        <div class="ctrl-row"><span>Touch R</span><span>Look</span></div>
+        <div class="ctrl-section">MOVEMENT</div>
+        <div class="ctrl-row"><kbd>W A S D</kbd><span>Move</span></div>
+        <div class="ctrl-row"><kbd>Shift</kbd><span>Sprint</span></div>
+        <div class="ctrl-row"><kbd>Space</kbd><span>Jetpack / Jump</span></div>
+        <div class="ctrl-row"><kbd>Mouse</kbd><span>Look / Aim</span></div>
+        <div class="ctrl-section">ACTIONS</div>
+        <div class="ctrl-row"><kbd>LMB Hold</kbd><span>Mine / Attack</span></div>
+        <div class="ctrl-row"><kbd>F</kbd><span>Scan (Analysis Visor)</span></div>
+        <div class="ctrl-row"><kbd>G</kbd><span>Enter / Exit Ship</span></div>
+        <div class="ctrl-section">ABILITIES</div>
+        <div class="ctrl-row"><kbd>Q</kbd><span>Ability 1</span></div>
+        <div class="ctrl-row"><kbd>E</kbd><span>Ability 2</span></div>
+        <div class="ctrl-row"><kbd>R</kbd><span>Ability 3</span></div>
+        <div class="ctrl-row"><kbd>F</kbd><span>Ultimate</span></div>
+        <div class="ctrl-section">MENUS</div>
+        <div class="ctrl-row"><kbd>Tab</kbd><span>Inventory</span></div>
+        <div class="ctrl-row"><kbd>N</kbd><span>Crafting</span></div>
+        <div class="ctrl-row"><kbd>T</kbd><span>Technology</span></div>
+        <div class="ctrl-row"><kbd>M</kbd><span>Galaxy Map</span></div>
+        <div class="ctrl-row"><kbd>Esc</kbd><span>Pause / Back</span></div>
+        <div class="ctrl-section">MOBILE</div>
+        <div class="ctrl-row"><span>Left Joystick</span><span>Move</span></div>
+        <div class="ctrl-row"><span>Right Swipe</span><span>Look</span></div>
+        <div class="ctrl-row"><span>Touch Buttons</span><span>Actions</span></div>
       </div>
       <button class="mm-btn" id="btn-back-ctrl">← BACK</button>
     </div>
-  </div>
-</div>
+
+  </div><!-- .mm-content -->
+</div><!-- #main-menu -->
 
 <!-- ═══════════════════════════ PAUSE MENU ════════════════════════════════ -->
-<div id="pause-menu" class="hidden">
+<div id="pause-menu" class="hidden screen-overlay">
   <div class="pause-panel">
+    <div class="pause-logo">⬡</div>
     <h2>PAUSED</h2>
-    <button class="mm-btn primary" id="btn-resume">RESUME</button>
-    <button class="mm-btn" id="btn-main-menu-from-pause">MAIN MENU</button>
+    <button class="mm-btn primary" id="btn-resume">▶  RESUME</button>
+    <button class="mm-btn" id="btn-main-menu-from-pause">⌂  MAIN MENU</button>
   </div>
 </div>
 
@@ -126,121 +190,219 @@
 <!-- ═══════════════════════════════ HUD ══════════════════════════════════ -->
 <div id="hud" class="hidden">
 
-  <!-- Biome / Location -->
-  <div id="hud-location">
-    <span id="loc-biome">Magitech Ruins</span>
-    <span id="loc-coords"></span>
+  <!-- ── TOP-LEFT: Planet / Location ── -->
+  <div class="hud-location" id="hud-location">
+    <div class="loc-icon">◈</div>
+    <div class="loc-text">
+      <span class="loc-planet" id="loc-planet">Loading…</span>
+      <span class="loc-biome"  id="loc-biome"></span>
+      <span class="loc-coords" id="loc-coords"></span>
+    </div>
   </div>
 
-  <!-- Top-right: level + XP bar -->
-  <div id="hud-level">
-    <span id="hud-level-num">Lv 1</span>
-    <div class="xp-bar-wrap"><div class="xp-bar" id="xp-bar"></div></div>
-    <span id="hud-xp-text">0 / 100 XP</span>
+  <!-- ── TOP-CENTRE: Hazard / Life Support bars ── -->
+  <div class="hud-hazard" id="hud-hazard">
+    <div class="haz-row" id="haz-lifesupport">
+      <span class="haz-icon">🌬</span>
+      <span class="haz-lbl">LIFE SUPPORT</span>
+      <div class="haz-bar-outer"><div class="haz-bar-inner ls-color" id="bar-lifesup" style="width:100%"></div></div>
+    </div>
+    <div class="haz-row" id="haz-hazard">
+      <span class="haz-icon">☢</span>
+      <span class="haz-lbl">HAZARD</span>
+      <div class="haz-bar-outer"><div class="haz-bar-inner hz-color" id="bar-hazard" style="width:0%"></div></div>
+    </div>
   </div>
 
-  <!-- Bottom-left: health + mana orbs -->
-  <div id="hud-vitals">
-    <div class="vital-orb" id="hp-orb">
-      <svg viewBox="0 0 80 80"><circle cx="40" cy="40" r="38" class="orb-bg"/><circle cx="40" cy="40" r="38" class="orb-fill hp-fill" id="hp-circle"/></svg>
-      <div class="orb-label">
-        <span id="hp-val">100</span>
-        <span class="orb-sub">HP</span>
+  <!-- ── TOP-RIGHT: Level + XP ── -->
+  <div class="hud-level-box" id="hud-level">
+    <div class="lvl-class" id="lvl-class">EXPLORER</div>
+    <div class="lvl-num" id="lvl-num">Lv 1</div>
+    <div class="xp-bar-track"><div class="xp-bar-fill" id="xp-bar"></div></div>
+    <div class="xp-txt" id="xp-txt">0 / 100 XP</div>
+  </div>
+
+  <!-- ── COMPASS (top-centre-right) ── -->
+  <div class="hud-compass-wrap">
+    <div class="compass-strip" id="compass-strip">
+      <span>N</span><span>NE</span><span>E</span><span>SE</span>
+      <span>S</span><span>SW</span><span>W</span><span>NW</span>
+      <span>N</span><span>NE</span><span>E</span><span>SE</span>
+    </div>
+    <div class="compass-needle">▾</div>
+  </div>
+
+  <!-- ── BOTTOM-LEFT: Vitals ── -->
+  <div class="hud-vitals" id="hud-vitals">
+
+    <!-- HP Arc -->
+    <div class="vital-ring-wrap">
+      <svg class="vital-ring" viewBox="0 0 90 90">
+        <circle cx="45" cy="45" r="36" class="ring-track"/>
+        <circle cx="45" cy="45" r="36" class="ring-fill ring-hp" id="ring-hp"
+          stroke-dasharray="188" stroke-dashoffset="0"/>
+      </svg>
+      <div class="ring-inner">
+        <span class="ring-icon">❤</span>
+        <span class="ring-val" id="hp-val">100</span>
       </div>
     </div>
-    <div class="vital-orb" id="mp-orb">
-      <svg viewBox="0 0 80 80"><circle cx="40" cy="40" r="38" class="orb-bg"/><circle cx="40" cy="40" r="38" class="orb-fill mp-fill" id="mp-circle"/></svg>
-      <div class="orb-label">
-        <span id="mp-val">100</span>
-        <span class="orb-sub">MP</span>
+
+    <!-- Shield Arc -->
+    <div class="vital-ring-wrap">
+      <svg class="vital-ring" viewBox="0 0 90 90">
+        <circle cx="45" cy="45" r="36" class="ring-track"/>
+        <circle cx="45" cy="45" r="36" class="ring-fill ring-sh" id="ring-sh"
+          stroke-dasharray="188" stroke-dashoffset="0"/>
+      </svg>
+      <div class="ring-inner">
+        <span class="ring-icon">🛡</span>
+        <span class="ring-val" id="sh-val">80</span>
       </div>
     </div>
+
+    <!-- Jetpack vertical bar -->
+    <div class="jetpack-column">
+      <div class="jp-icon">⚡</div>
+      <div class="jp-track">
+        <div class="jp-fill" id="jp-fill" style="height:100%"></div>
+      </div>
+      <div class="jp-lbl">JET</div>
+    </div>
+
+  </div><!-- .hud-vitals -->
+
+  <!-- ── BOTTOM-CENTRE: Quick-slots ── -->
+  <div class="quick-bar" id="quick-bar">
+    <div class="q-slot" id="q0"><div class="q-icon"></div><div class="q-key">1</div><div class="q-qty"></div></div>
+    <div class="q-slot" id="q1"><div class="q-icon"></div><div class="q-key">2</div><div class="q-qty"></div></div>
+    <div class="q-slot" id="q2"><div class="q-icon"></div><div class="q-key">3</div><div class="q-qty"></div></div>
+    <div class="q-slot" id="q3"><div class="q-icon"></div><div class="q-key">4</div><div class="q-qty"></div></div>
+    <div class="q-slot" id="q4"><div class="q-icon"></div><div class="q-key">5</div><div class="q-qty"></div></div>
   </div>
 
-  <!-- Bottom-centre: skill bar -->
-  <div id="skill-bar">
-    <div class="skill-slot" id="sk-attack">
-      <div class="skill-icon">⚔</div>
-      <div class="skill-key">LMB</div>
-      <div class="skill-cd hidden" id="cd-attack"></div>
-    </div>
-    <div class="skill-slot" id="sk-q">
-      <div class="skill-icon" id="sk-q-icon">Q</div>
-      <div class="skill-key">Q</div>
-      <div class="skill-cd hidden" id="cd-q"></div>
-    </div>
-    <div class="skill-slot" id="sk-e">
-      <div class="skill-icon" id="sk-e-icon">E</div>
-      <div class="skill-key">E</div>
-      <div class="skill-cd hidden" id="cd-e"></div>
-    </div>
-    <div class="skill-slot" id="sk-r">
-      <div class="skill-icon" id="sk-r-icon">R</div>
-      <div class="skill-key">R</div>
-      <div class="skill-cd hidden" id="cd-r"></div>
-    </div>
-    <div class="skill-slot ultimate" id="sk-f">
-      <div class="skill-icon" id="sk-f-icon">F</div>
-      <div class="skill-key">F</div>
-      <div class="skill-cd hidden" id="cd-f"></div>
-    </div>
-  </div>
-
-  <!-- Bottom-right: minimap -->
-  <div id="minimap-wrap">
+  <!-- ── BOTTOM-RIGHT: Minimap ── -->
+  <div class="minimap-wrap" id="minimap-wrap">
     <canvas id="minimap" width="160" height="160"></canvas>
-    <div id="minimap-label">MAP</div>
+    <div class="mm-label">▣ MAP</div>
   </div>
 
-  <!-- Notification feed -->
-  <div id="notifications"></div>
+  <!-- ── CROSSHAIR ── -->
+  <div class="crosshair" id="crosshair">
+    <div class="ch-h"></div><div class="ch-v"></div>
+    <div class="ch-dot"></div>
+  </div>
 
-  <!-- Damage numbers container -->
-  <div id="dmg-numbers"></div>
+  <!-- ── INTERACTION PROMPT ── -->
+  <div class="interact-prompt hidden" id="interact-prompt">⬡ Press G</div>
 
-  <!-- Boss health bar (hidden by default) -->
-  <div id="boss-bar" class="hidden">
-    <div class="boss-name" id="boss-name">BOSS</div>
-    <div class="boss-bar-wrap">
-      <div class="boss-bar-fill" id="boss-bar-fill"></div>
+  <!-- ── MINING PROGRESS ── -->
+  <div class="mine-ring hidden" id="mine-ring">
+    <svg viewBox="0 0 60 60">
+      <circle cx="30" cy="30" r="24" class="mine-track"/>
+      <circle cx="30" cy="30" r="24" class="mine-fill" id="mine-arc"
+        stroke-dasharray="150" stroke-dashoffset="150"/>
+    </svg>
+    <div class="mine-icon">⛏</div>
+  </div>
+
+  <!-- ── SCAN RING ── -->
+  <div class="scan-ring hidden" id="scan-ring">
+    <div class="scan-wave"></div>
+    <div class="scan-wave" style="animation-delay:0.4s"></div>
+    <div class="scan-wave" style="animation-delay:0.8s"></div>
+  </div>
+
+  <!-- ── DISCOVERY POPUP ── -->
+  <div class="discovery hidden" id="discovery">
+    <div class="disc-icon">📡</div>
+    <div class="disc-content">
+      <div class="disc-label">NEW DISCOVERY</div>
+      <div class="disc-name" id="disc-name">Unknown Entity</div>
     </div>
   </div>
+
+  <!-- ── BOSS BAR ── -->
+  <div class="boss-bar hidden" id="boss-bar">
+    <div class="boss-name" id="boss-name">BOSS</div>
+    <div class="boss-track"><div class="boss-fill" id="boss-fill" style="width:100%"></div></div>
+  </div>
+
+  <!-- ── FLIGHT HUD (ship / space mode) ── -->
+  <div class="flight-hud hidden" id="flight-hud">
+    <div class="fhud-row"><span class="fhud-lbl">SPD</span><span class="fhud-val" id="spd-val">0 m/s</span></div>
+    <div class="fhud-row"><span class="fhud-lbl">ALT</span><span class="fhud-val" id="alt-val">0 m</span></div>
+    <div class="fhud-row"><span class="fhud-lbl">MODE</span><span class="fhud-val" id="mode-val">SURFACE</span></div>
+  </div>
+
+  <!-- ── NOTIFICATIONS ── -->
+  <div class="notifications" id="notifications"></div>
+
+  <!-- ── DAMAGE NUMBERS ── -->
+  <div class="dmg-layer" id="dmg-layer"></div>
 
 </div><!-- #hud -->
 
 <!-- ══════════════════════════ INVENTORY SCREEN ══════════════════════════ -->
-<div id="inventory-screen" class="hidden screen-overlay">
-  <div class="screen-panel">
-    <h2>INVENTORY</h2>
-    <div id="inv-grid"></div>
-    <button class="mm-btn" id="btn-close-inv">CLOSE (Tab)</button>
+<div id="inventory-screen" class="screen-overlay hidden">
+  <div class="screen-panel inv-panel">
+    <div class="panel-header">
+      <span class="panel-icon">⬡</span>
+      <h2>EXOSUIT INVENTORY</h2>
+      <button class="panel-close" id="btn-close-inv">✕</button>
+    </div>
+    <div class="inv-body">
+      <div class="inv-equip-col" id="inv-equip">
+        <div class="equip-label">EQUIPMENT</div>
+        <div class="equip-slot" data-slot="weapon">⚔ Weapon</div>
+        <div class="equip-slot" data-slot="helmet">⛑ Helmet</div>
+        <div class="equip-slot" data-slot="chest">🦺 Chest</div>
+        <div class="equip-slot" data-slot="legs">👖 Legs</div>
+        <div class="equip-slot" data-slot="ship">🚀 Ship</div>
+      </div>
+      <div id="inv-grid" class="inv-grid"></div>
+    </div>
+    <div class="panel-hint">TAB – Close &nbsp;|&nbsp; Click – Select &nbsp;|&nbsp; Drag – Move</div>
   </div>
 </div>
 
 <!-- ════════════════════════ CHARACTER SCREEN ════════════════════════════ -->
-<div id="char-screen" class="hidden screen-overlay">
+<div id="char-screen" class="screen-overlay hidden">
   <div class="screen-panel char-panel">
-    <h2>CHARACTER</h2>
-    <div class="char-layout">
-      <div id="char-equip"></div>
-      <div id="char-stats"></div>
+    <div class="panel-header">
+      <span class="panel-icon">⬡</span>
+      <h2>CHARACTER</h2>
+      <button class="panel-close" id="btn-close-char">✕</button>
     </div>
-    <button class="mm-btn" id="btn-close-char">CLOSE (C)</button>
+    <div id="char-stats-grid"></div>
   </div>
 </div>
 
 <!-- ══════════════════════ MOBILE TOUCH CONTROLS ════════════════════════ -->
 <div id="touch-controls" class="hidden">
+  <!-- Left joystick -->
   <div id="joystick-zone">
-    <div id="joystick-base"><div id="joystick-thumb"></div></div>
+    <div id="joystick-base">
+      <div id="joystick-thumb"></div>
+    </div>
   </div>
+  <!-- Right-side action buttons -->
   <div id="touch-buttons">
-    <button class="touch-btn" id="tb-attack">⚔</button>
-    <button class="touch-btn" id="tb-q">Q</button>
-    <button class="touch-btn" id="tb-e">E</button>
-    <button class="touch-btn" id="tb-r">R</button>
-    <button class="touch-btn ultimate" id="tb-f">F</button>
-    <button class="touch-btn" id="tb-jump">↑</button>
+    <button class="touch-btn red"    id="tb-attack">⚔</button>
+    <button class="touch-btn blue"   id="tb-q">Q</button>
+    <button class="touch-btn green"  id="tb-e">E</button>
+    <button class="touch-btn purple" id="tb-r">R</button>
+    <button class="touch-btn gold ultimate" id="tb-f">F</button>
+    <button class="touch-btn grey"   id="tb-jump">↑</button>
+    <button class="touch-btn grey"   id="tb-scan">⊙</button>
+    <button class="touch-btn grey"   id="tb-enter-ship">🚀</button>
+  </div>
+  <!-- Top mobile buttons -->
+  <div id="touch-menu-bar">
+    <button class="touch-menu-btn" onclick="window.game&&window.game._toggleInventory()">⬡ INV</button>
+    <button class="touch-menu-btn" onclick="window.game&&window.game._toggleCrafting()">⚙ CRAFT</button>
+    <button class="touch-menu-btn" onclick="window.game&&window.game._toggleGalaxyMap()">🌌 MAP</button>
+    <button class="touch-menu-btn" onclick="window.game&&window.game._onEsc()">⏸</button>
   </div>
 </div>
 
