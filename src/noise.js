@@ -68,6 +68,11 @@ export class SimplexNoise {
     return 70 * (n0 + n1 + n2);   // returns [-1, 1]
   }
 
+  /** Fractional Brownian Motion convenience method – delegates to the standalone fbm(). */
+  fbm2(x, y, octaves = 6, persistence = 0.5, lacunarity = 2.0) {
+    return fbm(this, x, y, octaves, persistence, lacunarity);
+  }
+
   /** 3-D simplex noise → [-1, 1] */
   noise3D(xin, yin, zin) {
     const F3 = 1 / 3, G3 = 1 / 6;
