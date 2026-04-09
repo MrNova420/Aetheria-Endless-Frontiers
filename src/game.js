@@ -25,6 +25,7 @@ import { CraftingSystem }     from './crafting.js';
 import { AudioManager }       from './audio.js';
 import { GameHUD }             from './ui.js';
 import { getAssets }           from './assets.js';
+import { WeatherSystem }       from './weather.js';
 
 // ─── Game states ──────────────────────────────────────────────────────────────
 const GS = {
@@ -49,6 +50,10 @@ class Game {
     this._currentSystem = null;
     this._loadProgress  = 0;
     this._saveData      = null;
+    this._autoSaveTimer = 0;
+    this._combatTimer   = 0;
+    this._scanCooldown  = 0;
+    this._weather       = null;
   }
 
   // ─── Async init ─────────────────────────────────────────────────────────────
@@ -181,6 +186,9 @@ class Game {
     // Planet atmosphere sky
     this._atmosphere = new PlanetAtmosphere(this._scene, planet);
 
+    // Weather system
+    this._weather = new WeatherSystem(this._scene, planet);
+
     // Space scene (hidden until leaving atmosphere)
     this._spaceScene = new SpaceScene(this._scene, this._galaxy);
     this._spaceScene.enterSystem(this._currentSystem);
@@ -193,6 +201,7 @@ class Game {
     if (this._creatures) { this._creatures.dispose();  this._creatures = null; }
     if (this._mining)    { this._mining.dispose();     this._mining    = null; }
     if (this._atmosphere){ this._atmosphere.dispose(); this._atmosphere= null; }
+    if (this._weather)   { this._weather.dispose();    this._weather   = null; }
   }
 
   _setSpaceVisible(visible) {
@@ -257,6 +266,8 @@ class Game {
       if (e.code === 'KeyM')          this._toggleGalaxyMap();
       if (e.code === 'KeyG' && this._state === GS.PLANET_SURFACE) this._tryEnterShip();
       if (e.code === 'KeyG' && this._state === GS.SHIP_ATM)       this._tryExitShip();
+      if (e.code === 'KeyP')          this._saveGame();
+      if (e.code === 'KeyO')          this._loadGame();
     });
 
     document.addEventListener('keyup', e => { keys[e.code] = false; });
@@ -590,17 +601,51 @@ class Game {
     if (this._creatures) this._creatures.update(dt, pos, this._terrain ? (x,z) => this._terrain.getHeightAt(x,z) : null);
     if (this._mining)    this._mining.update(dt, pos, inp.mine, null, this._terrain ? (x,z) => this._terrain.getHeightAt(x,z) : null);
 
+    // Weather
+    if (this._weather) {
+      this._weather.update(dt, pos);
+      this._hud.setWeather(this._weather.getWeatherName(), this._weather.getWindStrength());
+    }
+
     // Player
     this._player.update(dt, inp, this._terrain, this._mining);
 
     // Ship idle
     this._ship?.update(dt, { shipThrust:0,shipYaw:0,shipPitch:0 }, this._terrain);
 
+    // Creature combat – hostile creatures deal damage to player
+    this._combatTimer += dt;
+    if (this._combatTimer >= 0.5 && this._creatures) {
+      this._combatTimer = 0;
+      const nearby = this._creatures.getNearbyCreatures(pos, 4);
+      for (const cr of nearby) {
+        if (cr.genome?.aggression === 'hostile' && cr.state === 3 /* ATTACKING */) {
+          const dmg = cr.genome.bodySize * 8;
+          const actual = this._player.applyDamage(dmg, 'creature');
+          if (actual > 0) {
+            this._hud.showNotification(`⚔ Attacked! −${Math.floor(actual)} HP`, 'warn', 1500);
+          }
+        }
+      }
+    }
+
+    // Scanner – F key
+    this._scanCooldown -= dt;
+    if (inp.scan && this._scanCooldown <= 0) {
+      this._scanCooldown = 2.5;
+      this._doScan(pos);
+    }
+
     // Life support drain in hazardous environments
     if (this._currentPlanet) {
       const haz = (this._currentPlanet.toxicity || 0) + (this._currentPlanet.radiation || 0);
       if (haz > 0.3) this._player.drainLifeSupport(haz * 2 * dt);
       else           this._player.refillLifeSupport(5 * dt);
+    }
+
+    // Hazard overlay
+    if (this._currentPlanet) {
+      this._hud.updateHazardOverlay(this._currentPlanet.hazardType, this._currentPlanet);
     }
 
     // Player death
@@ -611,6 +656,13 @@ class Game {
 
     // Day/night cycle
     this._updateDayNight(dt);
+
+    // Auto-save every 60 s
+    this._autoSaveTimer += dt;
+    if (this._autoSaveTimer >= 60) {
+      this._autoSaveTimer = 0;
+      this._saveGame(true);
+    }
   }
 
   _tickShip(dt) {
@@ -677,6 +729,89 @@ class Game {
     this._ambient.intensity = 0.15 + dayFactor * 0.4;
     this._sun.intensity     = 0.4  + dayFactor * 1.1;
     if (this._atmosphere) this._atmosphere.update(dt, this._sun.position.clone().normalize(), new THREE.Vector3());
+  }
+
+  // ─── Scanner ─────────────────────────────────────────────────────────────────
+  _doScan(playerPos) {
+    const SCAN_RANGE = 30;
+    const lines = [];
+
+    // Planet summary
+    if (this._currentPlanet) {
+      const p = this._currentPlanet;
+      lines.push(`🌍 ${p.name} · ${p.type}`);
+      lines.push(`🌡 ${p.temperature?.toFixed(0) ?? '?'}°C  ☢ RAD ${((p.radiation||0)*100).toFixed(0)}%  ☣ TOX ${((p.toxicity||0)*100).toFixed(0)}%`);
+      if (this._weather) lines.push(`🌤 Weather: ${this._weather.getWeatherName()}`);
+    }
+
+    // Nearby creatures
+    if (this._creatures) {
+      const crs = this._creatures.getNearbyCreatures(playerPos, SCAN_RANGE);
+      if (crs.length > 0) {
+        lines.push(`──── Fauna (${crs.length} detected) ────`);
+        const shown = crs.slice(0, 3);
+        for (const cr of shown) {
+          const g = cr.genome;
+          const legs = g.legCount === 0 ? 'Slitherer' : `${g.legCount}-legged`;
+          const beh  = g.aggression === 'hostile' ? '⚠ Hostile' : g.aggression === 'curious' ? '🔍 Curious' : '✓ Passive';
+          const biol = g.isBiolum ? ' [Bioluminescent]' : '';
+          lines.push(`  • ${legs} · HP ${g.maxHp} · ${beh}${biol}`);
+        }
+        if (crs.length > 3) lines.push(`  …and ${crs.length - 3} more`);
+      } else {
+        lines.push('  No fauna in range.');
+      }
+    }
+
+    // Nearby resources
+    if (this._mining) {
+      const nodes = this._mining.getNodesNear(playerPos, SCAN_RANGE);
+      if (nodes.length > 0) {
+        lines.push(`──── Resources (${nodes.length} detected) ────`);
+        // Group by type
+        const counts = {};
+        for (const n of nodes) counts[n.resourceType] = (counts[n.resourceType] || 0) + 1;
+        for (const [type, cnt] of Object.entries(counts)) {
+          lines.push(`  • ${type} ×${cnt}`);
+        }
+      }
+    }
+
+    this._hud.showScanResults(lines);
+  }
+
+  // ─── Save / Load ─────────────────────────────────────────────────────────────
+  _saveGame(silent = false) {
+    try {
+      const data = {
+        version: 1,
+        systemId: this._currentSystem?.id,
+        planetSeed: this._currentPlanet?.seed,
+        planetType: this._currentPlanet?.type,
+        dayTime: this._dayTime || 0,
+        player: this._player?.serializeState(),
+        inventory: this._inventory?.serialize(),
+      };
+      localStorage.setItem('aetheria_save', JSON.stringify(data));
+      if (!silent) this._hud.showNotification('💾 Game saved', 'info', 2000);
+    } catch (e) {
+      console.warn('Save failed:', e);
+    }
+  }
+
+  _loadGame() {
+    try {
+      const raw = localStorage.getItem('aetheria_save');
+      if (!raw) { this._hud.showNotification('No save found', 'warn', 2000); return; }
+      const data = JSON.parse(raw);
+      if (data.player && this._player) this._player.loadState(data.player);
+      if (data.inventory && this._inventory) this._inventory.deserialize(data.inventory);
+      if (data.dayTime != null) this._dayTime = data.dayTime;
+      this._hud.showNotification('💾 Game loaded', 'info', 2000);
+    } catch (e) {
+      console.warn('Load failed:', e);
+      this._hud.showNotification('Load failed', 'error', 2000);
+    }
   }
 }
 

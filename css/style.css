@@ -970,6 +970,61 @@ canvas { display: block; }
   100% { r: 120; opacity: 0; }
 }
 
+/* ── Hazard vignette ─────────────────────────────────────────────────────── */
+.hazard-vignette {
+  position: fixed; inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  transition: box-shadow 0.5s ease;
+}
+
+/* ── Weather indicator ───────────────────────────────────────────────────── */
+.hazard-weather {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--col-cyan);
+  margin-left: auto;
+  letter-spacing: 0.06em;
+}
+
+/* ── Scan results panel ──────────────────────────────────────────────────── */
+.scan-panel {
+  position: absolute;
+  top: 50%; right: 20px;
+  transform: translateY(-50%);
+  background: rgba(0, 6, 18, 0.9);
+  border: 1px solid rgba(0, 220, 255, 0.5);
+  border-radius: 6px;
+  padding: 14px 18px;
+  min-width: 240px; max-width: 320px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  z-index: 30;
+  box-shadow: 0 0 20px rgba(0,180,255,0.2), inset 0 0 12px rgba(0,180,255,0.04);
+}
+.scan-title {
+  font-family: var(--font-head);
+  font-size: 0.75rem; letter-spacing: 0.15em;
+  color: var(--col-cyan);
+  text-shadow: var(--glow-cyan);
+  border-bottom: 1px solid rgba(0,220,255,0.25);
+  padding-bottom: 6px; margin-bottom: 8px;
+  text-transform: uppercase;
+}
+.scan-line {
+  font-family: var(--font-mono);
+  font-size: 0.68rem; color: var(--col-text);
+  line-height: 1.6; white-space: pre;
+}
+.scan-line:empty { height: 4px; }
+.scan-close {
+  position: absolute; top: 6px; right: 8px;
+  background: none; border: none;
+  color: rgba(0,220,255,0.5); cursor: pointer;
+  font-size: 0.85rem; padding: 2px 6px;
+}
+.scan-close:hover { color: var(--col-cyan); }
+
 /* ── Responsive – tablet ─────────────────────────────────────────────────── */
 @media (max-width: 900px) {
   .mm-class-row { gap: 10px; }

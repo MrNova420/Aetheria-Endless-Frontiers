@@ -171,6 +171,15 @@ export class GameHUD {
     hzBar.appendChild(this._el.hzBar);
     hzRow.appendChild(hzBar);
     hazard.appendChild(hzRow);
+
+    // Weather row
+    const wxRow = el('div', 'hazard-row');
+    wxRow.appendChild(el('span', 'hazard-icon', '🌤'));
+    wxRow.appendChild(el('span', 'hazard-lbl', 'WEATHER'));
+    this._el.weatherLbl  = el('span', 'hazard-weather', 'Clear');
+    wxRow.appendChild(this._el.weatherLbl);
+    hazard.appendChild(wxRow);
+
     hud.appendChild(hazard);
 
     // ── Planet / Location (top-left) ─────────────────────────────────────────
@@ -274,6 +283,14 @@ export class GameHUD {
       this._el.qslots.push({ slot, icon, qty });
     }
     hud.appendChild(qbar);
+
+    // ── Hazard vignette (full-screen overlay for environmental effects) ───────
+    this._el.vignette = el('div', 'hazard-vignette');
+    hud.appendChild(this._el.vignette);
+
+    // ── Scan results panel ────────────────────────────────────────────────────
+    this._el.scanPanel = el('div', 'scan-panel hidden');
+    hud.appendChild(this._el.scanPanel);
 
     // ── Scanning ring ─────────────────────────────────────────────────────────
     this._el.scanRing = el('div', 'scan-ring hidden');
@@ -718,6 +735,57 @@ export class GameHUD {
   // ─── Analysis popup ───────────────────────────────────────────────────────────
   showAnalysis(entity) {
     this.showNotification(`📡 ${entity.name || 'Unknown Entity'} – SCANNED`, 'scan', 4000);
+  }
+
+  // ─── Weather indicator ────────────────────────────────────────────────────────
+  setWeather(name, windStrength) {
+    if (!this._el.weatherLbl) return;
+    const icons = {
+      Clear: '☀', Rain: '🌧', Storm: '⛈', Snow: '🌨', Blizzard: '❄',
+      Sandstorm: '🌪', 'Toxic Fog': '☁', Aurora: '✨',
+    };
+    const icon = icons[name] || '🌤';
+    this._el.weatherLbl.textContent = `${icon} ${name}` + (windStrength > 1.5 ? ` · Wind ${windStrength.toFixed(1)}` : '');
+  }
+
+  // ─── Hazard vignette overlay ──────────────────────────────────────────────────
+  updateHazardOverlay(hazardType, planet) {
+    if (!this._el.vignette) return;
+    const HAZARD_COLORS = {
+      heat:      'rgba(200, 60, 0,',
+      cold:      'rgba(0, 80, 200,',
+      toxic:     'rgba(50, 180, 0,',
+      radiation: 'rgba(180, 220, 0,',
+      exotic:    'rgba(120, 0, 200,',
+    };
+    const col = HAZARD_COLORS[hazardType];
+    const intensity = Math.min(1, ((planet?.toxicity || 0) + (planet?.radiation || 0)) * 1.5);
+    if (col && intensity > 0.05) {
+      const pulse = 0.03 + Math.abs(Math.sin(Date.now() * 0.002)) * 0.07;
+      this._el.vignette.style.boxShadow = `inset 0 0 120px 40px ${col}${(intensity * 0.4 + pulse).toFixed(3)})`;
+    } else {
+      this._el.vignette.style.boxShadow = '';
+    }
+  }
+
+  // ─── Scan results panel ───────────────────────────────────────────────────────
+  showScanResults(lines) {
+    const panel = this._el.scanPanel;
+    if (!panel) return;
+    panel.innerHTML = '';
+    const title = el('div', 'scan-title', '📡 ANALYSIS VISOR');
+    panel.appendChild(title);
+    for (const line of lines) {
+      const row = el('div', 'scan-line', line);
+      panel.appendChild(row);
+    }
+    const close = el('button', 'scan-close', '✕');
+    close.addEventListener('click', () => panel.classList.add('hidden'));
+    panel.appendChild(close);
+    panel.classList.remove('hidden');
+    // Auto-dismiss after 8 s
+    clearTimeout(this._scanDismissTimer);
+    this._scanDismissTimer = setTimeout(() => panel.classList.add('hidden'), 8000);
   }
 
   // ─── HUD visibility ───────────────────────────────────────────────────────────
