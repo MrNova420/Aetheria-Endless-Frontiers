@@ -303,11 +303,11 @@ export class Player {
         this._miningBeam.visible = true;
         const bPos = this._miningBeam.geometry.attributes.position;
         bPos.setXYZ(0, pos.x, pos.y + 1, pos.z);
-        bPos.setXYZ(1, node.mesh.position.x, node.mesh.position.y + 0.5, node.mesh.position.z);
+        bPos.setXYZ(1, node.group.position.x, node.group.position.y + 0.5, node.group.position.z);
         bPos.needsUpdate = true;
         if (this._miningTimer > 0.25) {
           this._miningTimer = 0;
-          mining.mine(node.id, 5);
+          // Mining is processed in MiningSystem.update(); no additional call needed here.
         }
       } else {
         this._miningTimer = 0;

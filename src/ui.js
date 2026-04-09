@@ -488,7 +488,7 @@ export class GameHUD {
     const systems = galaxy.getSystems();
     // Find bounds
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (const s of systems) { minX=Math.min(minX,s.x); maxX=Math.max(maxX,s.x); minY=Math.min(minY,s.y); maxY=Math.max(maxY,s.y); }
+    for (const s of systems) { minX=Math.min(minX,s.position.x); maxX=Math.max(maxX,s.position.x); minY=Math.min(minY,s.position.y); maxY=Math.max(maxY,s.position.y); }
     const toScreen = (gx, gy) => ({
       sx: ((gx - minX) / (maxX - minX + 0.001)) * (w - 40) + 20,
       sy: ((gy - minY) / (maxY - minY + 0.001)) * (h - 40) + 20,
@@ -496,11 +496,11 @@ export class GameHUD {
 
     // Draw systems
     for (const sys of systems) {
-      const { sx, sy } = toScreen(sys.x, sys.y);
+      const { sx, sy } = toScreen(sys.position.x, sys.position.y);
       const isCurrent = sys.id === currentId;
       ctx.beginPath();
       ctx.arc(sx, sy, isCurrent ? 6 : 3, 0, Math.PI * 2);
-      ctx.fillStyle = isCurrent ? '#0af' : (sys.starType?.color || '#fff');
+      ctx.fillStyle = isCurrent ? '#0af' : (sys.starColor || '#fff');
       ctx.fill();
       if (isCurrent) {
         ctx.strokeStyle = '#0af';
@@ -516,7 +516,7 @@ export class GameHUD {
     // Warp range circle
     const cur = systems.find(s => s.id === currentId);
     if (cur) {
-      const { sx, sy } = toScreen(cur.x, cur.y);
+      const { sx, sy } = toScreen(cur.position.x, cur.position.y);
       ctx.setLineDash([4, 4]);
       ctx.strokeStyle = 'rgba(0,170,255,0.3)';
       ctx.lineWidth = 1;
