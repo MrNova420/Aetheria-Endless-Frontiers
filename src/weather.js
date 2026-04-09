@@ -35,10 +35,10 @@ export class WeatherSystem {
 
     this._current         = 'clear';
     this._transitionTimer = 0;
-    this._changeInterval  = 60 + Math.random() * 120; // 60–180 s between changes
+    this._changeInterval  = 60 + this._rng() * 120; // 60–180 s between changes
     this._particles       = null;
     this._lightningTimer  = 0;
-    this._ambientLight    = null;  // for lightning flash
+    this._windTime        = 0;    // accumulated time for wind direction – deterministic
     this._windVec         = new THREE.Vector3();
 
     this._rng = this._makeRng(planet.seed || 1);
@@ -92,9 +92,9 @@ export class WeatherSystem {
 
     const positions = new Float32Array(count * 3);
     for (let i = 0; i < count; i++) {
-      positions[i * 3    ] = (Math.random() - 0.5) * spread;
-      positions[i * 3 + 1] = Math.random() * height;
-      positions[i * 3 + 2] = (Math.random() - 0.5) * spread;
+      positions[i * 3    ] = (this._rng() - 0.5) * spread;
+      positions[i * 3 + 1] = this._rng() * height;
+      positions[i * 3 + 2] = (this._rng() - 0.5) * spread;
     }
 
     const geo = new THREE.BufferGeometry();
@@ -162,8 +162,9 @@ export class WeatherSystem {
     const fallSpeed = def.fallSpeed;
     const wind      = def.wind;
 
-    // Wind direction rotates slowly
-    this._windVec.set(wind * Math.cos(Date.now() * 0.0001), 0, wind * Math.sin(Date.now() * 0.0001));
+    // Wind direction rotates slowly using deterministic accumulated time
+    this._windTime += dt * 0.05;
+    this._windVec.set(wind * Math.cos(this._windTime), 0, wind * Math.sin(this._windTime));
 
     for (let i = 0; i < count; i++) {
       let x = posAttr.getX(i);
@@ -179,7 +180,7 @@ export class WeatherSystem {
       const px = playerPos.x;
       const pz = playerPos.z;
       const half = spread / 2;
-      if (y < playerPos.y - 2)     y = playerPos.y + height * Math.random();
+      if (y < playerPos.y - 2)     y = playerPos.y + this._rng() * height;
       if (x - px > half)            x -= spread;
       else if (x - px < -half)      x += spread;
       if (z - pz > half)            z -= spread;

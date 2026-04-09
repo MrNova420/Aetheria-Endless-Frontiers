@@ -40,6 +40,7 @@ export class GameHUD {
     this._notifQ  = [];
     this._notifT  = 0;
     this._state   = 'surface'; // 'surface' | 'ship' | 'space'
+    this._elapsed = 0;         // accumulated game time for frame-rate-independent effects
   }
 
   init() {
@@ -579,6 +580,7 @@ export class GameHUD {
   // ─── Main update ──────────────────────────────────────────────────────────────
   update(dt, player, planet, ship, terrain, gameState) {
     if (!player) return;
+    this._elapsed += dt;
     const stats = player.getStats();
 
     // Health arc
@@ -761,7 +763,7 @@ export class GameHUD {
     const col = HAZARD_COLORS[hazardType];
     const intensity = Math.min(1, ((planet?.toxicity || 0) + (planet?.radiation || 0)) * 1.5);
     if (col && intensity > 0.05) {
-      const pulse = 0.03 + Math.abs(Math.sin(Date.now() * 0.002)) * 0.07;
+      const pulse = 0.03 + Math.abs(Math.sin(this._elapsed * 2)) * 0.07;
       this._el.vignette.style.boxShadow = `inset 0 0 120px 40px ${col}${(intensity * 0.4 + pulse).toFixed(3)})`;
     } else {
       this._el.vignette.style.boxShadow = '';

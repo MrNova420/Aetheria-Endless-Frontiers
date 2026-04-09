@@ -160,7 +160,8 @@ function buildCreatureMesh(genome) {
 }
 
 // ─── Creature class ───────────────────────────────────────────────────────────
-const STATE = { IDLE: 0, WANDERING: 1, FLEEING: 2, ATTACKING: 3, DEAD: 4 };
+export const CREATURE_STATE = { IDLE: 0, WANDERING: 1, FLEEING: 2, ATTACKING: 3, DEAD: 4 };
+const STATE = CREATURE_STATE;
 
 class Creature {
   constructor(scene, position, genome) {

@@ -16,6 +16,7 @@ import { PlanetGenerator, PlanetAtmosphere } from './planet.js';
 import { TerrainManager }     from './terrain.js';
 import { FloraManager }       from './flora.js';
 import { CreatureManager }    from './creatures.js';
+import { CREATURE_STATE }     from './creatures.js';
 import { MiningSystem }       from './mining.js';
 import { Player }             from './player.js';
 import { Ship, FlightMode }   from './ship.js';
@@ -619,7 +620,7 @@ class Game {
       this._combatTimer = 0;
       const nearby = this._creatures.getNearbyCreatures(pos, 4);
       for (const cr of nearby) {
-        if (cr.genome?.aggression === 'hostile' && cr.state === 3 /* ATTACKING */) {
+        if (cr.genome?.aggression === 'hostile' && cr.state === CREATURE_STATE.ATTACKING) {
           const dmg = cr.genome.bodySize * 8;
           const actual = this._player.applyDamage(dmg, 'creature');
           if (actual > 0) {
