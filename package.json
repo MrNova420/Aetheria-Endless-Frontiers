@@ -1,0 +1,30 @@
+{
+  "name": "aetheria-endless-frontiers",
+  "version": "1.0.0-beta.1",
+  "description": "AAA-quality browser 3D RPG – procedural open world, No Man's Sky scale, Fantasy MMORPG systems, Tech-Wasteland aesthetic.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js 8080",
+    "assets": "node scripts/download-assets.js",
+    "assets:quick": "node scripts/download-assets.js --quick",
+    "mobile:build": "bash scripts/build-mobile.sh",
+    "cap:sync": "npx cap sync",
+    "termux": "bash setup-termux.sh"
+  },
+  "keywords": ["game", "3d", "threejs", "rpg", "procedural", "fantasy"],
+  "author": "MrNova420",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.10",
+    "@capacitor/core": "^5.7.0",
+    "@capacitor/android": "^5.7.0",
+    "@capacitor/ios": "^5.7.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^5.7.0"
+  }
+}

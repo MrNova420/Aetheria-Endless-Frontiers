@@ -1,0 +1,218 @@
+{
+  "_comment": "Aetheria: Endless Frontiers – Asset Manifest v1.0",
+  "_license": "All listed assets are CC0 / Public Domain unless noted. See LICENSE-ASSETS.md",
+
+  "sources": {
+    "kenney_space":       "https://kenney.nl/media/pages/assets/space-kit/2f8fecefde-1699457988/kenney_space-kit.zip",
+    "kenney_nature":      "https://kenney.nl/media/pages/assets/nature-kit/95cac8ca4b-1629982591/kenney_nature-kit.zip",
+    "kenney_scifi_rts":   "https://kenney.nl/media/pages/assets/sci-fi-rts/a20d2d5b11-1699457921/kenney_sci-fi-rts.zip",
+    "kenney_characters":  "https://kenney.nl/media/pages/assets/character-pack/0ee2b33a88-1699457949/kenney_character-pack.zip",
+    "kenney_rocks":       "https://kenney.nl/media/pages/assets/rock-kit/1e5e1a6c20-1699457892/kenney_rock-kit.zip",
+    "kenney_planets":     "https://kenney.nl/media/pages/assets/planets/bcbb94b0b9-1699457886/kenney_planets.zip",
+    "kenney_spaceshooter_redux": "https://kenney.nl/media/pages/assets/space-shooter-redux/0c6c9cb07e-1699457896/kenney_space-shooter-redux.zip",
+    "poly_pizza_base":    "https://poly.pizza/m/"
+  },
+
+  "models": {
+
+    "ship_explorer": {
+      "file": "assets/models/ship/explorer.glb",
+      "source": "kenney_space",
+      "sourcePath": "Models/OBJ format/craft_speederA.obj",
+      "polyPizzaId": "9Cf0QNnMOXS",
+      "fallback": "procedural",
+      "scale": [1.0, 1.0, 1.0],
+      "offset": [0, 0, 0],
+      "castShadow": true,
+      "receiveShadow": false,
+      "animations": ["idle", "boost"]
+    },
+    "ship_fighter": {
+      "file": "assets/models/ship/fighter.glb",
+      "source": "kenney_space",
+      "sourcePath": "Models/OBJ format/craft_miner.obj",
+      "fallback": "procedural",
+      "scale": [0.9, 0.9, 0.9],
+      "offset": [0, 0, 0]
+    },
+    "ship_freighter": {
+      "file": "assets/models/ship/freighter.glb",
+      "source": "kenney_space",
+      "sourcePath": "Models/OBJ format/craft_cargoA.obj",
+      "fallback": "procedural",
+      "scale": [1.3, 1.3, 1.3],
+      "offset": [0, 0, 0]
+    },
+
+    "player_explorer": {
+      "file": "assets/models/player/explorer.glb",
+      "source": "kenney_characters",
+      "sourcePath": "Models/OBJ format/character_maleAdventurer.obj",
+      "polyPizzaId": "vMBBPFUDOzH",
+      "fallback": "procedural",
+      "scale": [0.6, 0.6, 0.6],
+      "offset": [0, 0, 0],
+      "animations": ["idle", "walk", "run", "jump", "mine", "scan"]
+    },
+
+    "flora_tree_alien": {
+      "file": "assets/models/flora/alien_tree.glb",
+      "source": "kenney_nature",
+      "sourcePath": "Models/OBJ format/tree_detailed.obj",
+      "polyPizzaId": "FjQ3eMp4DyS",
+      "fallback": "procedural",
+      "scale": [1.5, 1.5, 1.5],
+      "maxInstances": 500,
+      "castShadow": true
+    },
+    "flora_crystal": {
+      "file": "assets/models/flora/crystal.glb",
+      "source": "kenney_rocks",
+      "sourcePath": "Models/OBJ format/rock_crystalSmallA.obj",
+      "fallback": "procedural",
+      "scale": [1.2, 1.8, 1.2],
+      "maxInstances": 300
+    },
+    "flora_mushroom": {
+      "file": "assets/models/flora/mushroom.glb",
+      "source": "kenney_nature",
+      "sourcePath": "Models/OBJ format/mushroom_redTall.obj",
+      "fallback": "procedural",
+      "scale": [1.2, 1.2, 1.2],
+      "maxInstances": 400
+    },
+    "flora_cactus": {
+      "file": "assets/models/flora/cactus.glb",
+      "source": "kenney_nature",
+      "sourcePath": "Models/OBJ format/cactus.obj",
+      "fallback": "procedural",
+      "scale": [1.0, 1.0, 1.0],
+      "maxInstances": 400
+    },
+    "flora_rock_a": {
+      "file": "assets/models/flora/rock_a.glb",
+      "source": "kenney_rocks",
+      "sourcePath": "Models/OBJ format/rock_largeA.obj",
+      "fallback": "procedural",
+      "scale": [1.0, 1.0, 1.0],
+      "maxInstances": 600,
+      "castShadow": true,
+      "receiveShadow": true
+    },
+    "flora_rock_b": {
+      "file": "assets/models/flora/rock_b.glb",
+      "source": "kenney_rocks",
+      "sourcePath": "Models/OBJ format/rock_largeB.obj",
+      "fallback": "procedural",
+      "scale": [0.8, 0.8, 0.8],
+      "maxInstances": 600
+    },
+    "flora_grass_patch": {
+      "file": "assets/models/flora/grass.glb",
+      "source": "kenney_nature",
+      "sourcePath": "Models/OBJ format/grass.obj",
+      "fallback": "procedural",
+      "scale": [1.0, 1.0, 1.0],
+      "maxInstances": 1000
+    },
+
+    "creature_biped": {
+      "file": "assets/models/creatures/biped.glb",
+      "fallback": "procedural",
+      "scale": [0.8, 0.8, 0.8],
+      "animations": ["idle","walk","run","attack","death"]
+    },
+    "creature_quadruped": {
+      "file": "assets/models/creatures/quadruped.glb",
+      "fallback": "procedural",
+      "scale": [1.0, 1.0, 1.0],
+      "animations": ["idle","walk","run","attack","death"]
+    },
+    "creature_flying": {
+      "file": "assets/models/creatures/flying.glb",
+      "fallback": "procedural",
+      "scale": [0.9, 0.9, 0.9],
+      "animations": ["fly","idle","attack"]
+    },
+
+    "env_space_station": {
+      "file": "assets/models/environment/space_station.glb",
+      "source": "kenney_scifi_rts",
+      "fallback": "procedural",
+      "scale": [8.0, 8.0, 8.0],
+      "offset": [0, 0, 0]
+    },
+    "env_ruins_tower": {
+      "file": "assets/models/environment/ruins_tower.glb",
+      "source": "kenney_scifi_rts",
+      "fallback": "procedural",
+      "scale": [3.0, 3.0, 3.0]
+    },
+    "env_crashed_ship": {
+      "file": "assets/models/environment/crashed_ship.glb",
+      "source": "kenney_space",
+      "sourcePath": "Models/OBJ format/craft_speederC.obj",
+      "fallback": "procedural",
+      "scale": [2.5, 2.5, 2.5]
+    },
+    "env_portal": {
+      "file": "assets/models/environment/portal.glb",
+      "fallback": "procedural",
+      "scale": [2.0, 2.0, 2.0],
+      "animations": ["spin","active"]
+    },
+    "env_monolith": {
+      "file": "assets/models/environment/monolith.glb",
+      "fallback": "procedural",
+      "scale": [1.5, 1.5, 1.5]
+    },
+
+    "resource_carbon": {
+      "file": "assets/models/environment/resource_carbon.glb",
+      "source": "kenney_nature",
+      "sourcePath": "Models/OBJ format/plant_bush2.obj",
+      "fallback": "procedural",
+      "scale": [0.8, 0.8, 0.8]
+    },
+    "resource_ferrite": {
+      "file": "assets/models/environment/resource_ferrite.glb",
+      "source": "kenney_rocks",
+      "sourcePath": "Models/OBJ format/rock_smallA.obj",
+      "fallback": "procedural",
+      "scale": [0.9, 0.9, 0.9]
+    },
+    "resource_crystal": {
+      "file": "assets/models/environment/resource_crystal.glb",
+      "source": "kenney_rocks",
+      "sourcePath": "Models/OBJ format/rock_crystalLargeA.obj",
+      "fallback": "procedural",
+      "scale": [1.1, 1.2, 1.1]
+    },
+    "resource_gold": {
+      "file": "assets/models/environment/resource_gold.glb",
+      "source": "kenney_rocks",
+      "sourcePath": "Models/OBJ format/rock_crystalLargeB.obj",
+      "fallback": "procedural",
+      "scale": [0.7, 0.9, 0.7]
+    }
+  },
+
+  "textures": {
+    "terrain_grass_albedo":   { "file": "assets/textures/terrain/grass_albedo.jpg",   "fallback": "generated", "wrap": "repeat", "repeat": [16, 16] },
+    "terrain_grass_normal":   { "file": "assets/textures/terrain/grass_normal.jpg",   "fallback": "generated", "wrap": "repeat", "repeat": [16, 16] },
+    "terrain_rock_albedo":    { "file": "assets/textures/terrain/rock_albedo.jpg",    "fallback": "generated", "wrap": "repeat", "repeat": [8, 8]  },
+    "terrain_rock_normal":    { "file": "assets/textures/terrain/rock_normal.jpg",    "fallback": "generated", "wrap": "repeat", "repeat": [8, 8]  },
+    "terrain_sand_albedo":    { "file": "assets/textures/terrain/sand_albedo.jpg",    "fallback": "generated", "wrap": "repeat", "repeat": [12, 12] },
+    "terrain_snow_albedo":    { "file": "assets/textures/terrain/snow_albedo.jpg",    "fallback": "generated", "wrap": "repeat", "repeat": [10, 10] },
+    "terrain_alien_albedo":   { "file": "assets/textures/terrain/alien_albedo.jpg",   "fallback": "generated", "wrap": "repeat", "repeat": [10, 10] },
+    "sky_stars":              { "file": "assets/textures/sky/stars.jpg",              "fallback": "generated" },
+    "sky_nebula":             { "file": "assets/textures/sky/nebula.jpg",             "fallback": "generated" },
+    "fx_particle":            { "file": "assets/textures/effects/particle.png",       "fallback": "generated" },
+    "fx_flare":               { "file": "assets/textures/effects/flare.png",          "fallback": "generated" },
+    "ui_hex_frame":           { "file": "assets/textures/ui/hex_frame.png",           "fallback": "generated" }
+  },
+
+  "audio": {
+    "_comment": "All audio is procedurally generated via Web Audio API – no files needed"
+  }
+}

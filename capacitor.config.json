@@ -1,0 +1,30 @@
+{
+  "appId": "com.aetheria.endlessfrontiers",
+  "appName": "Aetheria: Endless Frontiers",
+  "webDir": ".",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 3000,
+      "backgroundColor": "#050d18",
+      "androidSplashResourceName": "splash",
+      "splashFullScreen": true
+    },
+    "StatusBar": {
+      "style": "Dark",
+      "backgroundColor": "#050d18"
+    }
+  },
+  "android": {
+    "allowMixedContent": true,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  },
+  "ios": {
+    "contentInset": "automatic",
+    "limitsNavigationsToAppBoundDomains": true
+  }
+}
