@@ -270,7 +270,7 @@ Please keep new features modular (one file per system in `src/`).
 
 ## 📄 License
 
-- **Game code** – MIT License © 2024 MrNova420
+- **Game code** – MIT License © 2026 MrNova420
 - **Assets** – CC0 1.0 Universal (see [LICENSE-ASSETS.md](LICENSE-ASSETS.md))
 
 ---
