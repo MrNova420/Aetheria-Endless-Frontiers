@@ -9,7 +9,8 @@
     "assets": "node scripts/download-assets.js",
     "assets:quick": "node scripts/download-assets.js --quick",
     "mobile:build": "bash scripts/build-mobile.sh",
-    "cap:sync": "npx cap sync"
+    "cap:sync": "npx cap sync",
+    "termux": "bash setup-termux.sh"
   },
   "keywords": ["game", "3d", "threejs", "rpg", "procedural", "fantasy"],
   "author": "MrNova420",

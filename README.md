@@ -12,13 +12,13 @@ A No Man's Sky-inspired 3D browser RPG with procedural worlds, real-time explora
 ```bash
 npm install
 npm start
-# Open http://localhost:3000
+# Open http://localhost:8080
 ```
 
 ### Method 2 – Python fallback
 ```bash
-python3 -m http.server 3000
-# Open http://localhost:3000
+python3 -m http.server 8080
+# Open http://localhost:8080
 ```
 
 ### Method 3 – Direct file
@@ -54,6 +54,23 @@ powershell -ExecutionPolicy Bypass -File setup.ps1
 chmod +x setup.sh
 ./setup.sh
 ```
+
+---
+
+## 📱 Termux (Android Terminal)
+
+Play directly on Android using [Termux](https://f-droid.org/packages/com.termux/) — no app store needed.
+
+```bash
+# In Termux on Android
+pkg install git nodejs -y
+git clone https://github.com/MrNova420/Aetheria-Endless-Frontiers.git
+cd Aetheria-Endless-Frontiers
+bash setup-termux.sh
+```
+
+Then open **http://localhost:8080** in Chrome on the same device.  
+To play from another device on the same Wi-Fi, use the LAN IP shown in the terminal.
 
 ---
 
@@ -223,6 +240,19 @@ aetheria-endless-frontiers/
 ├── setup.bat               # Windows auto-setup
 └── setup.ps1               # PowerShell auto-setup
 ```
+
+---
+
+## 📚 Documentation
+
+| Document | Description |
+|----------|-------------|
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Architecture, module API, adding features |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System diagrams, data-flow, memory management |
+| [docs/LIMITATIONS.md](docs/LIMITATIONS.md) | Known bugs, gaps, what still needs doing |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Beta 2 → v1.0 → v2.0 feature plan |
+| [docs/MOBILE_RELEASE.md](docs/MOBILE_RELEASE.md) | iOS + Android store release guide |
+| [LICENSE-ASSETS.md](LICENSE-ASSETS.md) | CC0 asset credits |
 
 ---
 
