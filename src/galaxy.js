@@ -4,10 +4,10 @@
 import * as THREE from 'three';
 
 function seededRng(seed) {
-  let s = seed;
+  let s = (seed >>> 0) || 1;
   return function() {
     s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
-    return s / 0xFFFFFFFF;
+    return s / 0x100000000;
   };
 }
 

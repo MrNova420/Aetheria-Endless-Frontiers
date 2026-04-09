@@ -186,7 +186,10 @@ export class FloraManager {
     if (!flora) return;
     for (const g of flora) {
       this.scene.remove(g);
-      g.traverse(c => { if(c.geometry) c.geometry.dispose(); });
+      g.traverse(c => {
+        if (c.geometry) c.geometry.dispose();
+        if (c.material) c.material.dispose();
+      });
     }
     this._chunkFlora.delete(key);
   }

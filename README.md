@@ -181,7 +181,7 @@ See [LICENSE-ASSETS.md](LICENSE-ASSETS.md) for full credits.
 - 🚀 **Ship flight** – atmospheric → space → galaxy-map seamless transitions
 - 🏗️ **Crafting system** – 40+ recipes, tech upgrades, multi-step crafting chains
 - 👾 **Creatures & flora** – procedurally generated fauna and plant-life per biome
-- 🌌 **Galaxy map** – 1000+ star systems with warp travel
+- 🌌 **Galaxy map** – 100 star systems with warp travel
 - 🎒 **Inventory** – 48-slot grid with equipment slots, rarity colouring
 - 🎵 **Procedural audio** – Web Audio API synthesised SFX and ambient music
 - 📱 **Mobile ready** – full touch controls, Capacitor Android/iOS build

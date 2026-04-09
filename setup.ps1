@@ -91,7 +91,7 @@ if ($LASTEXITCODE -ne 0) {
 Write-Ok "Dependencies installed."
 
 # ── 3. Start server ──────────────────────────────────────────────────────────
-Write-Info "Starting Aetheria server on http://localhost:3000 ..."
+Write-Info "Starting Aetheria server on http://localhost:8080 ..."
 Write-Host ""
 Write-Host "  Press Ctrl+C in this window to stop the server." -ForegroundColor Yellow
 Write-Host ""
@@ -99,7 +99,7 @@ Write-Host ""
 # Open browser after a short delay
 Start-Job -ScriptBlock {
     Start-Sleep -Seconds 2
-    Start-Process "http://localhost:3000"
+    Start-Process "http://localhost:8080"
 } | Out-Null
 
 & node server.js

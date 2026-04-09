@@ -139,7 +139,7 @@ export class TerrainManager {
     return 3;
   }
 
-  update(playerWorldPos) {
+  update(playerWorldPos, dt) {
     const cs   = WORLD.CHUNK_SIZE;
     const rd   = WORLD.RENDER_DISTANCE;
     const pcx  = Math.floor(playerWorldPos.x / cs);
@@ -181,20 +181,22 @@ export class TerrainManager {
       if (!needed.has(key)) {
         this.scene.remove(data.mesh);
         data.mesh.geometry.dispose();
+        data.mesh.material.dispose();
         this.chunks.delete(key);
         if (this._floraManager) this._floraManager.removeForChunk(data.cx, data.cz);
         if (this._resourceManager && this._resourceManager.removeForChunk) {
           this._resourceManager.removeForChunk(data.cx, data.cz);
         }
         const wm = this.waterChunks.get(key);
-        if (wm) { this.scene.remove(wm); wm.geometry.dispose(); this.waterChunks.delete(key); }
+        if (wm) { this.scene.remove(wm); wm.geometry.dispose(); wm.material.dispose(); this.waterChunks.delete(key); }
       }
     }
 
     // Update water shader time
+    const frameDt = dt || 0.016;
     for (const [, wm] of this.waterChunks) {
       if (wm.material.uniforms && wm.material.uniforms.uTime) {
-        wm.material.uniforms.uTime.value += 0.016;
+        wm.material.uniforms.uTime.value += frameDt;
       }
     }
   }
@@ -210,12 +212,20 @@ export class TerrainManager {
 
   _makeRng(seed) {
     let s = (seed >>> 0) || 1;
-    return () => { s=(Math.imul(s,1664525)+1013904223)>>>0; return s/0xFFFFFFFF; };
+    return () => { s=(Math.imul(s,1664525)+1013904223)>>>0; return s/0x100000000; };
   }
 
   dispose() {
-    for (const [, data] of this.chunks) { this.scene.remove(data.mesh); data.mesh.geometry.dispose(); }
-    for (const [, wm]   of this.waterChunks) { this.scene.remove(wm); wm.geometry.dispose(); }
+    for (const [, data] of this.chunks) {
+      this.scene.remove(data.mesh);
+      data.mesh.geometry.dispose();
+      data.mesh.material.dispose();
+    }
+    for (const [, wm] of this.waterChunks) {
+      this.scene.remove(wm);
+      wm.geometry.dispose();
+      wm.material.dispose();
+    }
     this.chunks.clear();
     this.waterChunks.clear();
   }

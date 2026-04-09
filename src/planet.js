@@ -7,7 +7,7 @@ import { BIOME_COLORS, PLANET_TYPES } from './config.js';
 
 function seededRng(seed) {
   let s = (seed >>> 0) || 1;
-  return () => { s = (Math.imul(s,1664525)+1013904223)>>>0; return s/0xFFFFFFFF; };
+  return () => { s = (Math.imul(s,1664525)+1013904223)>>>0; return s/0x100000000; };
 }
 
 const PLANET_NAMES = [
@@ -33,7 +33,7 @@ const RESOURCE_WEIGHTS_BY_TYPE = {
   FROZEN:  { 'Di-Hydrogen':8, 'Pure Ferrite':6, Cobalt:5, Platinum:3, Titanium:4 },
   BURNING: { Uranium:10, Titanium:6, Gold:4, 'Ferrite Dust':5, Cobalt:3 },
   EXOTIC:  { Emeril:8, Indium:6, 'Chromatic Metal':5, Platinum:4, Gold:3 },
-  DEAD:    { Platinum:8, 'Pure Ferrite':7, Titanium:5, Cobalt:4, Cobalt:3 },
+  DEAD:    { Platinum:8, 'Pure Ferrite':7, Titanium:5, Cobalt:7 },
   OCEAN:   { Carbon:8, Oxygen:10, 'Di-Hydrogen':6, Sodium:5, Copper:4 }
 };
 
@@ -88,9 +88,12 @@ export class PlanetGenerator {
 
   static getSystemPlanets(systemSeed, systemData) {
     if (systemData && systemData.planets) {
-      return systemData.planets.map(p =>
-        PlanetGenerator.generate(p.seed || (systemSeed + Math.random()*9999)|0, p.typeOverride)
-      );
+      return systemData.planets.map((p, i) => {
+        // Use a deterministic seed derived from systemSeed + index so the same
+        // system always generates the same planets regardless of call order.
+        const planetSeed = p.seed || ((systemSeed + i * 1031) >>> 0);
+        return PlanetGenerator.generate(planetSeed, p.typeOverride);
+      });
     }
     const rng = seededRng(systemSeed);
     const count = 3 + Math.floor(rng() * 3);

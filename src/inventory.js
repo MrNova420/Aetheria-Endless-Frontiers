@@ -9,24 +9,27 @@ export class Inventory {
   }
 
   addItem(type, amount) {
-    // Try to stack into existing slot
+    const MAX_STACK = 9999;
+    // Try to stack into existing slot(s), respecting MAX_STACK per slot
     for (let i = 0; i < this.maxSlots; i++) {
       if (this.slots[i] && this.slots[i].type === type) {
-        const space = 9999;
+        const space = MAX_STACK - this.slots[i].amount;
+        if (space <= 0) continue;
         const take = Math.min(amount, space);
         this.slots[i].amount += take;
         amount -= take;
         if (amount <= 0) return 0;
       }
     }
-    // New slot
-    for (let i = 0; i < this.maxSlots; i++) {
-      if (!this.slots[i]) {
-        this.slots[i] = { type, amount };
-        return 0;
-      }
+    // Open new slot(s) for any remaining amount
+    while (amount > 0) {
+      const emptyIdx = this.slots.findIndex(s => s === null);
+      if (emptyIdx === -1) return amount; // inventory full – return overflow
+      const take = Math.min(amount, MAX_STACK);
+      this.slots[emptyIdx] = { type, amount: take };
+      amount -= take;
     }
-    return amount; // overflow
+    return 0;
   }
 
   removeItem(type, amount) {

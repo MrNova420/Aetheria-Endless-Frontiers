@@ -11,7 +11,6 @@ import * as THREE from 'three';
 import { GLTFLoader }     from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader }    from 'three/addons/loaders/DRACOLoader.js';
 import { OBJLoader }      from 'three/addons/loaders/OBJLoader.js';
-import { MTLLoader }      from 'three/addons/loaders/MTLLoader.js';
 
 // ─── Singleton ────────────────────────────────────────────────────────────────
 let _instance = null;

@@ -160,7 +160,10 @@ export class MiningSystem {
     for(const [id,node] of this.nodes){
       if(Math.abs(node.pos.x-ox)<cs && Math.abs(node.pos.z-oz)<cs){
         this.scene.remove(node.group);
-        node.group.traverse(c=>{if(c.geometry)c.geometry.dispose();});
+        node.group.traverse(c=>{
+          if(c.geometry) c.geometry.dispose();
+          if(c.material) c.material.dispose();
+        });
         this.nodes.delete(id);
       }
     }
@@ -204,7 +207,10 @@ export class MiningSystem {
           if(this.inventory) this.inventory.addItem(nearest.resourceType, take);
           if(nearest.amount<=0){
             this.scene.remove(nearest.group);
-            nearest.group.traverse(c=>{if(c.geometry)c.geometry.dispose();});
+            nearest.group.traverse(c=>{
+              if(c.geometry) c.geometry.dispose();
+              if(c.material) c.material.dispose();
+            });
             this.nodes.delete(nearest.id);
             this._respawnQueue.push({at:now+180,pos:nearest.pos.clone(),type:nearest.resourceType,amount:nearest.maxAmount||100});
             this._clearBeam();
@@ -237,7 +243,12 @@ export class MiningSystem {
   }
 
   _clearBeam(){
-    if(this._beamLine){this.scene.remove(this._beamLine);this._beamLine.geometry.dispose();this._beamLine=null;}
+    if(this._beamLine){
+      this.scene.remove(this._beamLine);
+      this._beamLine.geometry.dispose();
+      this._beamLine.material.dispose();
+      this._beamLine=null;
+    }
   }
 
   getNodesNear(pos, radius) {
@@ -252,7 +263,10 @@ export class MiningSystem {
     const node=this.nodes.get(id);
     if(!node)return;
     this.scene.remove(node.group);
-    node.group.traverse(c=>{if(c.geometry)c.geometry.dispose();});
+    node.group.traverse(c=>{
+      if(c.geometry) c.geometry.dispose();
+      if(c.material) c.material.dispose();
+    });
     this.nodes.delete(id);
   }
 
@@ -261,13 +275,16 @@ export class MiningSystem {
 
   _rng(seed){
     let s=(seed>>>0)||1;
-    return ()=>{s=(Math.imul(s,1664525)+1013904223)>>>0;return s/0xFFFFFFFF;};
+    return ()=>{s=(Math.imul(s,1664525)+1013904223)>>>0;return s/0x100000000;};
   }
 
   dispose(){
     for(const[,node] of this.nodes){
       this.scene.remove(node.group);
-      node.group.traverse(c=>{if(c.geometry)c.geometry.dispose();});
+      node.group.traverse(c=>{
+        if(c.geometry) c.geometry.dispose();
+        if(c.material) c.material.dispose();
+      });
     }
     this.nodes.clear();
     this._clearBeam();
