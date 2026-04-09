@@ -150,7 +150,6 @@ export class Player {
     this._shieldRegenTimer = 0;
     this._dodgeCooldown    = 0;
     this._scanTimer        = 0;
-    this._miningTimer      = 0;
     this.isMining          = false;
     this.isScanning        = false;
 
@@ -294,26 +293,16 @@ export class Player {
     this.isMining = false;
     this._miningBeam.visible = false;
     if (input.mine && mining) {
-      const dir = forward.clone().setY(-0.1).normalize();
       const hit = mining.getNodesNear(pos, cfg.MINING_RANGE);
       if (hit.length > 0) {
         const node = hit[0];
         this.isMining = true;
-        this._miningTimer += dt;
         this._miningBeam.visible = true;
         const bPos = this._miningBeam.geometry.attributes.position;
         bPos.setXYZ(0, pos.x, pos.y + 1, pos.z);
         bPos.setXYZ(1, node.group.position.x, node.group.position.y + 0.5, node.group.position.z);
         bPos.needsUpdate = true;
-        if (this._miningTimer > 0.25) {
-          this._miningTimer = 0;
-          // Mining is processed in MiningSystem.update(); no additional call needed here.
-        }
-      } else {
-        this._miningTimer = 0;
       }
-    } else {
-      this._miningTimer = 0;
     }
 
     // ── Scanning ─────────────────────────────────────────────────────────────
