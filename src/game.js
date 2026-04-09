@@ -588,7 +588,7 @@ class Game {
     if (this._terrain)   this._terrain.update(pos);
     if (this._flora)     this._flora.update(dt, Date.now() * 0.001);
     if (this._creatures) this._creatures.update(dt, pos, this._terrain ? (x,z) => this._terrain.getHeightAt(x,z) : null);
-    if (this._mining)    this._mining.update(dt, pos, inp.mine, null);
+    if (this._mining)    this._mining.update(dt, pos, inp.mine, null, this._terrain ? (x,z) => this._terrain.getHeightAt(x,z) : null);
 
     // Player
     this._player.update(dt, inp, this._terrain, this._mining);
