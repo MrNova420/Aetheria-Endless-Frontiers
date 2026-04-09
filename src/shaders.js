@@ -1,304 +1,494 @@
 /**
- * src/shaders.js
- * All custom GLSL shaders used throughout the game.
+ * src/shaders.js  –  Film-grade GLSL shaders for Aetheria
  */
 
-// ─── Terrain Shader ───────────────────────────────────────────────────────────
 export const TerrainShader = {
   uniforms: {
-    uTime      : { value: 0 },
-    uFogColor  : { value: null },   // THREE.Color
-    uFogDensity: { value: 0.008 },
-    uSunDir    : { value: null },   // THREE.Vector3
-    uSunColor  : { value: null },   // THREE.Color
-    // biome blend weights uploaded per-chunk
-    uBiomeWeights: { value: null }, // Float32Array[5]
+    uTime:           { value: 0 },
+    uBiomeColorLow:  { value: null },
+    uBiomeColorMid:  { value: null },
+    uBiomeColorHigh: { value: null },
+    uBiomeAccent:    { value: null },
+    uWaterLevel:     { value: 10 },
+    uHeightScale:    { value: 80 },
+    uFogColor:       { value: null },
+    uFogDensity:     { value: 0.008 },
+    uSunDir:         { value: null },
+    uSunColor:       { value: null },
+    uAmbientColor:   { value: null }
   },
-
-  vertexShader: /* glsl */`
-    varying vec3  vWorldPos;
-    varying vec3  vNormal;
+  vertexShader: `
+    varying vec3 vWorldPos;
+    varying vec3 vNormal;
     varying float vHeight;
-    varying float vSlope;
+    varying vec3 vViewDir;
+    uniform float uHeightScale;
+    uniform float uWaterLevel;
 
     void main() {
-      vec4 worldPos  = modelMatrix * vec4(position, 1.0);
-      vWorldPos      = worldPos.xyz;
-      vNormal        = normalize(normalMatrix * normal);
-      vHeight        = position.y;
-      // slope = how horizontal the normal is (0=cliff, 1=flat)
-      vSlope         = dot(vNormal, vec3(0.0,1.0,0.0));
-      gl_Position    = projectionMatrix * viewMatrix * worldPos;
+      vec4 worldPos = modelMatrix * vec4(position, 1.0);
+      vWorldPos = worldPos.xyz;
+      vNormal   = normalize(normalMatrix * normal);
+      vHeight   = position.y / uHeightScale;
+      vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+      vViewDir  = normalize(-mvPos.xyz);
+      gl_Position = projectionMatrix * mvPos;
     }
   `,
-
-  fragmentShader: /* glsl */`
+  fragmentShader: `
     precision highp float;
+    uniform float uTime;
+    uniform vec3 uBiomeColorLow;
+    uniform vec3 uBiomeColorMid;
+    uniform vec3 uBiomeColorHigh;
+    uniform vec3 uBiomeAccent;
+    uniform float uWaterLevel;
+    uniform float uHeightScale;
+    uniform vec3 uFogColor;
+    uniform float uFogDensity;
+    uniform vec3 uSunDir;
+    uniform vec3 uSunColor;
+    uniform vec3 uAmbientColor;
 
-    uniform float   uTime;
-    uniform vec3    uFogColor;
-    uniform float   uFogDensity;
-    uniform vec3    uSunDir;
-    uniform vec3    uSunColor;
-    uniform float   uBiomeWeights[5];
-
-    varying vec3  vWorldPos;
-    varying vec3  vNormal;
+    varying vec3 vWorldPos;
+    varying vec3 vNormal;
     varying float vHeight;
-    varying float vSlope;
+    varying vec3 vViewDir;
 
-    // ── Biome base colours (low / mid / high) ──
-    // 0 Magitech Ruins
-    vec3 biome0(float h) {
-      return mix(vec3(0.36,0.29,0.19), mix(vec3(0.47,0.38,0.25),vec3(0.62,0.56,0.38),h),smoothstep(0.0,0.5,h));
-    }
-    // 1 Crystal Vaults
-    vec3 biome1(float h) {
-      return mix(vec3(0.05,0.12,0.24), mix(vec3(0.10,0.20,0.38),vec3(0.16,0.31,0.54),h),smoothstep(0.0,0.5,h));
-    }
-    // 2 Tech Wasteland
-    vec3 biome2(float h) {
-      return mix(vec3(0.23,0.15,0.06), mix(vec3(0.35,0.23,0.09),vec3(0.54,0.37,0.14),h),smoothstep(0.0,0.5,h));
-    }
-    // 3 Corrupted Forest
-    vec3 biome3(float h) {
-      return mix(vec3(0.05,0.10,0.03), mix(vec3(0.08,0.16,0.06),vec3(0.12,0.23,0.09),h),smoothstep(0.0,0.5,h));
-    }
-    // 4 Floating Isles
-    vec3 biome4(float h) {
-      return mix(vec3(0.75,0.85,0.94), mix(vec3(0.66,0.78,0.91),vec3(0.56,0.72,0.87),h),smoothstep(0.0,0.5,h));
-    }
-
-    // ── Cheap procedural detail noise ──
     float hash(vec2 p) {
-      return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);
+      p = fract(p * vec2(234.34, 435.345));
+      p += dot(p, p + 34.23);
+      return fract(p.x * p.y);
+    }
+    float hash3(vec3 p) {
+      p = fract(p * vec3(0.1031, 0.1030, 0.0973));
+      p += dot(p, p.yxz + 33.33);
+      return fract((p.x + p.y) * p.z);
     }
     float valueNoise(vec2 p) {
-      vec2 i=floor(p); vec2 f=fract(p);
-      f=f*f*(3.0-2.0*f);
-      float a=hash(i), b=hash(i+vec2(1,0)), c=hash(i+vec2(0,1)), d=hash(i+vec2(1,1));
-      return mix(mix(a,b,f.x),mix(c,d,f.x),f.y);
+      vec2 i = floor(p); vec2 f = fract(p);
+      vec2 u = f*f*(3.0-2.0*f);
+      return mix(mix(hash(i),hash(i+vec2(1,0)),u.x),
+                 mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),u.x),u.y);
+    }
+    float fbm(vec2 p, int oct) {
+      float v=0.0,a=0.5,freq=1.0;
+      for(int i=0;i<8;i++){
+        if(i>=oct) break;
+        v+=a*valueNoise(p*freq);
+        a*=0.5; freq*=2.1;
+      }
+      return v;
+    }
+    float voronoi(vec2 p) {
+      vec2 g=floor(p); vec2 f=fract(p);
+      float md=8.0;
+      for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++){
+        vec2 o=vec2(x,y);
+        vec2 r=o+vec2(hash(g+o),hash(g+o+7.7))-f;
+        md=min(md,dot(r,r));
+      }
+      return sqrt(md);
+    }
+    // Triplanar blending
+    vec3 triplanar(vec3 pos, vec3 nor, float scale) {
+      vec3 w=abs(nor); w=pow(w,vec3(6.0)); w/=(w.x+w.y+w.z);
+      float xy=fbm(pos.xy*scale,5);
+      float xz=fbm(pos.xz*scale,5);
+      float yz=fbm(pos.yz*scale,5);
+      return vec3(xy*w.z+xz*w.y+yz*w.x);
     }
 
     void main() {
-      // Normalised height for gradient
-      float h = clamp(vHeight / 35.0, 0.0, 1.0);
+      vec3 N = normalize(vNormal);
+      float slope = 1.0 - abs(N.y);
+      float h = clamp(vHeight, 0.0, 1.0);
+      float worldH = vWorldPos.y;
 
-      // Base biome colour
-      vec3 col = vec3(0.0);
-      float total = 0.0;
-      for(int i=0;i<5;i++) total += uBiomeWeights[i];
-      if(total < 0.001) total = 1.0;
-      col += biome0(h) * uBiomeWeights[0];
-      col += biome1(h) * uBiomeWeights[1];
-      col += biome2(h) * uBiomeWeights[2];
-      col += biome3(h) * uBiomeWeights[3];
-      col += biome4(h) * uBiomeWeights[4];
-      col /= total;
+      // Triplanar detail
+      vec3 tp = triplanar(vWorldPos*0.05, N, 1.0);
+      float detail = tp.x;
+      float crack = voronoi(vWorldPos.xz * 0.08) * 0.5;
 
-      // Rocky cliff override on steep slopes
-      float cliff = smoothstep(0.6,0.3,vSlope);
-      col = mix(col, vec3(0.25,0.22,0.20), cliff * 0.7);
+      // Height-based biome layering
+      vec3 col;
+      float sand  = smoothstep(0.0, 0.08, h);
+      float soil  = smoothstep(0.05,0.35, h);
+      float rock  = smoothstep(0.30,0.65, h);
+      float snow  = smoothstep(0.60,0.85, h);
 
-      // Snow cap
-      float snow = smoothstep(0.72,0.85,h) * smoothstep(0.3,0.6,vSlope);
-      col = mix(col, vec3(0.92,0.94,0.98), snow);
+      col = mix(uBiomeColorLow,  uBiomeColorLow*1.3,  sand);
+      col = mix(col, uBiomeColorMid,  soil);
+      col = mix(col, uBiomeColorHigh*0.6, rock);
+      col = mix(col, vec3(0.90,0.93,0.98), snow);
 
-      // Detail noise micro-texture
-      float det  = valueNoise(vWorldPos.xz * 0.8) * 0.08
-                 + valueNoise(vWorldPos.xz * 3.0) * 0.04;
-      col += det - 0.06;
+      // Slope cliff override
+      col = mix(col, uBiomeColorHigh*0.5 + vec3(0.1), smoothstep(0.45,0.75,slope));
 
-      // Lighting – Lambert with sun
-      float diff = max(0.0, dot(vNormal, normalize(uSunDir)));
-      vec3  lit  = col * (vec3(0.18,0.20,0.28) + uSunColor * diff * 0.85);
+      // Detail variation
+      col *= 0.85 + 0.3*detail;
+      col = mix(col, uBiomeAccent*0.6, crack*0.15*(1.0-slope));
 
-      // Specular glint on crystals / water-like areas
-      vec3  halfV = normalize(normalize(uSunDir) + vec3(0,1,0));
-      float spec  = pow(max(dot(vNormal,halfV),0.0), 32.0) * uBiomeWeights[1] * 0.4;
-      lit += vec3(0.5,0.9,1.0) * spec;
+      // Lighting
+      float diff = max(dot(N, normalize(uSunDir)), 0.0);
+      vec3 H = normalize(normalize(uSunDir) + vViewDir);
+      float spec = pow(max(dot(N,H),0.0), 32.0) * (snow*0.8 + (1.0-h)*0.1);
+      vec3 lighting = uAmbientColor + uSunColor * diff + uSunColor * spec * 0.4;
+      col *= lighting;
+
+      // AO from concavity approximation
+      float ao = 0.7 + 0.3 * detail;
+      col *= ao;
 
       // Fog
-      float dist    = length(vWorldPos - cameraPosition);
-      float fogFac  = 1.0 - exp(-uFogDensity * dist * dist);
-      lit = mix(lit, uFogColor, clamp(fogFac,0.0,1.0));
+      float dist = length(vWorldPos - cameraPosition);
+      float fog = 1.0 - exp(-uFogDensity * uFogDensity * dist * dist);
+      col = mix(col, uFogColor, clamp(fog, 0.0, 0.9));
 
-      gl_FragColor = vec4(lit, 1.0);
-    }
-  `,
-};
-
-// ─── Sky / Atmosphere Shader ──────────────────────────────────────────────────
-export const SkyShader = {
-  uniforms: {
-    uSunDir     : { value: null },
-    uDayFactor  : { value: 1.0 },   // 0=night 1=day
-    uTime       : { value: 0.0 },
-  },
-
-  vertexShader: /* glsl */`
-    varying vec3 vDir;
-    void main() {
-      vDir = normalize(position);
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-
-  fragmentShader: /* glsl */`
-    precision highp float;
-    uniform vec3  uSunDir;
-    uniform float uDayFactor;
-    uniform float uTime;
-    varying vec3  vDir;
-
-    float hash(float n){ return fract(sin(n)*43758.5453); }
-    float noise(vec3 p){
-      vec3 i=floor(p); vec3 f=fract(p); f=f*f*(3.-2.*f);
-      float n=i.x+i.y*57.+i.z*113.;
-      return mix(mix(mix(hash(n),hash(n+1.),f.x),
-                     mix(hash(n+57.),hash(n+58.),f.x),f.y),
-                 mix(mix(hash(n+113.),hash(n+114.),f.x),
-                     mix(hash(n+170.),hash(n+171.),f.x),f.y),f.z);
-    }
-
-    void main() {
-      vec3  d    = normalize(vDir);
-      float up   = clamp(d.y, 0.0, 1.0);
-      float sunA = max(0.0, dot(d, normalize(uSunDir)));
-
-      // Day sky gradient
-      vec3 zenith  = mix(vec3(0.04,0.05,0.15), vec3(0.10,0.25,0.65), uDayFactor);
-      vec3 horizon = mix(vec3(0.12,0.10,0.20), vec3(0.60,0.75,0.90), uDayFactor);
-      vec3 sky     = mix(horizon, zenith, smoothstep(0.0,0.6,up));
-
-      // Sun disc
-      float sunD   = 1.0 - smoothstep(0.0, 0.02, 1.0 - sunA);
-      vec3  sunCol = mix(vec3(1.0,0.5,0.2), vec3(1.0,1.0,0.9), uDayFactor);
-      sky += sunCol * sunD * uDayFactor;
-
-      // Sun corona
-      sky += sunCol * pow(sunA, 8.0) * 0.4 * uDayFactor;
-
-      // Stars at night
-      float stars = noise(d * 180.0) * noise(d * 60.0) * 10.0;
-      stars = clamp(stars - 8.5, 0.0, 1.0);
-      sky += vec3(stars) * (1.0 - uDayFactor) * 1.5;
-
-      // Aurora at night
-      float au = noise(vec3(d.x*3.+uTime*.05, d.y*2., d.z*3.)) * (1.0-uDayFactor);
-      au *= smoothstep(0.2,0.6,up) * smoothstep(0.9,0.5,up);
-      sky += vec3(0.0,0.8,0.4) * au * 0.6;
-      sky += vec3(0.4,0.0,0.8) * au * 0.3;
-
-      // Clouds
-      float cx    = d.x/(d.y+0.2)*2.;
-      float cz    = d.z/(d.y+0.2)*2.;
-      float cloud = noise(vec3(cx+uTime*.01, 0.5, cz+uTime*.005)) * uDayFactor;
-      cloud       = smoothstep(0.52,0.75,cloud) * smoothstep(0.0,0.15,up);
-      sky = mix(sky, vec3(0.95,0.97,1.0)*uDayFactor, cloud*0.7);
-
-      gl_FragColor = vec4(sky, 1.0);
-    }
-  `,
-};
-
-// ─── Magic Particle Shader ────────────────────────────────────────────────────
-export const ParticleShader = {
-  uniforms: {
-    uTime  : { value: 0 },
-    uColor : { value: null },
-  },
-  vertexShader: /* glsl */`
-    attribute float aSize;
-    attribute float aLife;
-    varying   float vLife;
-    uniform   float uTime;
-    void main() {
-      vLife = aLife;
-      vec4 mv = modelViewMatrix * vec4(position, 1.0);
-      gl_PointSize = aSize * (300.0 / -mv.z) * aLife;
-      gl_Position  = projectionMatrix * mv;
-    }
-  `,
-  fragmentShader: /* glsl */`
-    precision mediump float;
-    uniform vec3  uColor;
-    varying float vLife;
-    void main() {
-      vec2  uv   = gl_PointCoord - 0.5;
-      float d    = length(uv);
-      float core = 1.0 - smoothstep(0.0, 0.45, d);
-      float glow = 1.0 - smoothstep(0.0, 0.5, d);
-      vec3  col  = uColor * core + uColor * glow * 0.4;
-      float a    = glow * vLife;
-      gl_FragColor = vec4(col, a);
-    }
-  `,
-};
-
-// ─── Enemy / Object Emissive Pulse Shader ────────────────────────────────────
-export const EmissivePulseShader = {
-  uniforms: {
-    uTime      : { value: 0 },
-    uBaseColor : { value: null },
-    uEmissive  : { value: null },
-    uPulseSpeed: { value: 2.0 },
-  },
-  vertexShader: /* glsl */`
-    varying vec3 vNormal;
-    void main() {
-      vNormal = normalize(normalMatrix * normal);
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: /* glsl */`
-    precision mediump float;
-    uniform float uTime;
-    uniform vec3  uBaseColor;
-    uniform vec3  uEmissive;
-    uniform float uPulseSpeed;
-    varying vec3  vNormal;
-    void main() {
-      float rim   = 1.0 - max(0.0, dot(vNormal, vec3(0.0,0.0,1.0)));
-      float pulse = (sin(uTime * uPulseSpeed) * 0.5 + 0.5);
-      vec3  col   = uBaseColor + uEmissive * (rim * 0.6 + pulse * 0.4);
       gl_FragColor = vec4(col, 1.0);
     }
-  `,
+  `
 };
 
-// ─── Water / Void Plane Shader ────────────────────────────────────────────────
+export const AtmosphereShader = {
+  uniforms: {
+    uTime:           { value: 0 },
+    uSunDir:         { value: null },
+    uSunIntensity:   { value: 2.0 },
+    uDayFactor:      { value: 1.0 },
+    uRayleighColor:  { value: null },
+    uMieColor:       { value: null },
+    uAtmosphereColor:{ value: null },
+    uCloudCoverage:  { value: 0.5 },
+    uAuroraColor:    { value: null }
+  },
+  vertexShader: `
+    varying vec3 vWorldDir;
+    void main() {
+      vWorldDir = (modelMatrix * vec4(position, 0.0)).xyz;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    precision highp float;
+    uniform float uTime;
+    uniform vec3  uSunDir;
+    uniform float uSunIntensity;
+    uniform float uDayFactor;
+    uniform vec3  uRayleighColor;
+    uniform vec3  uMieColor;
+    uniform vec3  uAtmosphereColor;
+    uniform float uCloudCoverage;
+    uniform vec3  uAuroraColor;
+    varying vec3  vWorldDir;
+
+    float hash(vec2 p){p=fract(p*vec2(234.34,435.345));p+=dot(p,p+34.23);return fract(p.x*p.y);}
+    float hash3f(vec3 p){p=fract(p*vec3(0.1031,0.1030,0.0973));p+=dot(p,p.yxz+33.33);return fract((p.x+p.y)*p.z);}
+    float valueN(vec2 p){vec2 i=floor(p);vec2 f=fract(p);vec2 u=f*f*(3.0-2.0*f);return mix(mix(hash(i),hash(i+vec2(1,0)),u.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),u.x),u.y);}
+    float fbm2(vec2 p){float v=0.0,a=0.5;for(int i=0;i<6;i++){v+=a*valueN(p);a*=0.5;p*=2.1;}return v;}
+    float fbm3(vec3 p){
+      float v=0.0,a=0.5;
+      for(int i=0;i<5;i++){
+        v+=a*(hash3f(floor(p))+fract(dot(fract(p),vec3(1.0))));
+        a*=0.5;p*=2.0;
+      }
+      return v;
+    }
+
+    void main() {
+      vec3 dir = normalize(vWorldDir);
+      vec3 sun = normalize(uSunDir);
+
+      // Rayleigh scattering
+      float cosTheta = dot(dir, sun);
+      float rayleigh = (3.0/(16.0*3.14159)) * (1.0 + cosTheta*cosTheta);
+      vec3 skyCol = uRayleighColor * rayleigh * uSunIntensity;
+
+      // Horizon gradient
+      float horizon = pow(clamp(1.0 - abs(dir.y), 0.0, 1.0), 3.0);
+      skyCol = mix(skyCol, uAtmosphereColor, horizon * 0.6);
+
+      // Mie scattering (sun halo)
+      float mie = pow(max(cosTheta, 0.0), 64.0);
+      skyCol += uMieColor * mie * uSunIntensity * 1.5;
+
+      // Sun disc
+      float sunDisc = smoothstep(0.9985, 0.9995, cosTheta);
+      float corona  = pow(max(cosTheta,0.0), 8.0) * 0.3;
+      skyCol += vec3(1.0,0.95,0.8) * (sunDisc + corona) * uSunIntensity;
+
+      // Night sky
+      float night = 1.0 - clamp(uDayFactor, 0.0, 1.0);
+      if (night > 0.01) {
+        // Stars
+        vec3 sd = dir * 200.0;
+        float star = 0.0;
+        vec3 sg = floor(sd * 4.0);
+        float h = hash3f(sg);
+        float brightness = smoothstep(0.97, 1.0, h);
+        float sz = mix(0.5, 2.0, hash3f(sg + 0.5));
+        float distStar = length(fract(sd*4.0)-0.5);
+        star = brightness * smoothstep(0.3*sz, 0.0, distStar);
+        skyCol += vec3(0.9,0.95,1.0) * star * night * 3.0;
+
+        // Aurora
+        if (dir.y > 0.1) {
+          float auroraY = (dir.y - 0.1) * 5.0;
+          float aurora = fbm2(vec2(dir.x * 3.0 + uTime*0.1, dir.z * 3.0));
+          aurora = smoothstep(0.4, 0.7, aurora) * exp(-auroraY*2.0);
+          skyCol += uAuroraColor * aurora * night * 1.5;
+        }
+      }
+
+      // Clouds (2 layers)
+      if (dir.y > 0.02) {
+        float cloudH = 1.0 / (dir.y + 0.001);
+        vec2 cp1 = dir.xz * cloudH * 0.5 + vec2(uTime*0.005, 0.0);
+        vec2 cp2 = dir.xz * cloudH * 0.8 + vec2(0.0, uTime*0.003);
+        float c1 = fbm2(cp1 * 2.0);
+        float c2 = fbm2(cp2 * 3.0 + 5.5);
+        float cloud = smoothstep(uCloudCoverage - 0.1, uCloudCoverage + 0.3, (c1+c2)*0.5);
+        vec3 cloudCol = mix(vec3(1.0), vec3(0.5,0.55,0.6), 0.3 + 0.7*(1.0-uDayFactor));
+        cloudCol = mix(cloudCol, vec3(1.0,0.6,0.3)*uSunIntensity, horizon * uDayFactor * 0.3);
+        float cloudFade = smoothstep(0.02, 0.1, dir.y);
+        skyCol = mix(skyCol, cloudCol, cloud * cloudFade * clamp(uDayFactor+0.3,0.0,1.0));
+      }
+
+      // Ground (below horizon)
+      if (dir.y < 0.0) {
+        skyCol = mix(uAtmosphereColor * 0.3, skyCol, smoothstep(-0.1, 0.0, dir.y));
+      }
+
+      gl_FragColor = vec4(skyCol, 1.0);
+    }
+  `
+};
+
 export const WaterShader = {
   uniforms: {
-    uTime   : { value: 0 },
-    uColor  : { value: null },
+    uTime:       { value: 0 },
+    uWaterColor: { value: null },
+    uSkyColor:   { value: null },
+    uSunDir:     { value: null },
+    uFogColor:   { value: null },
+    uFogDensity: { value: 0.008 },
+    uDepthScale: { value: 20 }
   },
-  vertexShader: /* glsl */`
+  vertexShader: `
     uniform float uTime;
+    varying vec3 vWorldPos;
+    varying vec3 vNormal;
+    varying vec3 vViewDir;
+    varying float vDepth;
+
+    float hash(vec2 p){p=fract(p*vec2(234.34,435.345));p+=dot(p,p+34.23);return fract(p.x*p.y);}
+    float waveH(vec2 p, float t){
+      float h=0.0;
+      h+=sin(p.x*0.3+t*1.2)*cos(p.y*0.25+t*0.9)*0.6;
+      h+=sin(p.x*0.7-t*0.8)*sin(p.y*0.6+t*1.1)*0.3;
+      h+=sin(p.x*1.5+t*1.5)*cos(p.y*1.3-t)*0.15;
+      return h;
+    }
+    void main(){
+      vec3 pos = position;
+      pos.y += waveH(pos.xz, uTime);
+      vec4 wp = modelMatrix * vec4(pos,1.0);
+      vWorldPos = wp.xyz;
+
+      float eps=0.5;
+      float hL=waveH(pos.xz+vec2(-eps,0.0),uTime);
+      float hR=waveH(pos.xz+vec2( eps,0.0),uTime);
+      float hD=waveH(pos.xz+vec2(0.0,-eps),uTime);
+      float hU=waveH(pos.xz+vec2(0.0, eps),uTime);
+      vNormal = normalize(vec3(hL-hR, 2.0*eps, hD-hU));
+      vDepth = 0.5;
+      vec4 mvPos = modelViewMatrix * vec4(pos,1.0);
+      vViewDir = normalize(-mvPos.xyz);
+      gl_Position = projectionMatrix * mvPos;
+    }
+  `,
+  fragmentShader: `
+    precision highp float;
+    uniform vec3  uWaterColor;
+    uniform vec3  uSkyColor;
+    uniform vec3  uSunDir;
+    uniform vec3  uFogColor;
+    uniform float uFogDensity;
+    varying vec3  vWorldPos;
+    varying vec3  vNormal;
+    varying vec3  vViewDir;
+    varying float vDepth;
+
+    void main(){
+      vec3 N = normalize(vNormal);
+      vec3 V = normalize(vViewDir);
+      vec3 S = normalize(uSunDir);
+
+      // Fresnel
+      float fresnel = pow(1.0 - max(dot(N,V),0.0), 4.0);
+      // Shallow/deep tint
+      vec3 shallow = uWaterColor * 1.4;
+      vec3 deep    = uWaterColor * 0.4;
+      vec3 waterC  = mix(deep, shallow, vDepth);
+
+      // Specular
+      vec3 H = normalize(S+V);
+      float spec = pow(max(dot(N,H),0.0), 128.0);
+
+      vec3 col = mix(waterC, uSkyColor, fresnel*0.6);
+      col += vec3(1.0,0.98,0.9) * spec * 0.8;
+
+      // Foam (near shore - simple noise)
+      float foam = 0.0;
+      if(vDepth > 0.85) foam = 0.3;
+      col = mix(col, vec3(1.0), foam);
+
+      // Fog
+      float dist = length(vWorldPos - cameraPosition);
+      float fog  = 1.0 - exp(-uFogDensity*uFogDensity*dist*dist);
+      col = mix(col, uFogColor, clamp(fog,0.0,0.85));
+
+      gl_FragColor = vec4(col, 0.82);
+    }
+  `
+};
+
+export const FloraShader = {
+  uniforms: {
+    uTime:         { value: 0 },
+    uWindStrength: { value: 0.3 },
+    uWindDir:      { value: null },
+    uSunDir:       { value: null },
+    uSunColor:     { value: null },
+    uAmbientColor: { value: null }
+  },
+  vertexShader: `
+    attribute vec3 instanceColor;
+    uniform float uTime;
+    uniform float uWindStrength;
+    uniform vec3  uWindDir;
+    varying vec3  vColor;
+    varying vec3  vNormal;
+    varying vec3  vWorldPos;
     varying vec2  vUv;
-    varying float vWave;
-    void main() {
-      vUv   = uv;
-      float wave = sin(position.x*0.3 + uTime*1.5)*0.5
-                 + sin(position.z*0.4 + uTime*1.1)*0.5;
-      vec3 pos   = position + vec3(0.0, wave*0.6, 0.0);
-      vWave = wave;
+
+    void main(){
+      vUv = uv;
+      vColor = instanceColor;
+      vec3 pos = position;
+      // Wind sway based on height
+      float tip = smoothstep(0.0, 1.0, pos.y);
+      float sway = sin(uTime*2.0 + pos.x*3.0 + pos.z*2.0) * uWindStrength * tip;
+      pos.x += uWindDir.x * sway;
+      pos.z += uWindDir.z * sway;
+      vec4 wp = modelMatrix * vec4(pos, 1.0);
+      vWorldPos = wp.xyz;
+      vNormal = normalize(normalMatrix * normal);
       gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
     }
   `,
-  fragmentShader: /* glsl */`
-    precision mediump float;
-    uniform float uTime;
-    uniform vec3  uColor;
+  fragmentShader: `
+    precision highp float;
+    uniform vec3  uSunDir;
+    uniform vec3  uSunColor;
+    uniform vec3  uAmbientColor;
+    varying vec3  vColor;
+    varying vec3  vNormal;
+    varying vec3  vWorldPos;
     varying vec2  vUv;
-    varying float vWave;
-    void main() {
-      float foam = smoothstep(0.3, 0.5, vWave);
-      vec3  col  = mix(uColor, vec3(1.0), foam*0.25);
-      float edge = abs(vUv.x-0.5)*2.;
-      float alpha= 0.65 + vWave*0.1;
-      gl_FragColor = vec4(col, alpha);
+
+    float hash(vec2 p){p=fract(p*vec2(234.34,435.345));p+=dot(p,p+34.23);return fract(p.x*p.y);}
+
+    void main(){
+      // Alpha clip leaf edges
+      float n = hash(vUv*8.0 + 0.5);
+      if(n < 0.15) discard;
+
+      vec3 N = normalize(vNormal);
+      vec3 S = normalize(uSunDir);
+      // Two-sided
+      float diff = abs(dot(N, S));
+      // Translucency
+      float trans = pow(max(dot(-N, S),0.0), 2.0) * 0.4;
+      vec3 col = vColor * (uAmbientColor + uSunColor*(diff*0.7 + trans));
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `
+};
+
+export const SpaceShader = {
+  uniforms: {
+    uTime:         { value: 0 },
+    uNebulaColor1: { value: null },
+    uNebulaColor2: { value: null },
+    uNebulaColor3: { value: null },
+    uStarDensity:  { value: 1.0 }
+  },
+  vertexShader: `
+    varying vec3 vDir;
+    void main(){
+      vDir = (modelMatrix * vec4(position, 0.0)).xyz;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
     }
   `,
-  transparent: true,
+  fragmentShader: `
+    precision highp float;
+    uniform float uTime;
+    uniform vec3  uNebulaColor1;
+    uniform vec3  uNebulaColor2;
+    uniform vec3  uNebulaColor3;
+    uniform float uStarDensity;
+    varying vec3  vDir;
+
+    float hash3f(vec3 p){p=fract(p*vec3(0.1031,0.1030,0.0973));p+=dot(p,p.yxz+33.33);return fract((p.x+p.y)*p.z);}
+    float hash(vec2 p){p=fract(p*vec2(234.34,435.345));p+=dot(p,p+34.23);return fract(p.x*p.y);}
+    float valueN(vec3 p){
+      vec3 i=floor(p); vec3 f=fract(p);
+      vec3 u=f*f*(3.0-2.0*f);
+      return mix(mix(mix(hash3f(i),hash3f(i+vec3(1,0,0)),u.x),
+                     mix(hash3f(i+vec3(0,1,0)),hash3f(i+vec3(1,1,0)),u.x),u.y),
+                 mix(mix(hash3f(i+vec3(0,0,1)),hash3f(i+vec3(1,0,1)),u.x),
+                     mix(hash3f(i+vec3(0,1,1)),hash3f(i+vec3(1,1,1)),u.x),u.y),u.z);
+    }
+    float fbm3d(vec3 p, int oct){
+      float v=0.0,a=0.5;
+      for(int i=0;i<6;i++){if(i>=oct)break;v+=a*valueN(p);a*=0.5;p*=2.1;}
+      return v;
+    }
+
+    void main(){
+      vec3 dir = normalize(vDir);
+      vec3 col = vec3(0.0);
+
+      // Stars - 3 size classes
+      for(int layer=0;layer<3;layer++){
+        float scale = 80.0 + float(layer)*120.0;
+        vec3 sg = floor(dir * scale);
+        float h = hash3f(sg);
+        float thresh = 0.88 + float(layer)*0.04;
+        thresh /= uStarDensity;
+        if(h > thresh){
+          float bright = (h - thresh)/(1.0-thresh);
+          bright = pow(bright, 2.0) * (1.5 + float(layer)*0.8);
+          vec3 starCol = mix(vec3(0.8,0.9,1.0), vec3(1.0,0.8,0.7), hash3f(sg+0.3));
+          col += starCol * bright;
+        }
+      }
+
+      // Milky Way band
+      float mwBand = exp(-pow(dir.y / 0.15, 2.0));
+      float mw = fbm3d(dir * 4.0, 5) * mwBand;
+      col += vec3(0.5,0.55,0.7) * mw * 0.4;
+
+      // Nebula clouds (3 layers)
+      float n1 = fbm3d(dir * 2.0 + vec3(0.0), 4);
+      float n2 = fbm3d(dir * 2.5 + vec3(10.3,0.0,5.1), 4);
+      float n3 = fbm3d(dir * 1.8 + vec3(3.3,8.0,1.2), 4);
+      col += uNebulaColor1 * max(n1-0.4,0.0) * 0.8;
+      col += uNebulaColor2 * max(n2-0.42,0.0) * 0.7;
+      col += uNebulaColor3 * max(n3-0.44,0.0) * 0.5;
+
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `
 };

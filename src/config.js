@@ -1,254 +1,143 @@
 /**
- * src/config.js
- * Central configuration for all game systems.
+ * src/config.js  –  NMS-inspired game configuration
  */
 
-// ─── World ────────────────────────────────────────────────────────────────────
+export const PLANET_TYPES = {
+  LUSH:'LUSH', BARREN:'BARREN', TOXIC:'TOXIC', FROZEN:'FROZEN',
+  BURNING:'BURNING', EXOTIC:'EXOTIC', DEAD:'DEAD', OCEAN:'OCEAN'
+};
+
+export const RESOURCES = {
+  CARBON:'Carbon', FERRITE:'Ferrite Dust', COPPER:'Copper',
+  GOLD:'Gold', URANIUM:'Uranium', SODIUM:'Sodium', OXYGEN:'Oxygen',
+  DIHYDROGEN:'Di-Hydrogen', CHROMATIC_METAL:'Chromatic Metal',
+  PURE_FERRITE:'Pure Ferrite', CONDENSED_CARBON:'Condensed Carbon',
+  PLATINUM:'Platinum', COBALT:'Cobalt', TITANIUM:'Titanium',
+  EMERIL:'Emeril', INDIUM:'Indium'
+};
+
 export const WORLD = {
-  CHUNK_SIZE       : 128,   // world units per chunk side
-  CHUNK_VERTS      : 33,    // vertices per side (33 = 32 quads per chunk)
-  HEIGHT_SCALE     : 35,    // max terrain height
-  RENDER_DISTANCE  : 3,     // chunks loaded each direction from player
-  SEED             : 42,
-  DAY_DURATION     : 600,   // seconds for a full day/night cycle
-  GRAVITY          : 28,
-  MAX_CHUNK_OBJECTS: 18,    // decorative objects per chunk
+  CHUNK_SIZE:192, CHUNK_VERTS:65, LOD_LEVELS:[65,33,17,9],
+  RENDER_DISTANCE:4, HEIGHT_SCALE:80, WATER_LEVEL:10,
+  GRAVITY:22, SEED:12345, DAY_DURATION:600
 };
 
-// ─── Biomes ───────────────────────────────────────────────────────────────────
-export const BIOMES = {
-  MAGITECH_RUINS: {
-    id      : 'MAGITECH_RUINS',
-    name    : 'Magitech Ruins',
-    // ground colour gradient: [low, mid, high]
-    colors  : ['#5c4a30', '#7a6040', '#a09060'],
-    accent  : '#00aaff',
-    fog     : '#1a2a4a',
-    fogDensity: 0.008,
-    enemyTypes: ['VOID_WRAITH', 'MAGITECH_DRONE', 'CRYSTAL_ELEMENTAL'],
-    music   : 'ruins',
-  },
-  CRYSTAL_VAULTS: {
-    id      : 'CRYSTAL_VAULTS',
-    name    : 'Crystal Vaults',
-    colors  : ['#0d1f3c', '#1a3460', '#2a508a'],
-    accent  : '#00ffcc',
-    fog     : '#0a1535',
-    fogDensity: 0.01,
-    enemyTypes: ['CRYSTAL_ELEMENTAL', 'VOID_WRAITH', 'RUST_STALKER'],
-    music   : 'crystal',
-  },
-  TECH_WASTELAND: {
-    id      : 'TECH_WASTELAND',
-    name    : 'Tech Wasteland',
-    colors  : ['#3a2510', '#5a3a18', '#8a5e25'],
-    accent  : '#ff6600',
-    fog     : '#2a1a0a',
-    fogDensity: 0.012,
-    enemyTypes: ['MAGITECH_DRONE', 'CORRUPTED_GOLEM', 'RUST_STALKER'],
-    music   : 'wasteland',
-  },
-  CORRUPTED_FOREST: {
-    id      : 'CORRUPTED_FOREST',
-    name    : 'Corrupted Forest',
-    colors  : ['#0d1a08', '#152a10', '#203a18'],
-    accent  : '#cc00ff',
-    fog     : '#0a0f06',
-    fogDensity: 0.015,
-    enemyTypes: ['CORRUPTED_GOLEM', 'VOID_WRAITH', 'RUST_STALKER'],
-    music   : 'forest',
-  },
-  FLOATING_ISLES: {
-    id      : 'FLOATING_ISLES',
-    name    : 'Floating Archipelago',
-    colors  : ['#c0d8f0', '#a8c8e8', '#90b8e0'],
-    accent  : '#ffdd00',
-    fog     : '#6080a0',
-    fogDensity: 0.005,
-    enemyTypes: ['MAGITECH_DRONE', 'CRYSTAL_ELEMENTAL', 'VOID_WRAITH'],
-    music   : 'sky',
-  },
+export const PLAYER_CONFIG = {
+  WALK_SPEED:10, SPRINT_SPEED:20, JETPACK_THRUST:30,
+  JETPACK_FUEL:100, MAX_HP:100, MAX_SHIELD:80,
+  SHIELD_REGEN_DELAY:5, SHIELD_REGEN_RATE:15,
+  LIFE_SUPPORT_DRAIN:2, MINING_RANGE:8
 };
 
-// ─── Player Classes ───────────────────────────────────────────────────────────
-export const CLASSES = {
-  runekeeper: {
-    name        : 'Runekeeper',
-    icon        : '⚔',
-    description : 'Balanced warrior-mage. Runic blades fused with elemental arcana.',
-    baseStats   : { maxHp:120, maxMp:100, str:12, agi:10, int:12, vit:12 },
-    abilities   : ['runic_slash','arcane_bolt','mana_shield','ley_surge'],
-    bodyColor   : '#4488ff',
-    accentColor : '#88ccff',
+export const TECH_UPGRADES = {
+  SUIT:{
+    LIFE_SUPPORT:{name:'Life Support Module',tiers:[
+      {cost:{Carbon:50},bonus:{lifeSupportRate:-0.5}},
+      {cost:{'Condensed Carbon':50},bonus:{lifeSupportRate:-1.0}}
+    ]},
+    HAZARD:{name:'Hazard Protection',tiers:[
+      {cost:{'Ferrite Dust':80},bonus:{hazardProtection:20}},
+      {cost:{'Pure Ferrite':50},bonus:{hazardProtection:40}}
+    ]},
+    JETPACK:{name:'Jetpack Upgrade',tiers:[
+      {cost:{Titanium:100},bonus:{jetpackCapacity:25}},
+      {cost:{Cobalt:80},bonus:{jetpackCapacity:50}}
+    ]},
+    SHIELD:{name:'Personal Shield',tiers:[
+      {cost:{Copper:60},bonus:{shieldMax:20}},
+      {cost:{'Chromatic Metal':40},bonus:{shieldMax:40}}
+    ]}
   },
-  technomancer: {
-    name        : 'Technomancer',
-    icon        : '⚙',
-    description : 'Magitech engineer. Commands drones, overcharges systems.',
-    baseStats   : { maxHp:100, maxMp:120, str:8, agi:14, int:16, vit:8 },
-    abilities   : ['deploy_drone','emp_pulse','overcharge','orbital_strike'],
-    bodyColor   : '#ff8800',
-    accentColor : '#ffcc44',
+  MULTITOOL:{
+    MINING_BEAM:{name:'Mining Beam Upgrade',tiers:[
+      {cost:{Copper:50},bonus:{miningSpeed:1.5}},
+      {cost:{Gold:30},bonus:{miningSpeed:2.5}}
+    ]},
+    SCANNER:{name:'Analysis Visor',tiers:[
+      {cost:{'Chromatic Metal':50},bonus:{scanRange:50}},
+      {cost:{Platinum:20},bonus:{scanRange:100}}
+    ]},
+    COMBAT:{name:'Boltcaster Upgrade',tiers:[
+      {cost:{Cobalt:80},bonus:{weaponDamage:15}},
+      {cost:{Titanium:60},bonus:{weaponDamage:30}}
+    ]}
   },
-  voidhunter: {
-    name        : 'Voidhunter',
-    icon        : '🌑',
-    description : 'Shadow assassin. Teleports through void rifts, harvests entropy.',
-    baseStats   : { maxHp:90, maxMp:110, str:14, agi:18, int:10, vit:8 },
-    abilities   : ['shadow_step','void_trap','phase_shift','singularity'],
-    bodyColor   : '#aa00ff',
-    accentColor : '#cc44ff',
-  },
+  SHIP:{
+    PULSE_ENGINE:{name:'Pulse Engine Upgrade',tiers:[
+      {cost:{Uranium:50},bonus:{shipSpeed:20}},
+      {cost:{Indium:30},bonus:{shipSpeed:40}}
+    ]},
+    HYPERDRIVE:{name:'Hyperdrive Upgrade',tiers:[
+      {cost:{Indium:100},bonus:{warpRange:200}},
+      {cost:{Emeril:50},bonus:{warpRange:500}}
+    ]},
+    SHIELDS:{name:'Deflector Shield',tiers:[
+      {cost:{Cobalt:120},bonus:{shipShield:25}},
+      {cost:{'Pure Ferrite':80},bonus:{shipShield:50}}
+    ]},
+    WEAPONS:{name:'Photon Cannon',tiers:[
+      {cost:{Gold:40},bonus:{shipWeaponDamage:20}},
+      {cost:{Platinum:30},bonus:{shipWeaponDamage:40}}
+    ]},
+    LAUNCH_THRUSTER:{name:'Launch Thruster',tiers:[
+      {cost:{'Di-Hydrogen':50},bonus:{launchCost:-20}},
+      {cost:{Uranium:40},bonus:{launchCost:-40}}
+    ]}
+  }
 };
 
-// ─── Abilities ────────────────────────────────────────────────────────────────
-export const ABILITIES = {
-  // Runekeeper
-  runic_slash    : { name:'Runic Slash',     icon:'⚡', mpCost:15, cooldown:3,  range:4,  damage:1.8, type:'melee',    color:'#4488ff', desc:'AoE melee slash that deals arcane damage.' },
-  arcane_bolt    : { name:'Arcane Bolt',     icon:'🔥', mpCost:20, cooldown:4,  range:30, damage:2.2, type:'projectile',color:'#4488ff', desc:'Fire a bolt of arcane energy.' },
-  mana_shield    : { name:'Mana Shield',     icon:'🛡', mpCost:30, cooldown:12, range:0,  damage:0,   type:'shield',   color:'#44aaff', desc:'Absorb incoming damage for 4 seconds.' },
-  ley_surge      : { name:'Ley Surge',       icon:'🌊', mpCost:50, cooldown:25, range:8,  damage:5.0, type:'aoe',      color:'#0066ff', desc:'Massive arcane explosion around caster.' },
-  // Technomancer
-  deploy_drone   : { name:'Deploy Drone',    icon:'🤖', mpCost:25, cooldown:8,  range:0,  damage:1.2, type:'summon',   color:'#ff8800', desc:'Summon an AI combat drone.' },
-  emp_pulse      : { name:'EMP Pulse',       icon:'⚡', mpCost:30, cooldown:10, range:10, damage:1.5, type:'aoe',      color:'#ffaa00', desc:'Stun all nearby tech-type enemies.' },
-  overcharge     : { name:'Overcharge',      icon:'🔋', mpCost:20, cooldown:15, range:0,  damage:0,   type:'buff',     color:'#ffcc00', desc:'Boost speed and damage for 6 seconds.' },
-  orbital_strike : { name:'Orbital Strike',  icon:'🛸', mpCost:60, cooldown:30, range:25, damage:7.0, type:'projectile',color:'#ff6600', desc:'Call down a devastating energy beam.' },
-  // Voidhunter
-  shadow_step    : { name:'Shadow Step',     icon:'👁', mpCost:20, cooldown:5,  range:15, damage:2.5, type:'dash',     color:'#aa00ff', desc:'Teleport behind target and backstab.' },
-  void_trap      : { name:'Void Trap',       icon:'💀', mpCost:15, cooldown:6,  range:20, damage:1.8, type:'trap',     color:'#8800dd', desc:'Place an invisible void trap.' },
-  phase_shift    : { name:'Phase Shift',     icon:'🌀', mpCost:35, cooldown:18, range:0,  damage:0,   type:'invuln',   color:'#cc44ff', desc:'Enter the void plane briefly (2s invulnerability).' },
-  singularity    : { name:'Singularity',     icon:'⚫', mpCost:70, cooldown:35, range:20, damage:8.0, type:'aoe',      color:'#660099', desc:'Create a black hole that pulls and destroys enemies.' },
-};
-
-// ─── Enemy Definitions ────────────────────────────────────────────────────────
-export const ENEMY_DEFS = {
-  VOID_WRAITH: {
-    name:'Void Wraith', maxHp:60, speed:9, dmg:12, xp:30,
-    scale:1.0, color:'#8800cc', emissive:'#4400aa',
-    aggro:18, attack:2.2, lootTable:'low',
-    type: 'normal',
+export const SOLAR_SYSTEMS = [
+  {
+    id:'sys_0', name:'Euclid Prime', seed:12345, starColor:'#ffeeaa',
+    starType:'G', economy:'Mining', conflictLevel:1,
+    planets:[
+      {typeOverride:'LUSH',   orbitRadius:400,  seed:10001},
+      {typeOverride:'BARREN', orbitRadius:700,  seed:10002},
+      {typeOverride:'OCEAN',  orbitRadius:950,  seed:10003}
+    ]
   },
-  CORRUPTED_GOLEM: {
-    name:'Corrupted Golem', maxHp:200, speed:3, dmg:22, xp:80,
-    scale:1.8, color:'#556644', emissive:'#228822',
-    aggro:12, attack:2.0, lootTable:'medium',
-    type: 'normal',
+  {
+    id:'sys_1', name:'Nyreth Expanse', seed:54321, starColor:'#aaddff',
+    starType:'B', economy:'Technology', conflictLevel:3,
+    planets:[
+      {typeOverride:'FROZEN', orbitRadius:500,  seed:20001},
+      {typeOverride:'TOXIC',  orbitRadius:800,  seed:20002},
+      {typeOverride:'EXOTIC', orbitRadius:1100, seed:20003},
+      {typeOverride:'DEAD',   orbitRadius:1400, seed:20004}
+    ]
   },
-  MAGITECH_DRONE: {
-    name:'Magitech Drone', maxHp:80, speed:10, dmg:14, xp:45,
-    scale:0.8, color:'#445566', emissive:'#0088ff',
-    aggro:22, attack:1.8, lootTable:'medium',
-    type: 'flying',
-  },
-  CRYSTAL_ELEMENTAL: {
-    name:'Crystal Elemental', maxHp:120, speed:5, dmg:18, xp:60,
-    scale:1.3, color:'#2255aa', emissive:'#00ccff',
-    aggro:15, attack:2.5, lootTable:'medium',
-    type: 'normal',
-  },
-  RUST_STALKER: {
-    name:'Rust Stalker', maxHp:90, speed:8, dmg:20, xp:55,
-    scale:1.1, color:'#664422', emissive:'#ff4400',
-    aggro:10, attack:2.0, lootTable:'medium',
-    type: 'stealth',
-  },
-  // Boss enemies
-  ABYSSAL_ARCHON: {
-    name:'Abyssal Archon', maxHp:1500, speed:5, dmg:35, xp:600,
-    scale:2.5, color:'#440066', emissive:'#9900ff',
-    aggro:40, attack:1.5, lootTable:'boss',
-    type: 'boss', phases: 3,
-  },
-  NEXUS_CORE: {
-    name:'Nexus Core', maxHp:2000, speed:0, dmg:28, xp:800,
-    scale:3.0, color:'#334455', emissive:'#00aaff',
-    aggro:50, attack:1.2, lootTable:'boss',
-    type: 'boss_stationary', phases: 2,
-  },
-};
-
-// ─── Loot ─────────────────────────────────────────────────────────────────────
-export const RARITIES = [
-  { id:'common',    name:'Common',    color:'#aaaaaa', weight:50 },
-  { id:'uncommon',  name:'Uncommon',  color:'#4caf50', weight:25 },
-  { id:'rare',      name:'Rare',      color:'#2196f3', weight:14 },
-  { id:'epic',      name:'Epic',      color:'#9c27b0', weight:8  },
-  { id:'legendary', name:'Legendary', color:'#ffd700', weight:2.5},
-  { id:'mythic',    name:'Mythic',    color:'#ff6600', weight:0.5},
+  {
+    id:'sys_2', name:"Vel'Kira Reach", seed:99887, starColor:'#ffaaaa',
+    starType:'M', economy:'Agricultural', conflictLevel:2,
+    planets:[
+      {typeOverride:'BURNING', orbitRadius:300,  seed:30001},
+      {typeOverride:'BARREN',  orbitRadius:600,  seed:30002},
+      {typeOverride:'LUSH',    orbitRadius:900,  seed:30003},
+      {typeOverride:'EXOTIC',  orbitRadius:1200, seed:30004},
+      {typeOverride:'DEAD',    orbitRadius:1600, seed:30005}
+    ]
+  }
 ];
 
-export const ITEM_TYPES = {
-  WEAPON: {
-    slots: ['weapon'],
-    subtypes: [
-      {name:'Runic Blade', icon:'⚔', stats:['str','int'], dmgMult:1.2 },
-      {name:'Arcane Staff', icon:'🪄', stats:['int','mp'], dmgMult:1.0 },
-      {name:'Void Dagger', icon:'🗡', stats:['agi','str'], dmgMult:1.1 },
-      {name:'Tech Rifle',  icon:'🔫', stats:['agi','int'], dmgMult:1.3 },
-      {name:'Crystal Wand',icon:'💎', stats:['int'],       dmgMult:0.9 },
-    ],
-  },
-  HELM: {
-    slots: ['head'],
-    subtypes: [
-      {name:'Rune Helm',     icon:'🪖', stats:['vit','str'] },
-      {name:'Data Crown',    icon:'👑', stats:['int','mp']  },
-      {name:'Shadow Cowl',   icon:'🎩', stats:['agi','vit'] },
-    ],
-  },
-  CHEST: {
-    slots: ['chest'],
-    subtypes: [
-      {name:'Magitech Plate', icon:'🦺', stats:['vit','str'] },
-      {name:'Void Robe',      icon:'👘', stats:['int','mp']  },
-      {name:'Circuit Vest',   icon:'🥋', stats:['agi','int'] },
-    ],
-  },
-  BOOTS: {
-    slots: ['boots'],
-    subtypes: [
-      {name:'Ley Striders',    icon:'👢', stats:['agi','vit'] },
-      {name:'Void Walkers',    icon:'🥾', stats:['agi','int'] },
-    ],
-  },
-  ACCESSORY: {
-    slots: ['ring','amulet'],
-    subtypes: [
-      {name:'Resonance Crystal', icon:'💠', stats:['int','mp']   },
-      {name:'Data Core',         icon:'🔮', stats:['int','str']  },
-      {name:'Ley Shard',         icon:'🔷', stats:['mp','vit']   },
-      {name:'Entropy Sigil',     icon:'⭕', stats:['str','agi']  },
-    ],
-  },
+export const BIOME_COLORS = {
+  LUSH:   {low:'#1a5c1a',mid:'#2d8c2d',high:'#a0c8a0',accent:'#40ff40',fog:'#c8e8c8',water:'#1a6aff'},
+  BARREN: {low:'#5c3a1a',mid:'#8c6040',high:'#c0a080',accent:'#d08040',fog:'#d8c8b0',water:'#4060a0'},
+  TOXIC:  {low:'#3a5c1a',mid:'#60a020',high:'#a8c840',accent:'#d0ff00',fog:'#90c040',water:'#60c020'},
+  FROZEN: {low:'#405080',mid:'#8090b0',high:'#d0e0f0',accent:'#a0c8ff',fog:'#c0d8f0',water:'#2040c0'},
+  BURNING:{low:'#5c2010',mid:'#a04020',high:'#e06030',accent:'#ff8020',fog:'#c08040',water:'#a03010'},
+  EXOTIC: {low:'#5020a0',mid:'#8040c0',high:'#c080ff',accent:'#ff40ff',fog:'#a060d0',water:'#4020c0'},
+  DEAD:   {low:'#303030',mid:'#505050',high:'#808080',accent:'#606060',fog:'#606060',water:'#202040'},
+  OCEAN:  {low:'#103050',mid:'#1850a0',high:'#50a0d0',accent:'#80d0ff',fog:'#80c0e0',water:'#0830a0'}
 };
 
-// Prefixes & suffixes for procedural item names
-export const ITEM_AFFIXES = {
-  prefix: ['Ancient','Corrupted','Crystalline','Void-touched','Runic','Overcharged',
-           'Spectral','Shattered','Radiant','Entropic','Prismatic','Abyssal'],
-  suffix: ['of Dominion','of the Archon','of Corruption','of the Void','of Entropy',
-           'of Ascension','of the Nexus','of Eternity','of Ruin','of the Magitech'],
+export const CLASSES = {
+  EXPLORER:{name:'Explorer',walkSpeed:12,jetpackCapacity:120,scanRange:150,miningSpeed:1.0},
+  WARRIOR: {name:'Warrior', walkSpeed:8, maxHP:130,shieldMax:100,weaponDamage:1.5},
+  TRADER:  {name:'Trader',  inventorySlots:64,walkSpeed:10,cargoBonus:2.0}
 };
 
-// Stat ranges per rarity multiplier
-export const RARITY_MULT = {
-  common   : 1.0,
-  uncommon : 1.4,
-  rare     : 2.0,
-  epic     : 2.8,
-  legendary: 4.0,
-  mythic   : 6.0,
-};
-
-// ─── XP table (XP required to reach next level) ───────────────────────────────
-export function xpForLevel(level) {
-  return Math.floor(100 * Math.pow(level, 1.6));
-}
-
-// ─── Stat scaling (bonus per stat point) ─────────────────────────────────────
-export const STAT_SCALE = {
-  str : { physDmg: 2.0  },
-  agi : { speed: 0.4, critChance: 0.5 },  // critChance in %
-  int : { spellDmg: 2.2, mpRegen: 0.1 },
-  vit : { hpBonus: 8.0, hpRegen: 0.05 },
+export const GAME_STATES = {
+  LOADING:'LOADING', MAIN_MENU:'MAIN_MENU', PLANET_SURFACE:'PLANET_SURFACE',
+  SHIP_ATMOSPHERE:'SHIP_ATMOSPHERE', SPACE_LOCAL:'SPACE_LOCAL',
+  HYPERSPACE:'HYPERSPACE', SPACE_STATION:'SPACE_STATION', GALAXY_MAP:'GALAXY_MAP'
 };
