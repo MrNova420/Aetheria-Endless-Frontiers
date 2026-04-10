@@ -46,6 +46,63 @@ export const QUEST_DEFS = {
       { id: 'warp1',  type: 'explore', target: 1, label: 'Warp to a new system' },
     ],
     reward: { xp: 1000, items: { 'Emeril': 30, 'Indium': 20 } },
+    chain: 'sentinel_alert',
+  },
+  sentinel_alert: {
+    id: 'sentinel_alert',
+    title: '⚠ Sentinel Alert',
+    description: 'Sentinel forces have detected your activities. Deal with the threat.',
+    objectives: [
+      { id: 'kill_sentinels', type: 'kill_sentinel', target: 3, label: 'Defeat 3 Sentinel Drones' },
+      { id: 'scan_after',     type: 'scan',          target: 3, label: 'Scan 3 entities after the battle' },
+    ],
+    reward: { xp: 800, items: { 'Nanite Cluster': 50 } },
+    chain: 'anomaly_investigation',
+  },
+  anomaly_investigation: {
+    id: 'anomaly_investigation',
+    title: '📡 Anomaly Detected',
+    description: 'Strange signals have been detected. Investigate 3 new systems.',
+    objectives: [
+      { id: 'warp3',  type: 'explore', target: 3,  label: 'Warp to 3 different systems' },
+      { id: 'scan10', type: 'scan',    target: 10, label: 'Catalogue 10 life forms' },
+    ],
+    reward: { xp: 1500, items: { 'Emeril': 50, 'Chromatic Metal': 100 } },
+    chain: 'atlas_path',
+  },
+  atlas_path: {
+    id: 'atlas_path',
+    title: '🔮 The Atlas Interface',
+    description: 'Something vast has taken notice. Follow the Atlas signal deeper into the universe.',
+    objectives: [
+      { id: 'warp_galaxy',   type: 'warp_galaxy', target: 1,            label: 'Reach a new galaxy' },
+      { id: 'collect_atlas', type: 'collect',      resource: 'Atlas Stone', target: 1, label: 'Obtain an Atlas Stone' },
+    ],
+    reward: { xp: 3000, items: { 'Warp Cell': 5, 'Quantum Essence': 1 } },
+    chain: 'tech_mastery',
+  },
+  tech_mastery: {
+    id: 'tech_mastery',
+    title: '⚙ Technology Mastery',
+    description: 'Upgrade your exosuit, multi-tool and build an automated base.',
+    objectives: [
+      { id: 'craft5',  type: 'craft', target: 5,  label: 'Craft 5 technology upgrades' },
+      { id: 'build3',  type: 'build', target: 3,  label: 'Place 3 base structures' },
+      { id: 'kill10',  type: 'kill',  target: 10, label: 'Defeat 10 creatures' },
+    ],
+    reward: { xp: 5000, items: { 'Indium': 200, 'Platinum': 100 } },
+    chain: 'convergence',
+  },
+  convergence: {
+    id: 'convergence',
+    title: '✨ The Convergence',
+    description: 'The universe reveals its true nature. Build an empire across the stars.',
+    objectives: [
+      { id: 'build_hub',    type: 'build',   buildingType: 'town_hub', target: 1, label: 'Establish a Town Hub' },
+      { id: 'warp5',        type: 'explore', target: 5,                           label: 'Explore 5 more systems' },
+      { id: 'collect_rare', type: 'collect', resource: 'Quantum Essence', target: 3, label: 'Gather Quantum Essences' },
+    ],
+    reward: { xp: 10000, items: { 'Nanite Cluster': 500 } },
     chain: null,
   },
 };
@@ -88,14 +145,25 @@ export class QuestSystem {
           case 'kill':
             if (obj.type === 'kill') inc = 1;
             break;
+          case 'kill_sentinel':
+            if (obj.type === 'kill_sentinel') inc = 1;
+            break;
           case 'scan':
             if (obj.type === 'scan') inc = 1;
             break;
           case 'warp':
             if (obj.type === 'explore') inc = 1;
             break;
+          case 'warp_galaxy':
+            if (obj.type === 'warp_galaxy') inc = 1;
+            break;
           case 'craft':
             if (obj.type === 'craft' && obj.item === payload.item) inc = payload.amount || 1;
+            break;
+          case 'build':
+            if (obj.type === 'build') {
+              if (!obj.buildingType || obj.buildingType === payload.buildingType) inc = 1;
+            }
             break;
         }
         if (inc > 0) {

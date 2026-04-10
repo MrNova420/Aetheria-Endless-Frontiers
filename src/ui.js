@@ -155,203 +155,64 @@ export class GameHUD {
     const hud = document.getElementById('hud');
     if (!hud) return;
 
-    // ── Vitals (bottom-left) ──────────────────────────────────────────────────
-    const vitals = el('div', 'hud-vitals');
+    // ── Reference elements already present in index.html ─────────────────────
+    this._el.hpRing       = document.getElementById('ring-hp');
+    this._el.shRing       = document.getElementById('ring-sh');
+    this._el.hpVal        = document.getElementById('hp-val');
+    this._el.shVal        = document.getElementById('sh-val');
+    this._el.jpFill       = document.getElementById('jp-fill');
+    this._el.lsBar        = document.getElementById('bar-lifesup');
+    this._el.hzBar        = document.getElementById('bar-hazard');
+    this._el.locPlanet    = document.getElementById('loc-planet');
+    this._el.locBiome     = document.getElementById('loc-biome');
+    this._el.locCoords    = document.getElementById('loc-coords');
+    this._el.lvlNum       = document.getElementById('lvl-num');
+    this._el.lvlLbl       = document.getElementById('lvl-class');
+    this._el.xpFill       = document.getElementById('xp-bar');
+    this._el.xpTxt        = document.getElementById('xp-txt');
+    this._el.compassInner = document.getElementById('compass-strip');
+    this._el.miningRing   = document.getElementById('mine-ring');
+    this._el.miningArc    = document.getElementById('mine-arc');
+    this._el.scanRing     = document.getElementById('scan-ring');
+    this._el.notifs       = document.getElementById('notifications');
+    this._el.bossBar      = document.getElementById('boss-bar');
+    this._el.bossName     = document.getElementById('boss-name');
+    this._el.bossFill     = document.getElementById('boss-fill');
+    this._el.flightHud    = document.getElementById('flight-hud');
+    this._el.speedVal     = document.getElementById('spd-val');
+    this._el.altVal       = document.getElementById('alt-val');
+    this._el.interact     = document.getElementById('interact-prompt');
+    this._el.dmgLayer     = document.getElementById('dmg-layer');
+    this._el.minimap      = document.getElementById('minimap');
+    this._el.mmCtx        = this._el.minimap?.getContext('2d') ?? null;
+    this._el.crosshair    = document.getElementById('crosshair');
 
-    // Health arc
-    const hpWrap = el('div', 'vital-wrap');
-    const hpSvg  = this._buildArcSVG('hp-arc', '#0f8', '#09553a');
-    hpWrap.appendChild(hpSvg);
-    const hpLbl = el('div', 'vital-label');
-    this._el.hpVal = el('span', 'vital-val', '100');
-    this._el.hpMax = el('span', 'vital-sub', '/100');
-    const hpIco = el('span', 'vital-icon', '❤');
-    hpLbl.append(hpIco, this._el.hpVal, this._el.hpMax);
-    hpWrap.appendChild(hpLbl);
-    vitals.appendChild(hpWrap);
-
-    // Shield arc
-    const shWrap = el('div', 'vital-wrap');
-    const shSvg  = this._buildArcSVG('sh-arc', '#4af', '#1a3a55');
-    shWrap.appendChild(shSvg);
-    const shLbl = el('div', 'vital-label');
-    this._el.shVal = el('span', 'vital-val', '80');
-    this._el.shMax = el('span', 'vital-sub', '/80');
-    const shIco = el('span', 'vital-icon', '🛡');
-    shLbl.append(shIco, this._el.shVal, this._el.shMax);
-    shWrap.appendChild(shLbl);
-    vitals.appendChild(shWrap);
-
-    // Jetpack bar
-    const jpWrap = el('div', 'jetpack-wrap');
-    const jpLbl  = el('div', 'jp-label', '⚡ JETPACK');
-    const jpBar  = el('div', 'jp-bar-outer');
-    this._el.jpInner = el('div', 'jp-bar-inner');
-    jpBar.appendChild(this._el.jpInner);
-    jpWrap.append(jpLbl, jpBar);
-    vitals.appendChild(jpWrap);
-
-    hud.appendChild(vitals);
-
-    // ── Top hazard/life-support bars ──────────────────────────────────────────
-    const hazard = el('div', 'hazard-bars');
-    const lsRow  = el('div', 'hazard-row');
-    lsRow.appendChild(el('span', 'hazard-icon', '🌬'));
-    lsRow.appendChild(el('span', 'hazard-lbl', 'LIFE SUPPORT'));
-    const lsBar  = el('div', 'hazard-bar-outer');
-    this._el.lsBar = el('div', 'hazard-bar-inner ls-bar');
-    lsBar.appendChild(this._el.lsBar);
-    lsRow.appendChild(lsBar);
-    hazard.appendChild(lsRow);
-
-    const hzRow  = el('div', 'hazard-row');
-    hzRow.appendChild(el('span', 'hazard-icon', '☢'));
-    hzRow.appendChild(el('span', 'hazard-lbl', 'HAZARD'));
-    const hzBar  = el('div', 'hazard-bar-outer');
-    this._el.hzBar = el('div', 'hazard-bar-inner hz-bar');
-    hzBar.appendChild(this._el.hzBar);
-    hzRow.appendChild(hzBar);
-    hazard.appendChild(hzRow);
-
-    // Weather row
-    const wxRow = el('div', 'hazard-row');
-    wxRow.appendChild(el('span', 'hazard-icon', '🌤'));
-    wxRow.appendChild(el('span', 'hazard-lbl', 'WEATHER'));
-    this._el.weatherLbl  = el('span', 'hazard-weather', 'Clear');
-    wxRow.appendChild(this._el.weatherLbl);
-    hazard.appendChild(wxRow);
-
-    hud.appendChild(hazard);
-
-    // ── Planet / Location (top-left) ─────────────────────────────────────────
-    const loc = el('div', 'hud-location');
-    this._el.locPlanet = el('span', 'loc-planet', 'Loading…');
-    this._el.locBiome  = el('span', 'loc-biome', '');
-    this._el.locCoords = el('span', 'loc-coords', '');
-    loc.append(this._el.locPlanet, this._el.locBiome, this._el.locCoords);
-    hud.appendChild(loc);
-
-    // ── Level / XP (top-right) ────────────────────────────────────────────────
-    const lvl = el('div', 'hud-level-box');
-    this._el.lvlNum  = el('span', 'lvl-num',   'Lv 1');
-    this._el.lvlLbl  = el('span', 'lvl-label', 'EXPLORER');
-    const xpBg  = el('div', 'xp-bar-bg');
-    this._el.xpFill = el('div', 'xp-bar-fill');
-    this._el.xpFill.style.width = '0%';
-    xpBg.appendChild(this._el.xpFill);
-    this._el.xpTxt = el('span', 'lvl-label', '0 / 100 XP');
-    lvl.append(this._el.lvlNum, this._el.lvlLbl, xpBg, this._el.xpTxt);
-    hud.appendChild(lvl);
-
-    // ── Compass (top-centre) ──────────────────────────────────────────────────
-    const compass = el('div', 'hud-compass');
-    this._el.compass = compass;
-    const compassInner = el('div', 'compass-inner');
-    this._el.compassInner = compassInner;
-    for (const dir of ['N','NE','E','SE','S','SW','W','NW','N']) {
-      const d = el('span', 'compass-dir', dir);
-      compassInner.appendChild(d);
+    // Quick-slots: 5 slots in HTML (#q0–#q4)
+    this._el.qslots = [];
+    for (let i = 0; i < 5; i++) {
+      const slot = document.getElementById(`q${i}`);
+      if (slot) {
+        const icon = slot.querySelector('.q-icon');
+        const qty  = slot.querySelector('.q-qty');
+        this._el.qslots.push({ slot, icon, qty });
+      }
     }
-    const compassNeedle = el('div', 'compass-needle', '▾');
-    compass.append(compassInner, compassNeedle);
-    hud.appendChild(compass);
 
-    // ── Crosshair ─────────────────────────────────────────────────────────────
-    const xh = el('div', 'crosshair');
-    xh.innerHTML = '<div class="ch-h"></div><div class="ch-v"></div>';
-    hud.appendChild(xh);
-    this._el.crosshair = xh;
+    // ── Create elements not present in index.html ─────────────────────────────
 
-    // ── Interaction prompt ────────────────────────────────────────────────────
-    this._el.interact = el('div', 'interact-prompt hidden', '');
-    hud.appendChild(this._el.interact);
-
-    // ── Mining progress ring ──────────────────────────────────────────────────
-    this._el.miningRing = el('div', 'mining-ring hidden');
-    const mr = this._buildArcSVG('mining-arc', '#f80', '#552200');
-    mr.setAttribute('width', '80'); mr.setAttribute('height', '80');
-    this._el.miningRing.appendChild(mr);
-    hud.appendChild(this._el.miningRing);
-    this._el.miningArc = mr;
-
-    // ── Notification feed ─────────────────────────────────────────────────────
-    this._el.notifs = el('div', 'notifications');
-    hud.appendChild(this._el.notifs);
-
-    // ── Boss bar ──────────────────────────────────────────────────────────────
-    const bossBar = el('div', 'boss-bar hidden');
-    this._el.bossName = el('div', 'boss-name', 'BOSS');
-    const bossOuter = el('div', 'boss-bar-outer');
-    this._el.bossFill = el('div', 'boss-bar-fill');
-    bossOuter.appendChild(this._el.bossFill);
-    bossBar.append(this._el.bossName, bossOuter);
-    hud.appendChild(bossBar);
-    this._el.bossBar = bossBar;
-
-    // ── Damage numbers layer ──────────────────────────────────────────────────
-    this._el.dmgLayer = el('div', 'dmg-layer');
-    hud.appendChild(this._el.dmgLayer);
-
-    // ── Danger vignette (low HP) ──────────────────────────────────────────────
+    // Danger vignette (low HP pulsing border)
     this._el.dangerVignette = el('div', 'danger-vignette');
     document.body.appendChild(this._el.dangerVignette);
 
-    // ── Damage flash overlay ──────────────────────────────────────────────────
+    // Damage flash overlay
     this._el.damageFlash = el('div', 'damage-flash');
     document.body.appendChild(this._el.damageFlash);
 
-    // ── Minimap ───────────────────────────────────────────────────────────────
-    const mmWrap  = el('div', 'minimap-wrap');
-    this._el.minimap = document.createElement('canvas');
-    this._el.minimap.width  = 160;
-    this._el.minimap.height = 160;
-    this._el.minimap.className = 'minimap';
-    this._el.mmCtx = this._el.minimap.getContext('2d');
-    mmWrap.appendChild(this._el.minimap);
-    hud.appendChild(mmWrap);
-
-    // ── Flight controls indicator (shown in ship mode) ────────────────────────
-    this._el.flightHud = el('div', 'flight-hud hidden');
-    this._el.speedVal  = el('span', 'flight-stat', '0');
-    this._el.altVal    = el('span', 'flight-stat', '0');
-    const fRow1 = el('div', 'flight-row');
-    fRow1.append(el('span', 'flight-lbl', 'SPD'), this._el.speedVal);
-    const fRow2 = el('div', 'flight-row');
-    fRow2.append(el('span', 'flight-lbl', 'ALT'), this._el.altVal);
-    this._el.flightHud.append(fRow1, fRow2);
-    hud.appendChild(this._el.flightHud);
-
-    // ── Quick-slot bar (bottom) ───────────────────────────────────────────────
-    const qbar = el('div', 'quick-bar');
-    this._el.qslots = [];
-    for (let i = 0; i < 10; i++) {
-      const slot = el('div', 'quick-slot');
-      const icon = el('div', 'q-icon', '');
-      const key  = el('div', 'q-key', i === 9 ? '0' : String(i + 1));
-      const qty  = el('div', 'q-qty', '');
-      slot.append(icon, key, qty);
-      qbar.appendChild(slot);
-      this._el.qslots.push({ slot, icon, qty });
-    }
-    hud.appendChild(qbar);
-
-    // ── Hazard vignette (full-screen overlay for environmental effects) ───────
-    this._el.vignette = el('div', 'hazard-vignette');
-    hud.appendChild(this._el.vignette);
-
-    // ── Scan results panel ────────────────────────────────────────────────────
-    this._el.scanPanel = el('div', 'scan-panel hidden');
-    hud.appendChild(this._el.scanPanel);
-
-    // ── Scanning ring ─────────────────────────────────────────────────────────
-    this._el.scanRing = el('div', 'scan-ring hidden');
-    hud.appendChild(this._el.scanRing);
-
-    // ── Status effects row ────────────────────────────────────────────────────
+    // Status effects row
     this._el.statusRow = el('div', 'status-row');
     hud.appendChild(this._el.statusRow);
 
-    // ── Quest tracker (top-right overlay) ─────────────────────────────────────
+    // Quest tracker
     this._el.questTracker = el('div', 'quest-tracker hidden');
     this._el.questTitle   = el('div', 'quest-title', '');
     this._el.questObj     = el('div', 'quest-obj',   '');
@@ -361,7 +222,7 @@ export class GameHUD {
     this._el.questTracker.append(this._el.questTitle, this._el.questObj, this._el.questBar);
     hud.appendChild(this._el.questTracker);
 
-    // ── Resource direction indicator ──────────────────────────────────────────
+    // Resource direction indicator
     this._el.resIndicator = el('div', 'res-indicator hidden');
     this._el.resArrow     = el('div', 'res-arrow', '▲');
     this._el.resDist      = el('div', 'res-dist', '');
@@ -369,18 +230,56 @@ export class GameHUD {
     this._el.resIndicator.append(this._el.resArrow, this._el.resDist, this._el.resType);
     hud.appendChild(this._el.resIndicator);
 
-    // ── Space navigation HUD ─────────────────────────────────────────────────
-    this._el.spaceNav = el('div', 'space-nav hidden');
-    this._el.spaceNavDist     = el('div', 'space-nav-row', '');
-    this._el.spaceNavNearest  = el('div', 'space-nav-row', '');
-    this._el.spaceNavAU       = el('div', 'space-nav-row', '');
+    // Space navigation HUD
+    this._el.spaceNav        = el('div', 'space-nav hidden');
+    this._el.spaceNavDist    = el('div', 'space-nav-row', '');
+    this._el.spaceNavNearest = el('div', 'space-nav-row', '');
+    this._el.spaceNavAU      = el('div', 'space-nav-row', '');
     this._el.spaceNav.append(
       el('div', 'space-nav-title', '🛸 NAVIGATION'),
       this._el.spaceNavDist,
       this._el.spaceNavNearest,
-      this._el.spaceNavAU
+      this._el.spaceNavAU,
     );
     hud.appendChild(this._el.spaceNav);
+
+    // Wanted level / sentinel stars – NEW
+    this._el.wantedBar   = el('div', 'wanted-bar hidden');
+    this._el.wantedStars = [];
+    for (let i = 0; i < 5; i++) {
+      const star = el('span', 'wanted-star', '★');
+      this._el.wantedBar.appendChild(star);
+      this._el.wantedStars.push(star);
+    }
+    hud.appendChild(this._el.wantedBar);
+
+    // Currency display – NEW
+    this._el.currencyRow = el('div', 'currency-row hidden');
+    const unitsItem      = el('div', 'currency-item');
+    this._el.unitsVal    = el('span', 'currency-val', '0');
+    unitsItem.append(el('span', 'currency-icon', '💰'), this._el.unitsVal, el('span', 'currency-lbl', 'UNITS'));
+    const nanitesItem    = el('div', 'currency-item');
+    this._el.nanitesVal  = el('span', 'currency-val nanites', '0');
+    nanitesItem.append(el('span', 'currency-icon', '🔵'), this._el.nanitesVal, el('span', 'currency-lbl', 'NANITES'));
+    this._el.currencyRow.append(unitsItem, nanitesItem);
+    hud.appendChild(this._el.currencyRow);
+
+    // Hazard vignette (full-screen overlay for environmental effects)
+    this._el.vignette = el('div', 'hazard-vignette');
+    hud.appendChild(this._el.vignette);
+
+    // Scan results panel
+    this._el.scanPanel = el('div', 'scan-panel hidden');
+    hud.appendChild(this._el.scanPanel);
+
+    // Weather label appended to the hazard section if present
+    this._el.weatherLbl = el('span', 'haz-weather', 'Clear');
+    const hazardWrap = document.getElementById('hud-hazard');
+    if (hazardWrap) {
+      const wxRow = el('div', 'haz-row');
+      wxRow.append(el('span', 'haz-icon', '🌤'), el('span', 'haz-lbl', 'WEATHER'), this._el.weatherLbl);
+      hazardWrap.appendChild(wxRow);
+    }
   }
 
   _buildArcSVG(id, strokeColor, trackColor) {
@@ -610,7 +509,7 @@ export class GameHUD {
         const rect = this._el.galaxyCanvas.getBoundingClientRect();
         const mx = (e.clientX - rect.left) * (this._el.galaxyCanvas.width / rect.width);
         const my = (e.clientY - rect.top)  * (this._el.galaxyCanvas.height / rect.height);
-        const systems = g.getSystems();
+        const systems = g.getLoadedSystems ? g.getLoadedSystems() : (g.getSystems ? g.getSystems() : []);
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
         for (const s of systems) { minX=Math.min(minX,s.position.x); maxX=Math.max(maxX,s.position.x); minY=Math.min(minY,s.position.y); maxY=Math.max(maxY,s.position.y); }
         const w = this._el.galaxyCanvas.width, h = this._el.galaxyCanvas.height;
@@ -658,7 +557,7 @@ export class GameHUD {
     })());
     for (let i = 0; i < 400; i++) ctx.fillRect(rng()*w, rng()*h, rng() > 0.97 ? 2 : 1, 1);
 
-    const systems = galaxy.getSystems();
+    const systems = galaxy.getLoadedSystems ? galaxy.getLoadedSystems() : (galaxy.getSystems ? galaxy.getSystems() : []);
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     for (const s of systems) { minX=Math.min(minX,s.position.x); maxX=Math.max(maxX,s.position.x); minY=Math.min(minY,s.position.y); maxY=Math.max(maxY,s.position.y); }
     const toScreen = (gx, gy) => ({
@@ -750,19 +649,22 @@ export class GameHUD {
     this._elapsed += dt;
     const stats = player.getStats();
 
-    // Health arc
-    const hpSvg = document.querySelector('#hud .vital-wrap:nth-child(1) svg');
-    if (hpSvg?._arc) this._setArcFill(hpSvg, stats.hp / stats.maxHp);
+    // Health arc (SVG circle via stroke-dashoffset, dasharray=188)
+    if (this._el.hpRing) {
+      const hpPct = Math.max(0, Math.min(1, stats.hp / stats.maxHp));
+      this._el.hpRing.style.strokeDashoffset = String(188 * (1 - hpPct));
+    }
     if (this._el.hpVal) this._el.hpVal.textContent = stats.hp;
-    if (this._el.hpMax) this._el.hpMax.textContent = '/' + stats.maxHp;
 
     // Shield arc
-    const shSvg = document.querySelector('#hud .vital-wrap:nth-child(2) svg');
-    if (shSvg?._arc) this._setArcFill(shSvg, stats.shield / stats.maxShield);
+    if (this._el.shRing) {
+      const shPct = Math.max(0, Math.min(1, stats.shield / stats.maxShield));
+      this._el.shRing.style.strokeDashoffset = String(188 * (1 - shPct));
+    }
     if (this._el.shVal) this._el.shVal.textContent = stats.shield;
 
     // Jetpack bar
-    if (this._el.jpInner) this._el.jpInner.style.height = (stats.jetpack / stats.maxJetpack * 100) + '%';
+    if (this._el.jpFill) this._el.jpFill.style.height = (stats.jetpack / stats.maxJetpack * 100) + '%';
 
     // Life support
     if (this._el.lsBar) this._el.lsBar.style.width = stats.lifeSup + '%';
@@ -808,7 +710,7 @@ export class GameHUD {
     if (player.isMining) {
       if (this._el.miningRing) this._el.miningRing.classList.remove('hidden');
       if (this._el.miningArc && player._miningProgress != null) {
-        this._setArcFill(this._el.miningArc, player._miningProgress);
+        this._el.miningArc.style.strokeDashoffset = String(150 * (1 - player._miningProgress));
       }
     } else {
       if (this._el.miningRing) this._el.miningRing.classList.add('hidden');
@@ -1133,6 +1035,138 @@ export class GameHUD {
 
   setGameState(state) {
     this._state = state;
+  }
+
+  // ─── Wanted level (sentinel stars) ───────────────────────────────────────────
+  setWantedLevel(level, flashPct = 0) {
+    const bar   = this._el.wantedBar;
+    const stars = this._el.wantedStars;
+    if (!bar || !stars) return;
+    if (level > 0) {
+      bar.classList.remove('hidden');
+      stars.forEach((s, i) => {
+        s.className = 'wanted-star';
+        if (i < level) s.classList.add(flashPct > 0.7 ? 'alert' : 'active');
+      });
+    } else {
+      bar.classList.add('hidden');
+    }
+  }
+
+  // ─── Currency display ─────────────────────────────────────────────────────────
+  setCurrency(units, nanites) {
+    if (this._el.unitsVal)   this._el.unitsVal.textContent   = typeof units   === 'number' ? units.toLocaleString()   : String(units   ?? 0);
+    if (this._el.nanitesVal) this._el.nanitesVal.textContent = typeof nanites === 'number' ? nanites.toLocaleString() : String(nanites ?? 0);
+    if (this._el.currencyRow) this._el.currencyRow.classList.remove('hidden');
+  }
+
+  // ─── Discovery popup ──────────────────────────────────────────────────────────
+  showDiscovery(icon, name, detail, duration = 5000) {
+    const disc = document.getElementById('discovery');
+    if (!disc) return;
+    const iconEl = disc.querySelector('.disc-icon');
+    const nameEl = document.getElementById('disc-name');
+    if (iconEl) iconEl.textContent = icon || '📡';
+    if (nameEl) nameEl.textContent = name || 'Unknown Entity';
+    let detailEl = disc.querySelector('.disc-detail');
+    if (detail) {
+      if (!detailEl) {
+        detailEl = el('div', 'disc-detail');
+        const content = disc.querySelector('.disc-content');
+        (content || disc).appendChild(detailEl);
+      }
+      detailEl.textContent = detail;
+    } else if (detailEl) {
+      detailEl.remove();
+    }
+    disc.classList.remove('hidden');
+    clearTimeout(this._discoveryTimer);
+    this._discoveryTimer = setTimeout(() => disc.classList.add('hidden'), duration);
+  }
+
+  // ─── Space navigation distances ───────────────────────────────────────────────
+  setSpaceDistances(distKm, nearestName, nearestKm) {
+    if (!this._el.spaceNav) return;
+    this._el.spaceNav.classList.remove('hidden');
+    if (this._el.spaceNavDist)    this._el.spaceNavDist.textContent    = `📍 ${Math.round(distKm)} km from origin`;
+    if (this._el.spaceNavNearest) this._el.spaceNavNearest.textContent = `⭐ ${nearestName || '—'} · ${Math.round(nearestKm)} km`;
+    if (this._el.spaceNavAU)      this._el.spaceNavAU.textContent      = `🌌 ${(distKm / 149598000).toFixed(4)} AU`;
+  }
+
+  // ─── Help overlay ─────────────────────────────────────────────────────────────
+  showHelpOverlay(topic) {
+    if (!this._el.helpOverlay) {
+      this._el.helpOverlay = el('div', 'help-overlay hidden');
+      document.body.appendChild(this._el.helpOverlay);
+    }
+    const TOPICS = {
+      controls: {
+        title: 'CONTROLS',
+        html: `
+          <div class="help-section"><h3>Movement</h3>
+            <p class="help-tip"><span class="help-key">WASD</span> Move · <span class="help-key">Space</span> Jump / Jetpack · <span class="help-key">Shift</span> Sprint</p>
+          </div>
+          <div class="help-section"><h3>Combat</h3>
+            <p class="help-tip"><span class="help-key">LMB</span> Fire / Mine · <span class="help-key">RMB</span> Aim · <span class="help-key">R</span> Reload</p>
+          </div>
+          <div class="help-section"><h3>Menus</h3>
+            <p class="help-tip"><span class="help-key">Tab</span> Inventory · <span class="help-key">N</span> Crafting · <span class="help-key">T</span> Tech · <span class="help-key">M</span> Galaxy Map</p>
+          </div>
+          <div class="help-section"><h3>Interaction</h3>
+            <p class="help-tip"><span class="help-key">G</span> Interact · <span class="help-key">F</span> Enter/Exit Ship · <span class="help-key">E</span> Scanner</p>
+          </div>`,
+      },
+      crafting: {
+        title: 'CRAFTING',
+        html: `
+          <div class="help-section"><h3>How to Craft</h3>
+            <p class="help-tip">Press <span class="help-key">N</span> to open the crafting menu. Collect resources by mining planets with your multi-tool.</p>
+          </div>
+          <div class="help-section"><h3>Key Resources</h3>
+            <p class="help-tip">Carbon · Ferrite Dust · Di-Hydrogen · Chromatic Metal · Warp Cell</p>
+          </div>`,
+      },
+      universe: {
+        title: 'UNIVERSE',
+        html: `
+          <div class="help-section"><h3>Exploration</h3>
+            <p class="help-tip">Enter your ship and use the Galaxy Map (<span class="help-key">M</span>) to warp between star systems. Each system has unique planets, economies, and hazards.</p>
+          </div>
+          <div class="help-section"><h3>Galaxies</h3>
+            <p class="help-tip">Reach a new galaxy via the Atlas Path quest chain. Each galaxy contains thousands of unique star systems.</p>
+          </div>`,
+      },
+      buildings: {
+        title: 'BASE BUILDING',
+        html: `
+          <div class="help-section"><h3>Placing Structures</h3>
+            <p class="help-tip">Enter build mode to place structures. Structures snap to the terrain and provide resources, shelter, and fast-travel points.</p>
+          </div>`,
+      },
+      multiplayer: {
+        title: 'MULTIPLAYER',
+        html: `
+          <div class="help-section"><h3>Co-op</h3>
+            <p class="help-tip">Multiplayer features are in development. Stay tuned for co-op exploration, trading, and base sharing.</p>
+          </div>`,
+      },
+    };
+    const data = TOPICS[topic] || TOPICS.controls;
+    this._el.helpOverlay.innerHTML = `
+      <div class="help-panel">
+        <div class="help-header">
+          <span class="help-title">${data.title}</span>
+          <span class="help-close" id="_help-close">✕</span>
+        </div>
+        <div class="help-body">${data.html}</div>
+      </div>`;
+    this._el.helpOverlay.classList.remove('hidden');
+    const closeBtn = this._el.helpOverlay.querySelector('#_help-close');
+    if (closeBtn) closeBtn.addEventListener('click', () => this.hideHelpOverlay());
+  }
+
+  hideHelpOverlay() {
+    if (this._el.helpOverlay) this._el.helpOverlay.classList.add('hidden');
   }
 
   dispose() {}
