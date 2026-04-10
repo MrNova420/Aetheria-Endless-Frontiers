@@ -1040,6 +1040,14 @@ class Game {
       this._audio.update(dt, intensity);
     }
 
+    // Terrain shader: wetness from weather, lava/wind time scroll
+    if (this._terrain && this._weather) {
+      const intensity = this._weather.getIntensity?.() ?? 0;
+      const isRainy   = ['RAIN','STORM','ACID_RAIN'].includes(this._weather._current);
+      this._terrain.setWetness?.(isRainy ? intensity * 0.9 : 0);
+      this._terrain.tickWindTime?.(dt);
+    }
+
     // Auto-save every AUTO_SAVE_INTERVAL seconds
     this._autoSaveTimer += dt;
     if (this._autoSaveTimer >= AUTO_SAVE_INTERVAL) {

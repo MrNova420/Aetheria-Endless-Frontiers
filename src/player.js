@@ -10,10 +10,10 @@ import { PhysicsBody, PHYSICS } from './physics.js';
 // ─── Build detailed astronaut / explorer mesh ─────────────────────────────────
 function buildPlayerModel(classColor = 0x4488ff) {
   const root   = new THREE.Group();
-  const accent = new THREE.MeshPhongMaterial({ color: classColor, emissive: classColor, emissiveIntensity: 0.15, shininess: 80 });
-  const suit   = new THREE.MeshPhongMaterial({ color: 0x223344, shininess: 60 });
-  const visor  = new THREE.MeshPhongMaterial({ color: classColor, emissive: classColor, emissiveIntensity: 0.5, transparent: true, opacity: 0.7, shininess: 200 });
-  const dark   = new THREE.MeshLambertMaterial({ color: 0x111111 });
+  const accent = new THREE.MeshStandardMaterial({ color: classColor, emissive: new THREE.Color(classColor), emissiveIntensity: 0.35, roughness: 0.25, metalness: 0.75 });
+  const suit   = new THREE.MeshStandardMaterial({ color: 0x1e2d3d, roughness: 0.55, metalness: 0.60 });
+  const visor  = new THREE.MeshStandardMaterial({ color: classColor, emissive: new THREE.Color(classColor), emissiveIntensity: 1.2, transparent: true, opacity: 0.72, roughness: 0.05, metalness: 0.1 });
+  const dark   = new THREE.MeshStandardMaterial({ color: 0x0a0a0e, roughness: 0.80, metalness: 0.30 });
 
   // Torso
   const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.24, 0.55, 10), suit);

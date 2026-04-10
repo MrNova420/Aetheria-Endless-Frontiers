@@ -56,6 +56,8 @@ export class TerrainManager {
                        : new THREE.Color(1.0, 0.5, 0.1);
     mat.uniforms.uEmissiveColor.value     = emissiveCol;
     mat.uniforms.uEmissiveStrength.value  = emissiveStr;
+    mat.uniforms.uWetness.value           = 0.0;  // updated live by weather
+    mat.uniforms.uWindTime.value          = 0.0;  // updated live each tick
     return mat;
   }
 
@@ -70,11 +72,14 @@ export class TerrainManager {
     });
     const wc = this.planet.waterColor || new THREE.Color(0.1, 0.4, 0.8);
     const fc = this.planet.fogColor   || new THREE.Color(0.7, 0.8, 0.9);
+    const sc = this.planet.sunColor   || new THREE.Color(1.0, 0.95, 0.85);
     mat.uniforms.uWaterColor.value = wc.clone();
     mat.uniforms.uSkyColor.value   = fc.clone();
     mat.uniforms.uFogColor.value   = fc.clone();
     mat.uniforms.uSunDir.value     = this._sunDir.clone();
+    mat.uniforms.uSunColor.value   = sc.clone();
     mat.uniforms.uFogDensity.value = this.planet.fogDensity || 0.007;
+    mat.uniforms.uWaterLevel.value = this.planet.waterLevel ?? 10;
     return mat;
   }
 
@@ -224,8 +229,31 @@ export class TerrainManager {
       const u = data.mesh.material.uniforms;
       if (!u) continue;
       u.uSunDir.value.copy(sunDir);
-      if (sunColor)   u.uSunColor.value.copy(sunColor);
+      if (sunColor)     u.uSunColor.value.copy(sunColor);
       if (ambientColor) u.uAmbientColor.value.copy(ambientColor);
+    }
+    // Water meshes — update sun too
+    for (const wm of this._waterMeshes || []) {
+      const u = wm.material?.uniforms;
+      if (!u) continue;
+      if (u.uSunDir)   u.uSunDir.value.copy(sunDir);
+      if (u.uSunColor) u.uSunColor.value.copy(sunColor ?? new THREE.Color(1,0.95,0.85));
+    }
+  }
+
+  /** Set wetness (0–1) driven by weather intensity. */
+  setWetness(wet) {
+    for (const [, data] of this.chunks) {
+      const u = data.mesh.material.uniforms;
+      if (u?.uWetness) u.uWetness.value = wet;
+    }
+  }
+
+  /** Increment lava/wind time scroll. */
+  tickWindTime(dt) {
+    for (const [, data] of this.chunks) {
+      const u = data.mesh.material.uniforms;
+      if (u?.uWindTime) u.uWindTime.value += dt;
     }
   }
 

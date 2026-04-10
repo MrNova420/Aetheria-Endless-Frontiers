@@ -39,11 +39,27 @@ function generateGenome(seed) {
 function buildCreatureMesh(genome) {
   const root  = new THREE.Group();
   const bs    = genome.bodySize;
-  const bMat  = new THREE.MeshLambertMaterial({ color: genome.bodyColor });
-  const eMat  = new THREE.MeshLambertMaterial({
-    color   : genome.isBiolum ? genome.patternColor : genome.bodyColor,
-    emissive: genome.isBiolum ? genome.patternColor : new THREE.Color(0, 0, 0),
-    emissiveIntensity: genome.isBiolum ? 0.6 : 0,
+
+  // PBR body material — rougher for big beasts, shinier for exotic
+  const roughness = genome.isBoss ? 0.55 : (genome.isBiolum ? 0.30 : 0.70);
+  const metalness = genome.isBoss ? 0.25 : (genome.isBiolum ? 0.10 : 0.05);
+
+  const bMat = new THREE.MeshStandardMaterial({
+    color     : genome.bodyColor,
+    roughness, metalness,
+  });
+  const eMat = new THREE.MeshStandardMaterial({
+    color             : genome.isBiolum ? genome.patternColor : genome.bodyColor,
+    emissive          : genome.isBiolum ? new THREE.Color(genome.patternColor) : new THREE.Color(0x000000),
+    emissiveIntensity : genome.isBiolum ? 1.4 : (genome.isBoss ? 0.5 : 0),
+    roughness         : roughness * 0.7,
+    metalness         : metalness,
+  });
+  const eyeMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    emissive: new THREE.Color(genome.eyeCount > 2 ? genome.patternColor : 0xffffff),
+    emissiveIntensity: genome.isBoss ? 2.5 : 1.2,
+    roughness: 0.05, metalness: 0.0,
   });
 
   // Body
@@ -68,7 +84,7 @@ function buildCreatureMesh(genome) {
   for (let e = 0; e < genome.eyeCount; e++) {
     const eye = new THREE.Mesh(
       new THREE.SphereGeometry(bs * 0.12, 6, 6),
-      new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.8 })
+      eyeMat
     );
     const a = (e / genome.eyeCount) * Math.PI - Math.PI / 2;
     eye.position.set(
@@ -83,7 +99,7 @@ function buildCreatureMesh(genome) {
   for (let h = 0; h < genome.hornCount; h++) {
     const horn = new THREE.Mesh(
       new THREE.ConeGeometry(bs * 0.08, bs * 0.5, 5),
-      new THREE.MeshLambertMaterial({ color: genome.patternColor })
+      new THREE.MeshStandardMaterial({ color: genome.patternColor, roughness: 0.4, metalness: 0.1 })
     );
     const a = (h / genome.hornCount) * Math.PI * 2;
     horn.position.set(
@@ -142,9 +158,12 @@ function buildCreatureMesh(genome) {
     for (let w = 0; w < 2; w++) {
       const wing = new THREE.Mesh(
         new THREE.PlaneGeometry(bs * 2, bs * 1.2),
-        new THREE.MeshLambertMaterial({
+        new THREE.MeshStandardMaterial({
           color: genome.patternColor, side: THREE.DoubleSide,
-          transparent: true, opacity: 0.7
+          transparent: true, opacity: 0.72,
+          roughness: 0.5, metalness: 0.0,
+          emissive: genome.isBiolum ? new THREE.Color(genome.patternColor) : new THREE.Color(0x000000),
+          emissiveIntensity: genome.isBiolum ? 0.4 : 0,
         })
       );
       wing.position.set(0, bs * genome.scale + bs * 0.3, (w === 0 ? 1 : -1) * bs);
