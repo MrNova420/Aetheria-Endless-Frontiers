@@ -752,7 +752,7 @@ export class GameHUD {
       Sandstorm: '🌪', 'Toxic Fog': '☁', Aurora: '✨',
     };
     const icon = icons[name] || '🌤';
-    this._el.weatherLbl.textContent = `${icon} ${name}` + (windStrength > WIND_DISPLAY_THRESHOLD ? ` · Wind ${windStrength.toFixed(1)}` : '');
+    this._el.weatherLbl.textContent = `${icon} ${name}${windStrength > WIND_DISPLAY_THRESHOLD ? ` · Wind ${windStrength.toFixed(1)}` : ''}`;
   }
 
   // ─── Hazard vignette overlay ──────────────────────────────────────────────────

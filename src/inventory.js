@@ -63,8 +63,6 @@ export class Inventory {
 
   serialize() { return { maxSlots: this.maxSlots, slots: this.slots }; }
 
-  deserialize(data) { this.load(data); }
-
   load(data) {
     this.maxSlots = data.maxSlots;
     this.slots = data.slots;

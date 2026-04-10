@@ -811,7 +811,7 @@ class Game {
       if (!raw) { this._hud.showNotification('No save found', 'warn', 2000); return; }
       const data = JSON.parse(raw);
       if (data.player && this._player) this._player.loadState(data.player);
-      if (data.inventory && this._inventory) this._inventory.deserialize(data.inventory);
+      if (data.inventory && this._inventory) this._inventory.load(data.inventory);
       if (data.dayTime != null) this._dayTime = data.dayTime;
       this._hud.showNotification('💾 Game loaded', 'info', 2000);
     } catch (e) {
