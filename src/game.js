@@ -1404,7 +1404,7 @@ class Game {
     if (scanTarget) {
       const result = LoreSystem.scanResult({ type: 'fauna', genome: scanTarget.genome });
       this._hud?.showDiscovery?.(result.icon, result.name, result.traits);
-      this._quests?.reportEvent('kill_sentinel', {}); // actually scan event
+      this._quests?.reportEvent('scan', {}); // scan discovery event
     }
   }
 
