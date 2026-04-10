@@ -137,10 +137,47 @@ const meshPeers   = new Map();  // url → WebSocket
 
 let broadcastInterval = null;
 
+// ── Live banner player count ──────────────────────────────────────────────────
+// Tracks how many terminal rows the cursor is below the Players banner line.
+// Incremented on every log() call; set to null once the banner has scrolled
+// off-screen so we stop issuing cursor-movement escapes.
+let _rowsBelowPlayerLine = null;
+
+/** Width of the banner box interior (number of ═ in the top border). */
+const BANNER_CONTENT_WIDTH = 58;
+/** Fallback terminal height when process.stdout.rows is unavailable. */
+const DEFAULT_TERMINAL_ROWS = 24;
+
+/** Build the canonical Players line string, padded to fit the banner box. */
+function _playerCountLine() {
+  const content = `  Players → ${players.size} / ${MAX_PLAYERS}`;
+  return `║${content.padEnd(BANNER_CONTENT_WIDTH)}║`;
+}
+
+/**
+ * Rewrite the Players line in the banner in-place using ANSI cursor movement.
+ * Only active on TTY stdout while the banner is still visible on-screen.
+ */
+function refreshPlayerCount() {
+  if (!process.stdout.isTTY || _rowsBelowPlayerLine === null) return;
+  // Disable once the banner has scrolled past the top of the visible terminal.
+  const termRows = process.stdout.rows || DEFAULT_TERMINAL_ROWS;
+  if (_rowsBelowPlayerLine >= termRows) { _rowsBelowPlayerLine = null; return; }
+  const N = _rowsBelowPlayerLine;
+  process.stdout.write(
+    `\x1b[${N}A` +   // cursor up N rows → Players line
+    `\r\x1b[2K` +    // carriage-return + clear entire line
+    _playerCountLine() +
+    `\x1b[${N}B` +   // cursor down N rows → back to current position
+    `\r`             // carriage-return to column 0
+  );
+}
+
 // ── Logging ───────────────────────────────────────────────────────────────────
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}`;
   console.log(line);
+  if (_rowsBelowPlayerLine !== null) _rowsBelowPlayerLine++;
   logs.push(line);
   if (logs.length > 100) logs.shift();
 }
@@ -321,6 +358,7 @@ if (express) {
     session.ws.send(JSON.stringify({ type: 'kick', reason: reason || 'Kicked by admin' }));
     session.ws.terminate();
     players.delete(playerId);
+    refreshPlayerCount();
     log(`Admin kicked player ${playerId}`);
     res.json({ ok: true });
   });
@@ -334,6 +372,7 @@ if (express) {
     for (const [id, s] of players) {
       if (s.ip === ip) { try { s.ws.terminate(); } catch (_) {} players.delete(id); }
     }
+    refreshPlayerCount();
     log(`Admin banned IP ${ip}`);
     res.json({ ok: true });
   });
@@ -451,6 +490,9 @@ wss.on('connection', (ws, req) => {
         };
         players.set(id, session);
 
+        // Live-update the Players line in the banner
+        refreshPlayerCount();
+
         // Welcome the new player
         ws.send(JSON.stringify({
           type: 'welcome', playerId: id, playerCount: players.size,
@@ -535,6 +577,8 @@ wss.on('connection', (ws, req) => {
       broadcast({ type: 'chat', ...chatMsg });
       log(`Player left: ${session.name} (${session.id})`);
       players.delete(ws.playerId);
+      // Live-update the Players line in the banner
+      refreshPlayerCount();
     }
   });
 
@@ -549,6 +593,7 @@ function handleAdminCommand(fromId, cmd, args) {
         target.ws.send(JSON.stringify({ type: 'kick', reason: args?.reason || 'Kicked' }));
         target.ws.terminate();
         players.delete(args.targetId);
+        refreshPlayerCount();
         log(`Admin (${fromId}) kicked ${args.targetId}`);
       }
       break;
@@ -597,6 +642,7 @@ setInterval(() => {
       try { s.ws.terminate(); } catch (_) {}
       players.delete(id);
       broadcast({ type: 'player_leave', id, name: s.name });
+      refreshPlayerCount();
     }
   }
 }, 5000);
@@ -645,9 +691,13 @@ function printBanner(ip) {
 ║  Game    → http://localhost:${PORT}                        ║
 ║  Network → http://${ip}:${PORT}                      ║
 ║  Admin   → http://${ip}:${PORT}/admin              ║
-║  Players → ${players.size} / ${MAX_PLAYERS}                             ║
+${_playerCountLine()}
 ╚══════════════════════════════════════════════════════════╝
 Press Ctrl+C to stop.`);
+  // After the template literal above, the cursor sits one line below
+  // "Press Ctrl+C to stop." — which is 3 lines below the Players line
+  // (Players → ╚═══╝ → Press Ctrl+C → cursor).
+  if (process.stdout.isTTY) _rowsBelowPlayerLine = 3;
 }
 
 // ── Graceful shutdown ─────────────────────────────────────────────────────────

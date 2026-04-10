@@ -167,7 +167,7 @@ export class FactionManager {
   // ── Territories ─────────────────────────────────────────────────────────────
   assignTerritories(universe) {
     const ids = Object.keys(FACTIONS);
-    const systems = universe?.currentRegion ?? universe ?? [];
+    const systems = universe?.getLoadedSystems() ?? [];
 
     for (const system of systems) {
       const seed     = typeof system.seed === 'number' ? system.seed : (system.id ?? 0);
@@ -178,6 +178,10 @@ export class FactionManager {
 
   getTerritoryFaction(systemId) {
     return this._territories.get(systemId) ?? null;
+  }
+
+  getTerritoryCount() {
+    return this._territories.size;
   }
 
   // ── War / Alliance ──────────────────────────────────────────────────────────
