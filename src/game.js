@@ -33,6 +33,12 @@ import { ExtractorManager }   from './extractor.js';
 import { QuestSystem, QUEST_DEFS } from './quests.js';
 import { StatusEffectManager } from './status.js';
 import { TECH_UPGRADES, PLAYER_CONFIG as _PCFG, BIOME_COLORS } from './config.js';
+import { FactionManager }  from './factions.js';
+import { NpcManager }      from './npcs.js';
+import { TradingSystem }   from './trading.js';
+import { BuildingSystem }  from './building.js';
+import { NetworkManager }  from './network.js';
+import { HelpSystem }      from './help.js';
 
 // ─── Game states ──────────────────────────────────────────────────────────────
 const GS = {
@@ -90,6 +96,10 @@ class Game {
     this._sentinels   = null;
     this._buildings   = null;
     this._network     = null;
+    this._factions    = null;
+    this._npcs        = null;
+    this._trading     = null;
+    this._help        = null;
     this._units       = 0;      // in-game currency: Units
     this._nanites     = 0;      // Nanites currency
     this._buildMode   = false;
@@ -129,6 +139,12 @@ class Game {
     this._techTree.setConfig(TECH_UPGRADES);
     this._techTree.onUpgrade = (cat, techId, bonus) => this._applyTechBonus(bonus);
     this._audio        = new AudioManager();
+    // ── New subsystems ──────────────────────────────────────────────────────
+    this._factions   = new FactionManager();
+    this._trading    = new TradingSystem();
+    this._help       = new HelpSystem();
+    this._network    = new NetworkManager();
+    this._setupNetworkCallbacks();
     this._setLoad(75, 'Loading star systems…');
     this._currentSystem = this._universe.getCurrentSystem();
     this._setLoad(80, 'Generating planet…');
@@ -136,6 +152,13 @@ class Game {
     this._currentPlanet = PlanetGenerator.generate(_firstPlanetSeed, this._currentSystem.planets?.[0]?.typeOverride);
     this._setLoad(87, 'Building terrain…');
     this._setupSurface(this._currentPlanet);
+    // Assign faction territories now that universe + scene are ready
+    this._factions.assignTerritories(this._universe);
+    // NPC manager needs scene + terrain
+    this._npcs = new NpcManager(this._scene, this._terrain);
+    this._npcs.setFactionManager(this._factions);
+    // Building system needs scene + terrain
+    this._buildings = new BuildingSystem(this._scene, this._terrain);
     this._setLoad(90, 'Spawning player…');
     this._setupPlayer();
     this._setupShip();
@@ -881,6 +904,25 @@ class Game {
       this._hud?.setCurrency?.(this._units, this._nanites);
     }
 
+    // Faction tick (very slow evolution — runs every game frame, self-throttled)
+    this._factions?.tickFactionRelations?.(dt);
+
+    // Trade drone tick
+    this._trading?.updateDrones?.(dt);
+
+    // NPC update
+    if (this._npcs && this.state === GS.PLANET_SURFACE) {
+      this._npcs.update(dt, this._player?.getPosition());
+    }
+
+    // Building automation tick
+    if (this._buildings && this.state === GS.PLANET_SURFACE) {
+      this._buildings.tick?.(dt, this._inventory);
+    }
+
+    // Network state sync (~20 Hz, throttled inside NetworkManager)
+    this._syncNetworkState();
+
     this._composer.render();
   }
 
@@ -1527,6 +1569,8 @@ class Game {
         units:      this._units,
         nanites:    this._nanites,
         buildings:  this._buildings?.serialize?.() ?? [],
+        factions:   this._factions?.serialize?.() ?? null,
+        trading:    this._trading?.serialize?.()  ?? null,
       };
       localStorage.setItem('aetheria_save', JSON.stringify(data));
       if (!silent) this._hud.showNotification('💾 Game saved', 'info', 2000);
@@ -1553,6 +1597,9 @@ class Game {
       if (data.universe)   this._universe?.load(data.universe);
       if (data.units != null)   this._units   = data.units;
       if (data.nanites != null) this._nanites = data.nanites;
+      if (data.buildings && this._buildings) this._buildings.load?.(data.buildings);
+      if (data.factions  && this._factions)  this._factions.load?.(data.factions);
+      if (data.trading   && this._trading)   this._trading.load?.(data.trading);
       this._hud.showNotification('💾 Game loaded', 'info', 2000);
     } catch (e) {
       console.warn('Load failed:', e);
@@ -1566,6 +1613,69 @@ class Game {
     } else {
       this._hud?.showNotification('Build Mode: OFF', 'info', 1500);
     }
+  }
+
+  // ─── Network callback wiring ──────────────────────────────────────────────
+  _setupNetworkCallbacks() {
+    const net = this._network;
+    if (!net) return;
+
+    net.onConnect(({ playerId, playerCount }) => {
+      this._hud?.showNotification(`🌐 Connected — ${playerCount} player(s) online`, 'info', 3000);
+    });
+
+    net.onDisconnect(() => {
+      this._hud?.showNotification('🔌 Disconnected from server', 'warn', 3000);
+    });
+
+    net.onChatMessage(({ name, text }) => {
+      this._hud?.showNotification(`💬 ${name}: ${text}`, 'info', 4000);
+    });
+
+    net.onServerMessage(({ type, data }) => {
+      if (type === 'kicked') {
+        this._hud?.showNotification(`🚫 Kicked: ${data.reason || 'No reason given'}`, 'error', 6000);
+      }
+      if (type === 'announce') {
+        this._hud?.showNotification(`📢 ${data.text}`, data.severity === 'danger' ? 'error' : 'warn', 8000);
+      }
+    });
+
+    net.onBuildingUpdate(({ action, building }) => {
+      if (action === 'place' && this._buildings) {
+        this._buildings.placeFromNetwork?.(building);
+      } else if (action === 'remove' && this._buildings) {
+        this._buildings.removeFromNetwork?.(building.id);
+      }
+    });
+  }
+
+  // ─── Connect to game server (called from UI / main menu) ──────────────────
+  connectToServer(serverUrl, playerName) {
+    if (!serverUrl) return;
+    const playerId = this._getOrCreatePlayerId();
+    this._network?.connect(serverUrl, playerName || 'Explorer', playerId);
+  }
+
+  _getOrCreatePlayerId() {
+    let id = localStorage.getItem('aetheria_player_id');
+    if (!id) {
+      id = Math.random().toString(36).slice(2) + Date.now().toString(36);
+      localStorage.setItem('aetheria_player_id', id);
+    }
+    return id;
+  }
+
+  // ─── Send player state to network peers (called from _tickSurface) ────────
+  _syncNetworkState() {
+    if (!this._network?.isConnected()) return;
+    const pos = this._player?.getPosition();
+    if (!pos) return;
+    const rot = this._player?.getRotation?.() ?? { y: 0 };
+    const hp  = this._player?.hp ?? 100;
+    const st  = this.state === GS.PLANET_SURFACE ? 'surface'
+              : this.state === GS.SHIP_ATM ? 'ship' : 'space';
+    this._network.sendPlayerState({ x: pos.x, y: pos.y, z: pos.z }, rot, hp, st);
   }
 }
 
