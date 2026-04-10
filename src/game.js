@@ -180,27 +180,39 @@ class Game {
     this._scene = new THREE.Scene();
     this._scene.fog = new THREE.FogExp2(0x0a1020, 0.008);
 
-    // Ambient
-    this._ambient = new THREE.AmbientLight(0x223344, 0.5);
+    // Hemisphere light: sky → ground gradient
+    this._hemi = new THREE.HemisphereLight(0x88aacc, 0x3a3010, 0.4);
+    this._scene.add(this._hemi);
+
+    // Ambient (planet-tinted fill)
+    this._ambient = new THREE.AmbientLight(0x223344, 0.35);
     this._scene.add(this._ambient);
 
-    // Sun
-    this._sun = new THREE.DirectionalLight(0xfff4e0, 1.4);
+    // Sun (primary key light)
+    this._sun = new THREE.DirectionalLight(0xfff4e0, 1.6);
     this._sun.position.set(300, 500, 200);
     this._sun.castShadow = true;
     this._sun.shadow.mapSize.set(2048, 2048);
     this._sun.shadow.camera.near = 0.5;
-    this._sun.shadow.camera.far  = 1500;
-    this._sun.shadow.camera.left = this._sun.shadow.camera.bottom = -400;
-    this._sun.shadow.camera.right = this._sun.shadow.camera.top  =  400;
+    this._sun.shadow.camera.far  = 600;   // tighter = sharper shadows
+    this._sun.shadow.camera.left = this._sun.shadow.camera.bottom = -250;
+    this._sun.shadow.camera.right = this._sun.shadow.camera.top  =  250;
+    this._sun.shadow.bias = -0.0002;
     this._scene.add(this._sun);
+
+    // Fill / back light (blue-ish night fill)
+    this._fillLight = new THREE.DirectionalLight(0x2244aa, 0.25);
+    this._fillLight.position.set(-200, 100, -300);
+    this._scene.add(this._fillLight);
 
     // Post-processing
     this._composer = new EffectComposer(this._renderer);
     this._composer.addPass(new RenderPass(this._scene, this._camera));
+    const bloomRadius = 0.5;
+    const bloomStr    = window.devicePixelRatio <= 1 ? 0.75 : 0.9;
     this._bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.9, 0.55, 0.12
+      bloomStr, bloomRadius, 0.10
     );
     this._composer.addPass(this._bloomPass);
     const smaa = new SMAAPass(window.innerWidth * this._renderer.getPixelRatio(), window.innerHeight * this._renderer.getPixelRatio());
@@ -215,11 +227,35 @@ class Game {
 
     // Apply planet atmosphere / fog
     if (planet.fogColor) this._scene.fog = new THREE.FogExp2(new THREE.Color(planet.fogColor).getHex(), planet.fogDensity || 0.008);
-    if (planet.atmosphereColor) this._ambient.color.set(planet.atmosphereColor);
-    if (planet.ambientColor)    this._ambient.color.set(planet.ambientColor);
+    if (planet.ambientColor) this._ambient.color.set(planet.ambientColor);
 
-    // Day/night sun position based on planet type
-    this._sun.color.set(planet.sunColor || 0xfff4e0);
+    // Per-planet sun color + intensity
+    const sunCol = planet.sunColor || '#fff4e0';
+    this._sun.color.set(sunCol);
+    this._sun.intensity = 1.6;
+
+    // Hemisphere light sky/ground colors from planet palette
+    if (this._hemi) {
+      this._hemi.color.set(planet.atmosphereColor || '#88aacc');
+      this._hemi.groundColor.set(planet.ambientColor || '#3a3010');
+      // Volcanic/burning → hot red hemisphere
+      if (planet.type === 'VOLCANIC' || planet.type === 'BURNING') {
+        this._hemi.groundColor.set('#400800');
+        this._hemi.intensity = 0.6;
+      } else if (planet.type === 'CRYSTAL' || planet.type === 'EXOTIC') {
+        this._hemi.intensity = 0.5;
+      } else {
+        this._hemi.intensity = 0.35;
+      }
+    }
+
+    // Bloom strength per planet type
+    if (this._bloomPass) {
+      const emissive = planet.emissiveStrength || 0;
+      const base = window.devicePixelRatio <= 1 ? 0.7 : 0.85;
+      this._bloomPass.strength = base + emissive * 0.6;
+      this._bloomPass.threshold = planet.type === 'VOLCANIC' ? 0.05 : 0.10;
+    }
 
     // Terrain
     this._terrain = new TerrainManager(this._scene, planet, this._sun);
@@ -231,13 +267,18 @@ class Game {
     // Planet atmosphere sky
     this._atmosphere = new PlanetAtmosphere(this._scene, planet);
 
+    // Wire moon count into atmosphere shader
+    if (this._atmosphere?.material?.uniforms?.uMoonCount) {
+      this._atmosphere.material.uniforms.uMoonCount.value = Math.min((planet.moons || []).length, 3);
+    }
+
     // Weather system
     this._weather = new WeatherSystem(this._scene, planet);
 
-    // Auto-extractors (Satisfactory-style factory elements)
+    // Auto-extractors
     this._extractor = new ExtractorManager(this._scene, this._inventory);
 
-    // Space scene (hidden until leaving atmosphere)
+    // Space scene
     this._spaceScene = new SpaceScene(this._scene, this._galaxy);
     this._spaceScene.enterSystem(this._currentSystem);
     this._setSpaceVisible(false);
@@ -269,6 +310,10 @@ class Game {
     this._player.onFootstep = () => {
       if (this._audio?.initialized) this._audio.playOneShot('footstep');
     };
+    // Apply per-planet gravity
+    if (this._currentPlanet?.gravity) {
+      this._player.setGravity(this._currentPlanet.gravity);
+    }
     // Spawn on terrain
     const spawnX = 0, spawnZ = 0;
     if (this._terrain) {
@@ -557,26 +602,27 @@ class Game {
   respawn() {
     this._hud.hideDeath();
     if (this._player) {
-      // Full restore
-      this._player.hp      = this._player.maxHp;
-      this._player.shield  = this._player.maxShield;
+      // Partial restore (not full — AAA-style consequence)
+      this._player.hp      = Math.floor(this._player.maxHp * 0.5);
+      this._player.shield  = 0;
       this._player.lifeSup = 100;
-      // Drop half inventory at death site (simulate penalty)
-      if (this._inventory && this._mining) {
-        const deathPos = this._player.getPosition().clone();
+      // Drop 50% of inventory at death site
+      if (this._inventory && this._mining && this._deathPos) {
         const items = this._inventory.getAllItems();
         const toDrop = items.filter(() => Math.random() < DEATH_PENALTY_DROP_RATE);
         for (const it of toDrop) {
           if (it.amount > 0) {
+            const drop = Math.ceil(it.amount * 0.5);
             const scatter = new THREE.Vector3(
-              deathPos.x + (Math.random()-0.5) * 4,
-              deathPos.y,
-              deathPos.z + (Math.random()-0.5) * 4
+              this._deathPos.x + (Math.random()-0.5) * 4,
+              this._deathPos.y,
+              this._deathPos.z + (Math.random()-0.5) * 4
             );
-            this._mining.spawnResourceNode(scatter, it.type, Math.ceil(it.amount * 0.5), this._currentPlanet?.seed || 0);
-            this._inventory.removeItem(it.type, Math.ceil(it.amount * 0.5));
+            this._mining.spawnResourceNode(scatter, it.type, drop, this._currentPlanet?.seed || 0);
+            this._inventory.removeItem(it.type, drop);
           }
         }
+        this._hud.showNotification(`☠ Death cache dropped at last location`, 'warn', 4000);
       }
       // Respawn at ship
       const shipPos = this._ship?.getPosition();
@@ -586,7 +632,7 @@ class Game {
       this._player.setPosition(new THREE.Vector3(spawnX, sy + 1, spawnZ));
     }
     this._setState(GS.PLANET_SURFACE);
-    this._hud.showNotification('💫 Respawned. Some inventory was lost at death site.', 'warn', 5000);
+    this._hud.showNotification('💫 Respawned at 50% HP — recover your cache!', 'warn', 5000);
   }
 
   _tryEnterShip() {
@@ -890,6 +936,7 @@ class Game {
 
     // Player death
     if (!this._player.isAlive()) {
+      this._deathPos = this._player.getPosition().clone();
       this._setState(GS.DEAD);
       this._hud.showDeath();
     }
@@ -955,6 +1002,12 @@ class Game {
 
     // Day/night cycle
     this._updateDayNight(dt);
+
+    // Sync audio wind intensity with weather
+    if (this._audio?.initialized && this._weather) {
+      const intensity = this._weather.getIntensity?.() ?? 0;
+      this._audio.update(dt, intensity);
+    }
 
     // Auto-save every AUTO_SAVE_INTERVAL seconds
     this._autoSaveTimer += dt;
@@ -1081,19 +1134,95 @@ class Game {
   _dayTime = 0;
   _updateDayNight(dt) {
     this._dayTime = (this._dayTime || 0) + dt;
-    const cycle = 600; // seconds per full day
+    const cycle = this._currentPlanet?.dayDuration || 600;
     const t  = (this._dayTime % cycle) / cycle;
     const sunAngle = t * Math.PI * 2;
     const sunDir = new THREE.Vector3(Math.cos(sunAngle), Math.sin(sunAngle), 0.4).normalize();
-    this._sun.position.set(sunDir.x * 500, sunDir.y * 500, sunDir.z * 200);
+    const playerPos = this._player?.getPosition() || new THREE.Vector3();
+
+    // Shadow camera follows player for sharp local shadows
+    this._sun.position.set(
+      playerPos.x + sunDir.x * 300,
+      playerPos.y + Math.abs(sunDir.y) * 400 + 50,
+      playerPos.z + sunDir.z * 150
+    );
+    this._sun.target.position.copy(playerPos);
+    this._sun.target.updateMatrixWorld();
+
     const dayFactor = Math.max(0, sunDir.y);
-    this._ambient.intensity = 0.15 + dayFactor * 0.4;
-    this._sun.intensity     = 0.4  + dayFactor * 1.1;
-    // Sync terrain shader sun direction for accurate per-pixel lighting
+    const nightFactor = 1 - dayFactor;
+
+    // Smooth ambient transitions
+    this._ambient.intensity = 0.12 + dayFactor * 0.38;
+
+    // Sun warmth: orange at horizon, white at zenith
+    const horizonWarmth = Math.max(0, 1 - Math.abs(sunDir.y) * 3);
+    this._sun.color.lerpColors(
+      new THREE.Color(this._currentPlanet?.sunColor || '#fff4e0'),
+      new THREE.Color(0xff8820),
+      horizonWarmth * 0.4
+    );
+    this._sun.intensity = 0.3 + dayFactor * 1.3;
+
+    // Hemisphere: sky blue at day, deep blue at night
+    if (this._hemi) {
+      const skyDay   = new THREE.Color(this._currentPlanet?.atmosphereColor || '#88aacc');
+      const skyNight = new THREE.Color(0x050820);
+      this._hemi.color.lerpColors(skyDay, skyNight, nightFactor * 0.85);
+      this._hemi.intensity = 0.2 + dayFactor * 0.3;
+    }
+
+    // Fill light: blue moonlight at night
+    if (this._fillLight) {
+      this._fillLight.intensity = nightFactor * 0.35;
+    }
+
+    // Sync terrain shader sun direction
     if (this._terrain) this._terrain.setSunDirection(sunDir);
-    if (this._atmosphere) this._atmosphere.update(dt, sunDir, new THREE.Vector3());
-    // Bloom reduces at night
-    if (this._bloomPass) this._bloomPass.strength = 0.5 + dayFactor * 0.55;
+    if (this._atmosphere) this._atmosphere.update(dt, sunDir, playerPos);
+
+    // Bloom: brighter at noon, minimal at night (but emissive planets keep base)
+    if (this._bloomPass) {
+      const emissive = this._currentPlanet?.emissiveStrength || 0;
+      const base = window.devicePixelRatio <= 1 ? 0.5 : 0.6;
+      this._bloomPass.strength = base + dayFactor * 0.4 + emissive * 0.5;
+    }
+
+    // Tone mapping exposure: brighter at day
+    this._renderer.toneMappingExposure = 0.9 + dayFactor * 0.35;
+
+    // Fog: thicker at night / dusk
+    if (this._scene.fog) {
+      this._scene.fog.density = (this._currentPlanet?.fogDensity || 0.008) * (0.7 + nightFactor * 0.4);
+    }
+
+    // PLANETARY HAZARDS based on per-planet rates
+    if (this._currentPlanet && this._player) {
+      const rates = this._currentPlanet.hazardRates || {};
+      const wn = this._weather?.getWeatherName?.() || 'Clear';
+      const prot = this._player.hazardProt || 0;  // 0–100 from tech
+      const protMult = 1 - prot / 100;
+
+      // Heat damage (BURNING, VOLCANIC, DESERT)
+      if (rates.heat > 0) {
+        const stormy = (wn === 'Storm' || wn === 'Sandstorm') ? 2 : 1;
+        this._player.drainLifeSupport(rates.heat * dt * stormy * protMult);
+      }
+      // Cold damage (FROZEN, ARCTIC)
+      if (rates.cold > 0) {
+        const bliz = (wn === 'Blizzard') ? 2 : 1;
+        this._player.drainLifeSupport(rates.cold * dt * bliz * protMult);
+      }
+      // Radiation damage (DEAD, VOLCANIC)
+      if (rates.radiation > 0) {
+        this._player.takeDamage?.(rates.radiation * dt * protMult);
+      }
+      // Toxic damage (TOXIC, SWAMP)
+      if (rates.toxic > 0) {
+        const fog = (wn === 'Toxic Fog') ? 2 : 1;
+        this._player.drainLifeSupport(rates.toxic * dt * fog * protMult);
+      }
+    }
   }
 
   // ─── Scanner ─────────────────────────────────────────────────────────────────

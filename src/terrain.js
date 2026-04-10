@@ -30,6 +30,7 @@ export class TerrainManager {
 
   _buildTerrainMat() {
     const bc = this.planet;
+    const hs = bc.heightScale || WORLD.HEIGHT_SCALE;
     const mat = new THREE.ShaderMaterial({
       uniforms: THREE.UniformsUtils.clone(TerrainShader.uniforms),
       vertexShader: TerrainShader.vertexShader,
@@ -40,12 +41,21 @@ export class TerrainManager {
     mat.uniforms.uBiomeColorHigh.value = bc.snowColor       ? bc.snowColor.clone()       : new THREE.Color(0.9,0.93,0.98);
     mat.uniforms.uBiomeAccent.value    = bc.sandColor       ? bc.sandColor.clone()       : new THREE.Color(0.8,0.7,0.5);
     mat.uniforms.uWaterLevel.value     = bc.waterLevel != null ? bc.waterLevel : WORLD.WATER_LEVEL;
-    mat.uniforms.uHeightScale.value    = WORLD.HEIGHT_SCALE;
+    mat.uniforms.uHeightScale.value    = hs;
     mat.uniforms.uFogColor.value       = bc.fogColor        ? bc.fogColor.clone()        : new THREE.Color(0.7,0.8,0.9);
     mat.uniforms.uFogDensity.value     = bc.fogDensity || 0.007;
     mat.uniforms.uSunDir.value         = this._sunDir.clone();
-    mat.uniforms.uSunColor.value       = new THREE.Color(1.0, 0.95, 0.85);
-    mat.uniforms.uAmbientColor.value   = new THREE.Color(0.25, 0.3, 0.4);
+    mat.uniforms.uSunColor.value       = bc.sunColor ? bc.sunColor.clone() : new THREE.Color(1.0, 0.95, 0.85);
+    mat.uniforms.uAmbientColor.value   = bc.ambientColor ? bc.ambientColor.clone() : new THREE.Color(0.25, 0.3, 0.4);
+    // Emissive for lava/crystal/exotic glow zones
+    const emissiveStr  = bc.emissiveStrength || 0;
+    const emissiveCol  = bc.type === 'VOLCANIC' ? new THREE.Color(1.0, 0.3, 0.05)
+                       : bc.type === 'BURNING'  ? new THREE.Color(1.0, 0.4, 0.1)
+                       : bc.type === 'CRYSTAL'  ? new THREE.Color(0.4, 0.9, 1.0)
+                       : bc.type === 'EXOTIC'   ? new THREE.Color(0.8, 0.2, 1.0)
+                       : new THREE.Color(1.0, 0.5, 0.1);
+    mat.uniforms.uEmissiveColor.value     = emissiveCol;
+    mat.uniforms.uEmissiveStrength.value  = emissiveStr;
     return mat;
   }
 
@@ -69,7 +79,7 @@ export class TerrainManager {
   }
 
   getHeightAt(worldX, worldZ) {
-    const s = WORLD.HEIGHT_SCALE;
+    const s = this.planet.heightScale || WORLD.HEIGHT_SCALE;
     const n1 = this.noise.fbm2(worldX * 0.003, worldZ * 0.003, 6) * s;
     const n2 = this.noise2.fbm2(worldX * 0.015, worldZ * 0.015, 4) * s * 0.3;
     const n3 = this.noise3.fbm2(worldX * 0.06,  worldZ * 0.06,  3) * s * 0.1;
@@ -192,12 +202,30 @@ export class TerrainManager {
       }
     }
 
-    // Update water shader time
+    // Update terrain+water shader time and ambient color
     const frameDt = dt || 0.016;
+    for (const [, data] of this.chunks) {
+      if (data.mesh.material.uniforms?.uTime != null) {
+        data.mesh.material.uniforms.uTime.value += frameDt;
+      }
+    }
     for (const [, wm] of this.waterChunks) {
       if (wm.material.uniforms && wm.material.uniforms.uTime) {
         wm.material.uniforms.uTime.value += frameDt;
       }
+    }
+  }
+
+  /** Update per-frame lighting from game day/night cycle. */
+  updateLighting(sunDir, sunColor, ambientColor) {
+    if (!sunDir) return;
+    this._sunDir.copy(sunDir);
+    for (const [, data] of this.chunks) {
+      const u = data.mesh.material.uniforms;
+      if (!u) continue;
+      u.uSunDir.value.copy(sunDir);
+      if (sunColor)   u.uSunColor.value.copy(sunColor);
+      if (ambientColor) u.uAmbientColor.value.copy(ambientColor);
     }
   }
 

@@ -267,6 +267,7 @@ export class Player {
 
   getPosition()     { return this.model.position.clone(); }
   setPosition(v3)   { this.model.position.copy(v3); }
+  setGravity(g)     { this._gravity = g; }
 
   update(dt, input, terrain, mining) {
     const pos  = this.model.position;

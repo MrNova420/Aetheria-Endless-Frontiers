@@ -81,12 +81,14 @@ export class SpaceScene {
     this.skyMat.uniforms.uNebulaColor2.value.copy(nc2);
     this.skyMat.uniforms.uNebulaColor3.value.copy(nc3);
 
-    // Sun – use MeshStandardMaterial so emissive works and the bloom pass picks it up
-    const sunGeo = new THREE.SphereGeometry(800, 32, 16);
+    // Sun – emissive sphere + corona rings
+    const starColor = new THREE.Color(systemData.starColor || '#ffeeaa');
+    const starRadius = systemData.starRadius || 800;
+    const sunGeo = new THREE.SphereGeometry(starRadius, 32, 16);
     const sunMat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(systemData.starColor || '#ffeeaa'),
-      emissive: new THREE.Color(systemData.starColor || '#ffeeaa'),
-      emissiveIntensity: 1.0,
+      color: starColor,
+      emissive: starColor,
+      emissiveIntensity: systemData.starIntensity || 1.4,
       roughness: 1.0,
       metalness: 0.0,
     });
@@ -94,15 +96,52 @@ export class SpaceScene {
     this.sunMesh.position.set(0, 0, 0);
     this.scene.add(this.sunMesh);
 
+    // Corona glow rings (additive planes)
+    for (let r = 0; r < 3; r++) {
+      const scale = 1.3 + r * 0.5;
+      const fGeo = new THREE.SphereGeometry(starRadius * scale, 24, 12);
+      const fMat = new THREE.MeshBasicMaterial({
+        color: starColor,
+        transparent: true,
+        opacity: 0.06 / (r + 1),
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.BackSide
+      });
+      this.sunMesh.add(new THREE.Mesh(fGeo, fMat));
+    }
+
     // Lens flare billboard
-    const fGeo = new THREE.PlaneGeometry(3000,3000);
-    const fMat = new THREE.MeshBasicMaterial({
-      color: new THREE.Color(systemData.starColor||'#ffeeaa'),
-      transparent:true, opacity:0.15,
-      blending: THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide
+    const fGeo2 = new THREE.PlaneGeometry(starRadius * 5, starRadius * 5);
+    const fMat2 = new THREE.MeshBasicMaterial({
+      color: starColor,
+      transparent: true, opacity: 0.12,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
     });
-    const flare = new THREE.Mesh(fGeo, fMat);
-    this.sunMesh.add(flare);
+    this.sunMesh.add(new THREE.Mesh(fGeo2, fMat2));
+
+    // Binary companion star (if present)
+    if (systemData.binaryCompanion) {
+      const bc = systemData.binaryCompanion;
+      const bcColor = new THREE.Color(bc.color || '#aaddff');
+      const bcGeo = new THREE.SphereGeometry(bc.radius, 24, 12);
+      const bcMat = new THREE.MeshStandardMaterial({
+        color: bcColor, emissive: bcColor,
+        emissiveIntensity: bc.intensity || 0.5,
+        roughness: 1.0, metalness: 0.0
+      });
+      const bcMesh = new THREE.Mesh(bcGeo, bcMat);
+      bcMesh.position.set(bc.offset || 2500, 0, 0);
+      // Corona
+      const bcCorona = new THREE.SphereGeometry(bc.radius * 1.6, 16, 8);
+      const bcCoronaMat = new THREE.MeshBasicMaterial({
+        color: bcColor, transparent: true, opacity: 0.08,
+        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide
+      });
+      bcMesh.add(new THREE.Mesh(bcCorona, bcCoronaMat));
+      this.scene.add(bcMesh);
+      this.planetMeshes.push(bcMesh); // track for cleanup
+    }
 
     // Planets
     const planets = PlanetGenerator.getSystemPlanets(systemData.seed, systemData);
@@ -113,7 +152,7 @@ export class SpaceScene {
     // Space station
     this._buildStation();
 
-    // Asteroid belt
+    // Asteroid belt (wider + more varied)
     this._buildAsteroids(rng);
   }
 
@@ -190,25 +229,42 @@ export class SpaceScene {
   }
 
   _buildAsteroids(rng) {
-    const count = 300;
+    // Two instanced meshes: main belt + scattered debris field
+    const mainCount  = 500;
+    const scatCount  = 150;
     const geo = new THREE.IcosahedronGeometry(1, 1);
-    const mat = new THREE.MeshPhongMaterial({ color:0x556677, shininess:20 });
-    const inst = new THREE.InstancedMesh(geo, mat, count);
-    const mx = new THREE.Matrix4();
-    for (let i=0;i<count;i++){
-      const angle = rng()*Math.PI*2;
-      const r = 2000 + rng()*1000;
-      const y = (rng()-0.5)*200;
-      const s = 5 + rng()*40;
-      mx.makeRotationFromEuler(new THREE.Euler(rng()*Math.PI, rng()*Math.PI, rng()*Math.PI));
-      mx.setPosition(Math.cos(angle)*r, y, Math.sin(angle)*r);
-      const sc = new THREE.Matrix4().makeScale(s,s*rng()*1.5,s);
-      mx.multiply(sc);
-      inst.setMatrixAt(i, mx);
-    }
-    inst.instanceMatrix.needsUpdate = true;
-    this.asteroidMesh = inst;
-    this.scene.add(inst);
+
+    const buildBelt = (count, minR, maxR, ySpread, sizeMin, sizeMax) => {
+      const mat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(0x445566).lerpColors(new THREE.Color(0x334455), new THREE.Color(0x667788), rng()),
+        roughness: 0.9, metalness: 0.2
+      });
+      const inst = new THREE.InstancedMesh(geo, mat, count);
+      const mx = new THREE.Matrix4();
+      for (let i = 0; i < count; i++) {
+        const angle = rng() * Math.PI * 2;
+        const r = minR + rng() * (maxR - minR);
+        const y = (rng() - 0.5) * ySpread;
+        const s = sizeMin + rng() * (sizeMax - sizeMin);
+        const rot = new THREE.Euler(rng()*Math.PI*2, rng()*Math.PI*2, rng()*Math.PI*2);
+        mx.makeRotationFromEuler(rot);
+        const scale = new THREE.Matrix4().makeScale(s, s * (0.6 + rng() * 0.8), s * (0.7 + rng() * 0.6));
+        mx.multiply(scale);
+        mx.setPosition(Math.cos(angle)*r, y, Math.sin(angle)*r);
+        inst.setMatrixAt(i, mx);
+      }
+      inst.instanceMatrix.needsUpdate = true;
+      this.scene.add(inst);
+      return inst;
+    };
+
+    // Main belt between outer planets
+    const belt1 = buildBelt(mainCount, 2200, 3200, 250, 8, 55);
+    // Inner debris ring (closer)
+    const belt2 = buildBelt(scatCount, 1400, 1800, 100, 3, 22);
+
+    this.asteroidMesh = belt1;
+    this._asteroidMesh2 = belt2;
   }
 
   _clearSystem() {
@@ -236,6 +292,12 @@ export class SpaceScene {
       this.scene.remove(this.asteroidMesh);
       this.asteroidMesh.geometry.dispose();
       this.asteroidMesh.material.dispose();
+    }
+    if (this._asteroidMesh2) {
+      this.scene.remove(this._asteroidMesh2);
+      this._asteroidMesh2.geometry.dispose();
+      this._asteroidMesh2.material.dispose();
+      this._asteroidMesh2 = null;
     }
     this.sunMesh = null; this.stationMesh = null; this.asteroidMesh = null;
   }

@@ -18,14 +18,21 @@ const WEATHER_DEFS = {
 };
 
 const PLANET_WEATHER_TABLE = {
-  LUSH:    ['clear', 'clear', 'clear', 'rain', 'rain', 'storm'],
-  BARREN:  ['clear', 'clear', 'sandstorm', 'sandstorm', 'sandstorm'],
-  TOXIC:   ['toxic_fog', 'toxic_fog', 'storm', 'clear', 'rain'],
-  FROZEN:  ['clear', 'snow', 'snow', 'blizzard', 'blizzard', 'snow'],
-  BURNING: ['clear', 'sandstorm', 'sandstorm', 'storm'],
-  EXOTIC:  ['clear', 'aurora', 'aurora', 'rain', 'storm'],
-  DEAD:    ['clear', 'clear', 'clear', 'sandstorm'],
-  OCEAN:   ['clear', 'rain', 'rain', 'rain', 'storm', 'storm'],
+  LUSH:     ['clear', 'clear', 'clear', 'rain', 'rain', 'storm'],
+  BARREN:   ['clear', 'clear', 'sandstorm', 'sandstorm', 'sandstorm'],
+  TOXIC:    ['toxic_fog', 'toxic_fog', 'storm', 'clear', 'rain'],
+  FROZEN:   ['clear', 'snow', 'snow', 'blizzard', 'blizzard', 'snow'],
+  BURNING:  ['clear', 'sandstorm', 'sandstorm', 'storm'],
+  EXOTIC:   ['clear', 'aurora', 'aurora', 'rain', 'storm'],
+  DEAD:     ['clear', 'clear', 'clear', 'sandstorm'],
+  OCEAN:    ['clear', 'rain', 'rain', 'rain', 'storm', 'storm'],
+  // New subtypes
+  TROPICAL: ['clear', 'rain', 'rain', 'rain', 'storm', 'storm', 'storm'],
+  ARCTIC:   ['blizzard', 'blizzard', 'snow', 'snow', 'clear'],
+  VOLCANIC: ['clear', 'sandstorm', 'sandstorm', 'storm'],
+  SWAMP:    ['rain', 'rain', 'toxic_fog', 'toxic_fog', 'clear', 'storm'],
+  DESERT:   ['clear', 'sandstorm', 'sandstorm', 'sandstorm', 'clear'],
+  CRYSTAL:  ['clear', 'clear', 'aurora', 'snow', 'clear'],
 };
 
 export class WeatherSystem {
@@ -57,6 +64,12 @@ export class WeatherSystem {
   /** Human-readable weather name */
   getWeatherName() {
     return WEATHER_DEFS[this._current]?.name || 'Clear';
+  }
+
+  /** Intensity normalised 0..1 for audio, etc. */
+  getIntensity() {
+    const wind = this.getWindStrength();
+    return Math.min(1, wind / 3.5);
   }
 
   /** Approximate horizontal wind magnitude (0–3.5) */

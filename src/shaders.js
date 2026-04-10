@@ -15,7 +15,9 @@ export const TerrainShader = {
     uFogDensity:     { value: 0.008 },
     uSunDir:         { value: null },
     uSunColor:       { value: null },
-    uAmbientColor:   { value: null }
+    uAmbientColor:   { value: null },
+    uEmissiveColor:  { value: null },
+    uEmissiveStrength:{ value: 0.0 },
   },
   vertexShader: `
     varying vec3 vWorldPos;
@@ -49,6 +51,8 @@ export const TerrainShader = {
     uniform vec3 uSunDir;
     uniform vec3 uSunColor;
     uniform vec3 uAmbientColor;
+    uniform vec3  uEmissiveColor;
+    uniform float uEmissiveStrength;
 
     varying vec3 vWorldPos;
     varying vec3 vNormal;
@@ -129,21 +133,35 @@ export const TerrainShader = {
       col *= 0.85 + 0.3*detail;
       col = mix(col, uBiomeAccent*0.6, crack*0.15*(1.0-slope));
 
-      // Lighting
+      // Diffuse lighting with half-Lambert wrap
       float diff = max(dot(N, normalize(uSunDir)), 0.0);
+      float wrap = diff * 0.5 + 0.5; // softer wrap-around
       vec3 H = normalize(normalize(uSunDir) + vViewDir);
-      float spec = pow(max(dot(N,H),0.0), 32.0) * (snow*0.8 + (1.0-h)*0.1);
-      vec3 lighting = uAmbientColor + uSunColor * diff + uSunColor * spec * 0.4;
+      float spec = pow(max(dot(N,H),0.0), 48.0) * (snow*1.0 + (1.0-h)*0.12);
+
+      // Rim light (atmospheric backscatter from sun side)
+      float rim = pow(1.0 - max(dot(N, vViewDir), 0.0), 3.0);
+      rim *= max(dot(N, normalize(uSunDir)), 0.0) * 0.4;
+
+      vec3 lighting = uAmbientColor + uSunColor * wrap * 0.9 + uSunColor * spec * 0.5 + uSunColor * rim;
       col *= lighting;
 
-      // AO from concavity approximation
-      float ao = 0.7 + 0.3 * detail;
+      // AO from detail
+      float ao = 0.65 + 0.35 * detail;
       col *= ao;
+
+      // Emissive zones (lava cracks, crystal glow, exotic bio-luminescence)
+      if (uEmissiveStrength > 0.01) {
+        float lavaCrack = smoothstep(0.35, 0.55, crack) * (1.0 - slope) * (1.0 - snow);
+        // Animate lava/crystal glow with time
+        float pulse = 0.8 + 0.2 * sin(uTime * 1.5 + vWorldPos.x * 0.03 + vWorldPos.z * 0.05);
+        col += uEmissiveColor * lavaCrack * uEmissiveStrength * pulse;
+      }
 
       // Fog
       float dist = length(vWorldPos - cameraPosition);
       float fog = 1.0 - exp(-uFogDensity * uFogDensity * dist * dist);
-      col = mix(col, uFogColor, clamp(fog, 0.0, 0.9));
+      col = mix(col, uFogColor, clamp(fog, 0.0, 0.92));
 
       gl_FragColor = vec4(col, 1.0);
     }
@@ -160,7 +178,18 @@ export const AtmosphereShader = {
     uMieColor:       { value: null },
     uAtmosphereColor:{ value: null },
     uCloudCoverage:  { value: 0.5 },
-    uAuroraColor:    { value: null }
+    uAuroraColor:    { value: null },
+    // Moon disc uniforms (up to 3 moons)
+    uMoon0Dir:   { value: new THREE.Vector3(0.4,0.6,0.5) },
+    uMoon0Color: { value: new THREE.Color(0.85,0.88,0.92) },
+    uMoon0Size:  { value: 0.035 },
+    uMoon1Dir:   { value: new THREE.Vector3(-0.5,0.5,0.3) },
+    uMoon1Color: { value: new THREE.Color(0.8,0.6,0.5) },
+    uMoon1Size:  { value: 0.025 },
+    uMoon2Dir:   { value: new THREE.Vector3(0.2,0.7,-0.4) },
+    uMoon2Color: { value: new THREE.Color(0.7,0.85,0.95) },
+    uMoon2Size:  { value: 0.03 },
+    uMoonCount:  { value: 0 },
   },
   vertexShader: `
     varying vec3 vWorldDir;
@@ -180,6 +209,10 @@ export const AtmosphereShader = {
     uniform vec3  uAtmosphereColor;
     uniform float uCloudCoverage;
     uniform vec3  uAuroraColor;
+    uniform vec3  uMoon0Dir; uniform vec3 uMoon0Color; uniform float uMoon0Size;
+    uniform vec3  uMoon1Dir; uniform vec3 uMoon1Color; uniform float uMoon1Size;
+    uniform vec3  uMoon2Dir; uniform vec3 uMoon2Color; uniform float uMoon2Size;
+    uniform int   uMoonCount;
     varying vec3  vWorldDir;
 
     float hash(vec2 p){p=fract(p*vec2(234.34,435.345));p+=dot(p,p+34.23);return fract(p.x*p.y);}
@@ -195,6 +228,16 @@ export const AtmosphereShader = {
       return v;
     }
 
+    vec3 moonDisc(vec3 dir, vec3 moonDir, vec3 moonCol, float moonSize, float night) {
+      float d = dot(dir, normalize(moonDir));
+      float disc = smoothstep(1.0 - moonSize, 1.0 - moonSize * 0.6, d);
+      // Limb darkening on moon edge
+      float limb = 1.0 - (1.0 - disc) * 0.3;
+      // Soft glow halo around moon
+      float glow = pow(max(d, 0.0), 60.0 / moonSize) * 0.15;
+      return moonCol * (disc * limb + glow) * night * 1.8;
+    }
+
     void main() {
       vec3 dir = normalize(vWorldDir);
       vec3 sun = normalize(uSunDir);
@@ -206,16 +249,23 @@ export const AtmosphereShader = {
 
       // Horizon gradient
       float horizon = pow(clamp(1.0 - abs(dir.y), 0.0, 1.0), 3.0);
-      skyCol = mix(skyCol, uAtmosphereColor, horizon * 0.6);
+      skyCol = mix(skyCol, uAtmosphereColor, horizon * 0.65);
 
       // Mie scattering (sun halo)
       float mie = pow(max(cosTheta, 0.0), 64.0);
       skyCol += uMieColor * mie * uSunIntensity * 1.5;
 
-      // Sun disc
-      float sunDisc = smoothstep(0.9985, 0.9995, cosTheta);
+      // Sun disc + corona
+      float sunDisc = smoothstep(0.9985, 0.9996, cosTheta);
       float corona  = pow(max(cosTheta,0.0), 8.0) * 0.3;
-      skyCol += vec3(1.0,0.95,0.8) * (sunDisc + corona) * uSunIntensity;
+      // Multi-ring corona glow
+      float corona2 = pow(max(cosTheta,0.0), 18.0) * 0.5;
+      float corona3 = pow(max(cosTheta,0.0), 40.0) * 0.8;
+      skyCol += vec3(1.0,0.95,0.8) * (sunDisc + corona + corona2 + corona3) * uSunIntensity;
+
+      // Twilight / dusk glow at horizon
+      float dusk = smoothstep(0.0, 0.25, 1.0 - abs(sun.y)) * smoothstep(0.0, 0.3, uDayFactor);
+      skyCol += uMieColor * horizon * dusk * 0.5;
 
       // Night sky
       float night = 1.0 - clamp(uDayFactor, 0.0, 1.0);
@@ -226,18 +276,34 @@ export const AtmosphereShader = {
         vec3 sg = floor(sd * 4.0);
         float h = hash3f(sg);
         float brightness = smoothstep(0.97, 1.0, h);
+        // Star colour tints
+        vec3 starCol = mix(vec3(0.9,0.9,1.0), vec3(1.0,0.85,0.7), hash3f(sg+1.1));
         float sz = mix(0.5, 2.0, hash3f(sg + 0.5));
         float distStar = length(fract(sd*4.0)-0.5);
         star = brightness * smoothstep(0.3*sz, 0.0, distStar);
-        skyCol += vec3(0.9,0.95,1.0) * star * night * 3.0;
+        // Scintillation twinkle
+        float twinkle = 0.8 + 0.2 * sin(uTime * 5.0 * hash3f(sg+2.0));
+        skyCol += starCol * star * night * 3.0 * twinkle;
+
+        // Milky-Way-style dense star band
+        float mwAngle = abs(dir.y);
+        float mwDens  = fbm2(dir.xz * 4.0 + vec2(uTime * 0.002)) * smoothstep(0.15, 0.0, mwAngle);
+        skyCol += vec3(0.6,0.65,0.9) * mwDens * night * 0.4;
 
         // Aurora
-        if (dir.y > 0.1) {
-          float auroraY = (dir.y - 0.1) * 5.0;
-          float aurora = fbm2(vec2(dir.x * 3.0 + uTime*0.1, dir.z * 3.0));
-          aurora = smoothstep(0.4, 0.7, aurora) * exp(-auroraY*2.0);
-          skyCol += uAuroraColor * aurora * night * 1.5;
+        if (dir.y > 0.05) {
+          float auroraY = (dir.y - 0.05) * 4.0;
+          float aurora = fbm2(vec2(dir.x * 3.0 + uTime*0.12, dir.z * 3.0));
+          aurora = smoothstep(0.35, 0.7, aurora) * exp(-auroraY*2.0);
+          // Shimmer bands
+          float shimmer = sin(dir.x * 12.0 + uTime * 0.5) * 0.3 + 0.7;
+          skyCol += uAuroraColor * aurora * night * 1.8 * shimmer;
         }
+
+        // Moon discs
+        if (uMoonCount >= 1) skyCol += moonDisc(dir, uMoon0Dir, uMoon0Color, uMoon0Size, night);
+        if (uMoonCount >= 2) skyCol += moonDisc(dir, uMoon1Dir, uMoon1Color, uMoon1Size, night);
+        if (uMoonCount >= 3) skyCol += moonDisc(dir, uMoon2Dir, uMoon2Color, uMoon2Size, night);
       }
 
       // Clouds (2 layers)
@@ -249,9 +315,11 @@ export const AtmosphereShader = {
         float c2 = fbm2(cp2 * 3.0 + 5.5);
         float cloud = smoothstep(uCloudCoverage - 0.1, uCloudCoverage + 0.3, (c1+c2)*0.5);
         vec3 cloudCol = mix(vec3(1.0), vec3(0.5,0.55,0.6), 0.3 + 0.7*(1.0-uDayFactor));
-        cloudCol = mix(cloudCol, vec3(1.0,0.6,0.3)*uSunIntensity, horizon * uDayFactor * 0.3);
+        // Cloud shadow / underside
+        cloudCol = mix(cloudCol, vec3(0.3,0.35,0.4), smoothstep(0.4,0.8,cloud) * 0.5);
+        cloudCol = mix(cloudCol, vec3(1.0,0.6,0.3)*uSunIntensity, horizon * uDayFactor * 0.4);
         float cloudFade = smoothstep(0.02, 0.1, dir.y);
-        skyCol = mix(skyCol, cloudCol, cloud * cloudFade * clamp(uDayFactor+0.3,0.0,1.0));
+        skyCol = mix(skyCol, cloudCol, cloud * cloudFade * clamp(uDayFactor+0.35,0.0,1.0));
       }
 
       // Ground (below horizon)
