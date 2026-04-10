@@ -883,7 +883,7 @@ class Game {
     }
 
     // Atmosphere/sky time
-    if (this._atmosphere) this._atmosphere.update(dt, this._sun.position.clone().normalize(), this._player?.getPosition() || new THREE.Vector3());
+    if (this._atmosphere) this._atmosphere.update(dt, this._sv1.copy(this._sun.position).normalize(), this._player?.getPosition() ?? this._sv2.set(0, 0, 0));
 
     // HUD update
     const gs = this.state === GS.SHIP_ATM ? 'ship' : this.state === GS.SPACE_LOCAL ? 'space' : 'surface';
@@ -1014,7 +1014,7 @@ class Game {
       this._attackCooldown = ATTACK_COOLDOWN;
 
       // Fire projectile from player eye position in camera direction
-      const eyePos = pos.clone().add(new THREE.Vector3(0, 1.5, 0));
+      const eyePos = this._sv3.copy(pos).addScaledVector(THREE.Object3D.DEFAULT_UP, 1.5);
       const camDir = new THREE.Vector3(
         -Math.sin(this._player._camYaw) * Math.cos(this._player._camPitch),
         -Math.sin(this._player._camPitch),
@@ -1291,10 +1291,9 @@ class Game {
     if (!this._ship || !this._player) return;
     this._ship.update(dt, this._input, this._terrain);
 
-    // Follow camera to ship
+    // Follow camera to ship — reuse scratch vector (no allocation)
     const sp = this._ship.getPosition();
-    const cOff = new THREE.Vector3(0, 8, 20);
-    this._camera.position.lerp(sp.clone().add(cOff), 0.1);
+    this._camera.position.lerp(this._sv3.copy(sp).add({ x: 0, y: 8, z: 20 }), 0.1);
     this._camera.lookAt(sp);
 
     // Transition to surface if landed
@@ -1317,8 +1316,7 @@ class Game {
     if (!this._ship) return;
     this._ship.update(dt, this._input, null);
     const sp = this._ship.getPosition();
-    const cOff = new THREE.Vector3(0, 4, 16);
-    this._camera.position.lerp(sp.clone().add(cOff), 0.1);
+    this._camera.position.lerp(this._sv3.copy(sp).add({ x: 0, y: 4, z: 16 }), 0.1);
     this._camera.lookAt(sp);
 
     // Move skybox/starfield with ship
@@ -1383,13 +1381,24 @@ class Game {
   }
 
   _dayTime = 0;
+
+  // ─── Pre-allocated scratch objects (zero GC pressure in hot paths) ─────────
+  _sv1 = new THREE.Vector3();   // general-purpose scratch
+  _sv2 = new THREE.Vector3();   // second scratch
+  _sv3 = new THREE.Vector3();   // third scratch (camera offsets)
+  _sc1 = new THREE.Color();     // scratch color A
+  _sc2 = new THREE.Color();     // scratch color B (horizon warm)
+  _sc3 = new THREE.Color();     // scratch color C (sky day)
+  _sc4 = new THREE.Color();     // scratch color D (sky night)
   _updateDayNight(dt) {
     this._dayTime = (this._dayTime || 0) + dt;
     const cycle = this._currentPlanet?.dayDuration || 600;
     const t  = (this._dayTime % cycle) / cycle;
     const sunAngle = t * Math.PI * 2;
-    const sunDir = new THREE.Vector3(Math.cos(sunAngle), Math.sin(sunAngle), 0.4).normalize();
-    const playerPos = this._player?.getPosition() || new THREE.Vector3();
+
+    // Reuse scratch vector — no allocation
+    const sunDir = this._sv1.set(Math.cos(sunAngle), Math.sin(sunAngle), 0.4).normalize();
+    const playerPos = this._player?.getPosition() ?? this._sv2.set(0, 0, 0);
 
     // Shadow camera follows player for sharp local shadows
     this._sun.position.set(
@@ -1406,20 +1415,22 @@ class Game {
     // Smooth ambient transitions
     this._ambient.intensity = 0.12 + dayFactor * 0.38;
 
-    // Sun warmth: orange at horizon, white at zenith
+    // Sun warmth: orange at horizon, white at zenith — reuse scratch colors
     const horizonWarmth = Math.max(0, 1 - Math.abs(sunDir.y) * 3);
     this._sun.color.lerpColors(
-      new THREE.Color(this._currentPlanet?.sunColor || '#fff4e0'),
-      new THREE.Color(0xff8820),
+      this._sc1.set(this._currentPlanet?.sunColor || '#fff4e0'),
+      this._sc2.setHex(0xff8820),
       horizonWarmth * 0.4
     );
     this._sun.intensity = 0.3 + dayFactor * 1.3;
 
-    // Hemisphere: sky blue at day, deep blue at night
+    // Hemisphere: sky blue at day, deep blue at night — reuse scratch colors
     if (this._hemi) {
-      const skyDay   = new THREE.Color(this._currentPlanet?.atmosphereColor || '#88aacc');
-      const skyNight = new THREE.Color(0x050820);
-      this._hemi.color.lerpColors(skyDay, skyNight, nightFactor * 0.85);
+      this._hemi.color.lerpColors(
+        this._sc3.set(this._currentPlanet?.atmosphereColor || '#88aacc'),
+        this._sc4.setHex(0x050820),
+        nightFactor * 0.85
+      );
       this._hemi.intensity = 0.2 + dayFactor * 0.3;
     }
 
