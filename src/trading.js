@@ -249,8 +249,12 @@ export class TradingSystem {
 
     if (units < cost)    return { ok: false, cost, message: `Not enough Units. Need ${cost}, have ${units}.` };
 
-    const overflow = inventory.addItem(itemId, qty);
-    if (overflow > 0)    return { ok: false, cost: 0, message: 'Inventory full.' };
+    const overflow = inventory.addItem(item.name, qty);
+    if (overflow > 0) {
+      // Rollback any partial add that did fit
+      if (overflow < qty) inventory.removeItem(item.name, qty - overflow);
+      return { ok: false, cost: 0, message: 'Inventory full.' };
+    }
 
     return { ok: true, cost, message: `Purchased ${qty}× ${item.name} for ${cost} Units.` };
   }
@@ -260,12 +264,12 @@ export class TradingSystem {
     if (!item)    return { ok: false, revenue: 0, message: 'Unknown item.' };
     if (qty <= 0) return { ok: false, revenue: 0, message: 'Invalid quantity.' };
 
-    const removed = inventory.removeItem(itemId, qty);
-    if (removed < qty) {
-      // Re-add partial if we couldn't remove all
-      if (removed > 0) inventory.addItem(itemId, removed);
-      return { ok: false, revenue: 0, message: `You only have ${removed} of that item.` };
+    const have = inventory.getAmount(item.name);
+    if (have < qty) {
+      return { ok: false, revenue: 0, message: `You only have ${have}× of that item.` };
     }
+    const removed = inventory.removeItem(item.name, qty);
+    if (!removed) return { ok: false, revenue: 0, message: 'Failed to remove items.' };
 
     const prices  = this.getPrices(systemId);
     const price   = prices[itemId] ?? item.basePrice;

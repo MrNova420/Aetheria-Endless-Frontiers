@@ -283,7 +283,13 @@ export class NpcManager {
     if (idx === -1) return;
     const npc = this._npcs[idx];
     this._scene?.remove(npc.mesh);
-    npc.mesh.traverse(c => { if (c.geometry) c.geometry.dispose(); });
+    npc.mesh.traverse(c => {
+      if (c.geometry) c.geometry.dispose();
+      if (c.material) {
+        if (Array.isArray(c.material)) c.material.forEach(m => m.dispose());
+        else c.material.dispose();
+      }
+    });
     this._npcs.splice(idx, 1);
     this._wanderTimers.delete(id);
     this._wanderDirs.delete(id);

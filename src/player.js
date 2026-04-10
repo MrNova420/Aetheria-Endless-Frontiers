@@ -183,6 +183,10 @@ export class Player {
     this.classId      = 'explorer';
     this.classColor   = 0x4488ff;
 
+    // ── Mesh ─────────────────────────────────────────────────────────────────
+    this.model = buildPlayerModel(this.classColor);
+    this.scene.add(this.model);
+
     // ── Physics (PhysicsBody) ─────────────────────────────────────────────────
     this._body = new PhysicsBody({
       position: this.model.position,
@@ -217,10 +221,6 @@ export class Player {
     // ── Callback hooks ────────────────────────────────────────────────────────
     this.onFootstep = null;   // () => void – called each footstep while walking
 
-    // ── Mesh ─────────────────────────────────────────────────────────────────
-    this.model = buildPlayerModel(this.classColor);
-    this.scene.add(this.model);
-
     // ── Mining beam ──────────────────────────────────────────────────────────
     this._miningBeam = buildMiningBeam(this.classColor);
     this._miningBeam.visible = false;
@@ -230,7 +230,8 @@ export class Player {
     this._thrustParts = this._buildThrustParticles();
     this.scene.add(this._thrustParts);
 
-    // ── Footdust ─────────────────────────────────────────────────────────────    this._footDust = this._buildFootDust();
+    // ── Footdust ─────────────────────────────────────────────────────────────
+    this._footDust = this._buildFootDust();
     this.scene.add(this._footDust);
 
     // ── Walk animation ───────────────────────────────────────────────────────
@@ -440,7 +441,7 @@ export class Player {
 
     // ── Walk animation ────────────────────────────────────────────────────────
     if (moving && this._grounded) {
-      this._walkTime += dt * spd * 0.5;
+      this._walkTime += dt * targetSpd * 0.5;
       this._breathTime = 0; // reset breathing while walking
 
       // Body bob
@@ -464,7 +465,7 @@ export class Player {
 
       // Footstep audio
       this._footTimer += dt;
-      const interval = this._footInterval / Math.max(0.5, spd / 10);
+      const interval = this._footInterval / Math.max(0.5, targetSpd / 10);
       if (this._footTimer >= interval) {
         this._footTimer = 0;
         if (this.onFootstep) this.onFootstep();

@@ -216,7 +216,7 @@ export class LoreSystem {
 
     const gravityG    = planet.gravity != null ? planet.gravity : parseFloat((0.6 + rng() * 1.2).toFixed(2));
     const temperature = planet.temperature != null ? planet.temperature : Math.round((rng() * 200) - 80);
-    const moonCount   = planet.moons ?? Math.floor(rng() * 4);
+    const moonCount   = Array.isArray(planet.moons) ? planet.moons.length : (planet.moons ?? Math.floor(rng() * 4));
     const hasRings    = planet.hasRings ?? (rng() < 0.18);
 
     return { description: desc, threat, floraLevel, faunaLevel, primaryResources, gravityG, temperature, moonCount, hasRings };

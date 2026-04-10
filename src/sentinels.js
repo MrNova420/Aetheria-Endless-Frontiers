@@ -237,12 +237,13 @@ class SentinelDrone {
 // ─── SentinelManager ─────────────────────────────────────────────────────────
 export class SentinelManager {
   constructor(scene) {
-    this._scene      = scene;
-    this._wanted     = 0;
-    this._drones     = [];
-    this._spawnTimer = 0;
-    this._alertPhase = 0;
-    this._getHeight  = null;
+    this._scene          = scene;
+    this._wanted         = 0;
+    this._drones         = [];
+    this._spawnTimer     = 0;
+    this._alertPhase     = 0;
+    this._getHeight      = null;
+    this._lastPlayerPos  = null;
   }
 
   setHeightFn(fn) {
@@ -251,7 +252,7 @@ export class SentinelManager {
 
   addWanted(amount) {
     this._wanted = Math.min(5.0, this._wanted + amount);
-    this._checkSpawn();
+    this._checkSpawn(this._lastPlayerPos);
   }
 
   getWantedLevel() {
@@ -265,6 +266,7 @@ export class SentinelManager {
   /** @returns {{pendingDamage: number}} */
   update(dt, playerPos, getHeight) {
     const heightFn = getHeight || this._getHeight || (() => 0);
+    if (playerPos) this._lastPlayerPos = playerPos;
 
     // Cooldown
     const level = this.getWantedLevel();
@@ -284,7 +286,7 @@ export class SentinelManager {
       this._spawnTimer -= dt;
       if (this._spawnTimer <= 0) {
         this._spawnTimer = SPAWN_INTERVAL;
-        this._checkSpawn();
+        this._checkSpawn(playerPos);
       }
     }
 
@@ -351,7 +353,7 @@ export class SentinelManager {
 
   // ─── Internal ──────────────────────────────────────────────────────────────
 
-  _checkSpawn() {
+  _checkSpawn(playerPos) {
     const level  = this.getWantedLevel();
     const target = DRONE_COUNTS[Math.min(level, 5)];
     const alive  = this._drones.filter(d => d.alive).length;
@@ -359,18 +361,22 @@ export class SentinelManager {
     if (alive >= target) return;
 
     const isHeavy = level >= HEAVY_THRESHOLD;
-    const spawn   = this._makeSpawnPos();
+    const spawn   = this._makeSpawnPos(playerPos ?? this._lastPlayerPos);
     const drone   = new SentinelDrone(this._scene, spawn, isHeavy);
     this._drones.push(drone);
   }
 
-  _makeSpawnPos() {
+  _makeSpawnPos(playerPos) {
+    const cx     = playerPos?.x ?? 0;
+    const cz     = playerPos?.z ?? 0;
     const angle  = Math.random() * Math.PI * 2;
     const radius = 20 + Math.random() * 15;
+    const x = cx + Math.cos(angle) * radius;
+    const z = cz + Math.sin(angle) * radius;
     return new THREE.Vector3(
-      Math.cos(angle) * radius,
-      (this._getHeight ? this._getHeight(Math.cos(angle) * radius, Math.sin(angle) * radius) : 0) + HOVER_HEIGHT,
-      Math.sin(angle) * radius,
+      x,
+      (this._getHeight ? this._getHeight(x, z) : 0) + HOVER_HEIGHT,
+      z,
     );
   }
 }
