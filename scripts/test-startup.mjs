@@ -8,12 +8,13 @@
  * Usage:  node scripts/test-startup.mjs
  */
 import { readFileSync } from 'fs';
+import { execSync }     from 'child_process';
 
 /** Expected number of systems in a freshly loaded region. */
 const EXPECTED_SYSTEM_COUNT = 1000;
-import { execSync }     from 'child_process';
 
 // ─── Browser global stubs ────────────────────────────────────────────────────
+// navigator.vibrate is read-only in Node's global — ignore the assignment error.
 try { Object.defineProperty(global,'navigator',{value:{vibrate:()=>{}},writable:true}); } catch(e) {}
 global.document = {
   getElementById:  ()=>null,
