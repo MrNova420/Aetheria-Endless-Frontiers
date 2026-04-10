@@ -5,6 +5,7 @@
  */
 import * as THREE from 'three';
 import { PLAYER_CONFIG, WORLD } from './config.js';
+import { PhysicsBody, PHYSICS } from './physics.js';
 
 // ─── Build detailed astronaut / explorer mesh ─────────────────────────────────
 function buildPlayerModel(classColor = 0x4488ff) {
@@ -182,9 +183,18 @@ export class Player {
     this.classId      = 'explorer';
     this.classColor   = 0x4488ff;
 
-    // ── Physics ──────────────────────────────────────────────────────────────
-    this._vel       = new THREE.Vector3();
-    this._grounded  = false;
+    // ── Physics (PhysicsBody) ─────────────────────────────────────────────────
+    this._body = new PhysicsBody({
+      position: this.model.position,
+      mass: 80,
+      radius: 0.35,
+      height: 1.8,
+      friction: PHYSICS.GROUND_FRICTION_PS,
+      drag: PHYSICS.AIR_DRAG_PER_SEC,
+      restitution: 0,
+    });
+    this._vel       = this._body.velocity;   // alias for compatibility
+    this._grounded  = false;                  // proxied from body.grounded
     this._gravity   = WORLD.GRAVITY;
     this._shieldRegenTimer = 0;
     this._dodgeCooldown    = 0;
@@ -266,20 +276,21 @@ export class Player {
   }
 
   getPosition()     { return this.model.position.clone(); }
-  setPosition(v3)   { this.model.position.copy(v3); }
+  setPosition(v3)   { this.model.position.copy(v3); this._body.position.copy(v3); }
   setGravity(g)     { this._gravity = g; }
 
   update(dt, input, terrain, mining) {
     const pos  = this.model.position;
+    const body = this._body;
+    const vel  = body.velocity;
     const cfg  = PLAYER_CONFIG;
 
+    // Sync body position from model (in case external code moved it)
+    body.position = pos;
+
     // ── Move direction from input ────────────────────────────────────────────
-    const forward = new THREE.Vector3(
-      -Math.sin(this._camYaw), 0, -Math.cos(this._camYaw)
-    );
-    const right = new THREE.Vector3(
-      Math.cos(this._camYaw), 0, -Math.sin(this._camYaw)
-    );
+    const forward = new THREE.Vector3(-Math.sin(this._camYaw), 0, -Math.cos(this._camYaw));
+    const right   = new THREE.Vector3( Math.cos(this._camYaw), 0, -Math.sin(this._camYaw));
 
     const moveDir = new THREE.Vector3();
     if (input.forward) moveDir.addScaledVector(forward, 1);
@@ -288,53 +299,115 @@ export class Player {
     if (input.right)   moveDir.addScaledVector(right, 1);
     if (moveDir.lengthSq() > 0) moveDir.normalize();
 
-    const spd = (input.sprint ? cfg.SPRINT_SPEED : cfg.WALK_SPEED)
+    const targetSpd = (input.sprint ? cfg.SPRINT_SPEED : cfg.WALK_SPEED)
       * (input._weatherSpeedMult ?? 1.0)
       * (input._statusSpeedMult  ?? 1.0);
 
-    // ── Horizontal velocity ──────────────────────────────────────────────────
     const moving = moveDir.lengthSq() > 0;
-    this._vel.x = moveDir.x * spd;
-    this._vel.z = moveDir.z * spd;
 
+    // ── Acceleration-based horizontal movement ───────────────────────────────
+    // Accelerate toward target velocity; instant stop when no input on ground
+    const accel = body.grounded ? PHYSICS.ACCEL_GROUND : PHYSICS.ACCEL_AIR;
     if (moving) {
+      const targetVx = moveDir.x * targetSpd;
+      const targetVz = moveDir.z * targetSpd;
+      vel.x += (targetVx - vel.x) * Math.min(accel * dt, 1);
+      vel.z += (targetVz - vel.z) * Math.min(accel * dt, 1);
       this.model.rotation.y = Math.atan2(moveDir.x, moveDir.z);
     }
+    // Friction/drag handled inside integrateBody
 
-    // ── Jetpack ──────────────────────────────────────────────────────────────
-    if (input.jump && this.jetpackFuel > 0) {
-      this._vel.y   = Math.min(this._vel.y + cfg.JETPACK_THRUST * dt, 16);
+    // ── Jetpack / jump ────────────────────────────────────────────────────────
+    if (input.jump) body.queueJump();
+
+    const usingJetpack = input.jump && this.jetpackFuel > 0 && !body.isGroundedOrCoyote;
+    if (usingJetpack) {
+      vel.y = Math.min(vel.y + cfg.JETPACK_THRUST * dt, 18);
       this.jetpackFuel = Math.max(0, this.jetpackFuel - 30 * dt);
-      this._grounded   = false;
+      body.grounded = false;
+      body._coyoteTimer = 0;
       this._thrustParts.visible = true;
       this._updateThrustParticles(pos);
     } else {
       this._thrustParts.visible = false;
-      // Fuel regen
-      if (this._grounded || !input.jump) {
-        this.jetpackFuel = Math.min(cfg.JETPACK_FUEL, this.jetpackFuel + 25 * dt);
+      if (!input.jump) this.jetpackFuel = Math.min(cfg.JETPACK_FUEL, this.jetpackFuel + 25 * dt);
+    }
+
+    // ── Jump (ground only, via coyote time) ──────────────────────────────────
+    if (body._jumpBuf > 0 && body.isGroundedOrCoyote && !usingJetpack) {
+      // Jump impulse scaled by gravity (higher gravity = bigger jump to feel fair)
+      const jumpVel = Math.sqrt(2 * this._gravity * 2.8); // 2.8m max jump height
+      vel.y = jumpVel;
+      body.grounded = false;
+      body._coyoteTimer = 0;
+      body._jumpBuf = 0;
+    }
+
+    // ── Physics integration (gravity, drag, terrain collision) ───────────────
+    const getH = terrain ? (x, z) => terrain.getHeightAt(x, z) : null;
+    // Override gravity in body (per-planet set by setGravity)
+    // We integrate manually to pass correct gravity
+    {
+      // Gravity wells (in-atmosphere: none. Space: done in ship.js)
+      if (!body.grounded && !usingJetpack) {
+        vel.y -= this._gravity * dt;
+        if (vel.y < PHYSICS.TERMINAL_VELOCITY) vel.y = PHYSICS.TERMINAL_VELOCITY;
+      }
+
+      // Horizontal friction/drag
+      if (body.grounded) {
+        const f = Math.pow(body.friction, dt * 60);
+        vel.x *= f; vel.z *= f;
+      } else if (!usingJetpack) {
+        const d = Math.pow(body.drag, dt * 60);
+        vel.x *= d; vel.z *= d;
+      }
+
+      // Integrate position
+      pos.addScaledVector(vel, dt);
+
+      // Terrain collision with step-up and slope detection
+      if (getH) {
+        const r = 0.35;
+        const hC = getH(pos.x,     pos.z);
+        const hN = getH(pos.x,     pos.z + r);
+        const hE = getH(pos.x + r, pos.z);
+        const hS = getH(pos.x,     pos.z - r);
+        const hW = getH(pos.x - r, pos.z);
+        const groundY = hC;
+
+        // Slope normal
+        const nx = hW - hE, nz = hN - hS, ny = 2 * r;
+        const nLen = Math.sqrt(nx*nx + ny*ny + nz*nz) || 1;
+        const slopeY = ny / nLen;
+
+        if (pos.y <= groundY + PHYSICS.STEP_HEIGHT) {
+          if (slopeY < PHYSICS.SLOPE_THRESHOLD) {
+            // Steep slope – slide
+            body._slopeSliding = true;
+            // Push down the slope horizontally
+            vel.x += (nx / nLen) * PHYSICS.SLIDE_ACCEL * dt;
+            vel.z += (nz / nLen) * PHYSICS.SLIDE_ACCEL * dt;
+            if (pos.y < groundY) pos.y = groundY;
+          } else {
+            body._slopeSliding = false;
+            if (pos.y < groundY) pos.y = groundY;
+            if (vel.y < 0) vel.y = 0;
+            body.grounded = true;
+            body._coyoteTimer = PHYSICS.COYOTE_TIME;
+          }
+        } else {
+          if (body.grounded && body._coyoteTimer <= 0) body._coyoteTimer = PHYSICS.COYOTE_TIME;
+          body.grounded = false;
+          if (body._coyoteTimer > 0) body._coyoteTimer -= dt;
+          body._slopeSliding = false;
+        }
       }
     }
 
-    // ── Gravity ──────────────────────────────────────────────────────────────
-    if (!this._grounded) {
-      this._vel.y -= this._gravity * dt;
-    }
-
-    // ── Apply velocity ───────────────────────────────────────────────────────
-    pos.addScaledVector(this._vel, dt);
-
-    // ── Terrain collision ────────────────────────────────────────────────────
-    if (terrain) {
-      const groundY = terrain.getHeightAt(pos.x, pos.z);
-      if (pos.y <= groundY + 0.01) {
-        pos.y       = groundY;
-        this._vel.y = 0;
-        this._grounded = true;
-      } else {
-        this._grounded = false;
-      }
-    }
+    // Sync local alias
+    this._grounded = body.grounded;
+    body._jumpBuf = Math.max(0, (body._jumpBuf || 0) - dt);
 
     // ── Dodge cooldown ────────────────────────────────────────────────────────
     if (this._dodgeCooldown > 0) this._dodgeCooldown -= dt;
@@ -474,6 +547,18 @@ export class Player {
     this.hp = Math.max(0, this.hp - dmg);
     this._shieldRegenTimer = PLAYER_CONFIG.SHIELD_REGEN_DELAY;
     return dmg;
+  }
+
+  /** Alias used by creature melee system */
+  takeDamage(amount, type = 'physical') { return this.applyDamage(amount, type); }
+
+  /** Returns how much shield absorbed (used by game.js melee handler). */
+  absorbDamage(amount) {
+    if (this.shield <= 0) return 0;
+    const absorbed = Math.min(this.shield, amount * 0.7);
+    this.shield -= absorbed;
+    this._shieldRegenTimer = PLAYER_CONFIG.SHIELD_REGEN_DELAY;
+    return absorbed;
   }
 
   heal(amount) {

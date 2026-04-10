@@ -15,8 +15,7 @@ import { Galaxy }             from './galaxy.js';
 import { PlanetGenerator, PlanetAtmosphere } from './planet.js';
 import { TerrainManager }     from './terrain.js';
 import { FloraManager }       from './flora.js';
-import { CreatureManager }    from './creatures.js';
-import { CREATURE_STATE }     from './creatures.js';
+import { CreatureManager, CREATURE_STATE } from './creatures.js';
 import { MiningSystem }       from './mining.js';
 import { Player }             from './player.js';
 import { Ship, FlightMode }   from './ship.js';
@@ -25,6 +24,7 @@ import { Inventory }          from './inventory.js';
 import { CraftingSystem, TechTree }     from './crafting.js';
 import { AudioManager }       from './audio.js';
 import { GameHUD }             from './ui.js';
+import { PhysicsWorld }       from './physics.js';
 import { getAssets }           from './assets.js';
 import { WeatherSystem }       from './weather.js';
 import { ExtractorManager }   from './extractor.js';
@@ -282,6 +282,10 @@ class Game {
     this._spaceScene = new SpaceScene(this._scene, this._galaxy);
     this._spaceScene.enterSystem(this._currentSystem);
     this._setSpaceVisible(false);
+
+    // Physics world (re-created per planet)
+    if (this._physicsWorld) this._physicsWorld.dispose(this._scene);
+    this._physicsWorld = new PhysicsWorld();
   }
 
   _teardownSurface() {
@@ -835,27 +839,54 @@ class Game {
       }
     }
 
-    // ─── Player attack (right-click / R2) ─────────────────────────────────────
+    // ─── Player attack (right-click / R2) — projectile-based ─────────────────
     this._attackCooldown -= dt;
-    if (inp.attack && this._attackCooldown <= 0 && this._creatures) {
+    if (inp.attack && this._attackCooldown <= 0 && this._physicsWorld) {
       this._attackCooldown = ATTACK_COOLDOWN;
-      const targets = this._creatures.getNearbyCreatures(pos, ATTACK_RANGE)
-        .filter(c => c.isAlive())
-        .sort((a, b) => a.getPosition().distanceTo(pos) - b.getPosition().distanceTo(pos));
-      if (targets.length > 0) {
-        const t = targets[0];
-        const died = t.takeDamage(ATTACK_DAMAGE);
-        this._audio?.playOneShot('attack_shoot');
-        this._hud.showNotification(`🔫 Hit! −${ATTACK_DAMAGE} dmg`, 'success', 800);
+
+      // Fire projectile from player eye position in camera direction
+      const eyePos = pos.clone().add(new THREE.Vector3(0, 1.5, 0));
+      const camDir = new THREE.Vector3(
+        -Math.sin(this._player._camYaw) * Math.cos(this._player._camPitch),
+        -Math.sin(this._player._camPitch),
+        -Math.cos(this._player._camYaw) * Math.cos(this._player._camPitch)
+      ).normalize();
+
+      this._physicsWorld.fireProjectile(eyePos, camDir, 'player', this._scene, 0x00aaff);
+      this._audio?.playOneShot('attack_shoot');
+    }
+
+    // ─── Projectile hit resolution ────────────────────────────────────────────
+    if (this._physicsWorld && this._creatures) {
+      const aliveCreatures = this._creatures.getNearbyCreatures(pos, 200);
+      const projHits = this._physicsWorld.stepProjectiles(
+        dt, this._scene, aliveCreatures,
+        this._terrain ? (x, z) => this._terrain.getHeightAt(x, z) : null
+      );
+      for (const { target } of projHits) {
+        const died = target.takeDamage(ATTACK_DAMAGE);
+        this._hud.showNotification(`🔫 Hit! −${ATTACK_DAMAGE}`, 'success', 700);
         if (died) {
           this._audio?.playOneShot('creature_kill');
           this._awardXP(XP_PER_KILL);
           this._quests.reportEvent('kill');
           this._hud.showNotification(`💀 Creature defeated  +${XP_PER_KILL} XP`, 'success', 2000);
-          this._dropCreatureLoot(t.getPosition().clone());
+          this._dropCreatureLoot(target.getPosition().clone());
         }
-      } else {
-        this._audio?.playOneShot('attack_shoot');
+      }
+    }
+
+    // ─── Creature melee hits on player ────────────────────────────────────────
+    if (this._creatures) {
+      const meleeHits = this._creatures.drainPendingHits?.() ?? [];
+      for (const { damage } of meleeHits) {
+        const absorbed = this._player.absorbDamage?.(damage) ?? 0;
+        const taken = damage - absorbed;
+        if (taken > 0) {
+          this._player.takeDamage(taken);
+          this._audio?.playOneShot('hit');
+          this._hud.showNotification(`💥 Hit for ${taken} dmg`, 'danger', 1000);
+        }
       }
     }
 
@@ -1115,6 +1146,48 @@ class Game {
     // Move skybox/starfield with ship
     if (this._spaceScene?.skyMesh) this._spaceScene.skyMesh.position.copy(sp);
     if (this._spaceScene?.starPoints) this._spaceScene.starPoints.position.copy(sp);
+
+    // ─── Gravity wells near planets ──────────────────────────────────────────
+    if (this._spaceScene && this._physicsWorld) {
+      // Rebuild gravity wells every 2s (cheap – just recreate from planet list)
+      this._gwTimer = (this._gwTimer || 0) + dt;
+      if (this._gwTimer > 2.0) {
+        this._gwTimer = 0;
+        this._physicsWorld.clearGravityWells();
+        for (const pm of this._spaceScene.planetMeshes || []) {
+          if (!pm.userData.planetConfig) continue;
+          const r = pm.userData.orbitRadius || 600;
+          // Gentle pull – strength 0.8 m/s² at rim, radius = 5× planet visual size
+          const wellR = Math.max(r * 0.15, 1200);
+          this._physicsWorld.addGravityWell(pm.position, 0.8, wellR);
+        }
+      }
+      // Apply gravity wells to ship velocity
+      const shipVel = this._ship._vel;
+      for (const w of this._physicsWorld.gravityWells) {
+        const dist = sp.distanceTo(w.position);
+        if (dist < w.radius && dist > 10) {
+          const pull = w.position.clone().sub(sp).normalize();
+          const mag  = w.strength * (1 - dist / w.radius) * dt;
+          shipVel.addScaledVector(pull, mag);
+        }
+      }
+    }
+
+    // ─── Space distance HUD ──────────────────────────────────────────────────
+    if (this._spaceScene && this._hud) {
+      const distFromOrigin = sp.length();
+      const distKm = Math.round(distFromOrigin / 10); // 1 unit ≈ 10 km
+      const distAU = (distFromOrigin / 14960).toFixed(2); // 14960 units ≈ 1 AU
+      let nearest = null, nearestDist = Infinity;
+      for (const pm of this._spaceScene.planetMeshes || []) {
+        const d = sp.distanceTo(pm.position);
+        if (d < nearestDist) { nearestDist = d; nearest = pm; }
+      }
+      const nearestName = nearest?.userData.planetConfig?.name ?? '---';
+      const nearestKm   = Math.round(nearestDist / 10);
+      this._hud.setSpaceDistances?.({ distKm, distAU, nearestName, nearestKm });
+    }
 
     // Check if near planet to re-enter
     if (this._spaceScene) {

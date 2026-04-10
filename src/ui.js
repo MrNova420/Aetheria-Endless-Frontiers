@@ -368,6 +368,19 @@ export class GameHUD {
     this._el.resType      = el('div', 'res-type', '');
     this._el.resIndicator.append(this._el.resArrow, this._el.resDist, this._el.resType);
     hud.appendChild(this._el.resIndicator);
+
+    // ── Space navigation HUD ─────────────────────────────────────────────────
+    this._el.spaceNav = el('div', 'space-nav hidden');
+    this._el.spaceNavDist     = el('div', 'space-nav-row', '');
+    this._el.spaceNavNearest  = el('div', 'space-nav-row', '');
+    this._el.spaceNavAU       = el('div', 'space-nav-row', '');
+    this._el.spaceNav.append(
+      el('div', 'space-nav-title', '🛸 NAVIGATION'),
+      this._el.spaceNavDist,
+      this._el.spaceNavNearest,
+      this._el.spaceNavAU
+    );
+    hud.appendChild(this._el.spaceNav);
   }
 
   _buildArcSVG(id, strokeColor, trackColor) {
