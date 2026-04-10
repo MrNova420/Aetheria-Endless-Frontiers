@@ -214,7 +214,7 @@ export class LoreSystem {
       .slice(0, 3)
       .map(([name]) => name);
 
-    const gravityG    = planet.gravity != null ? planet.gravity.toFixed(2) : (0.6 + rng() * 1.2).toFixed(2);
+    const gravityG    = planet.gravity != null ? planet.gravity : parseFloat((0.6 + rng() * 1.2).toFixed(2));
     const temperature = planet.temperature != null ? planet.temperature : Math.round((rng() * 200) - 80);
     const moonCount   = planet.moons ?? Math.floor(rng() * 4);
     const hasRings    = planet.hasRings ?? (rng() < 0.18);
