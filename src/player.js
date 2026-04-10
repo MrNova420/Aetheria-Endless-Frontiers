@@ -70,25 +70,33 @@ function buildPlayerModel(classColor = 0x4488ff) {
   hip.position.y = 0.60;
   root.add(hip);
 
-  // Legs
-  for (const side of [-1, 1]) {
+  // Legs (grouped for animation)
+  const legGroups = [];
+  for (let li = 0; li < 2; li++) {
+    const side = li === 0 ? -1 : 1;
+    const legGroup = new THREE.Group();
+    legGroup.position.set(side * 0.13, 0.50, 0); // pivot at hip
+    root.add(legGroup);
+
     const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.10, 0.34, 8), suit);
-    thigh.position.set(side * 0.13, 0.38, 0);
-    root.add(thigh);
+    thigh.position.y = -0.17;
+    legGroup.add(thigh);
 
     const knee = new THREE.Mesh(new THREE.SphereGeometry(0.10, 6, 5), accent);
-    knee.position.set(side * 0.13, 0.22, 0);
-    root.add(knee);
+    knee.position.y = -0.36;
+    legGroup.add(knee);
 
     const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.10, 0.32, 8), suit);
-    shin.position.set(side * 0.13, 0.04, 0);
-    root.add(shin);
+    shin.position.y = -0.54;
+    legGroup.add(shin);
 
-    // Boot
     const boot = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.24), dark);
-    boot.position.set(side * 0.13, -0.12, 0.04);
-    root.add(boot);
+    boot.position.set(0, -0.74, 0.04);
+    legGroup.add(boot);
+
+    legGroups.push({ group: legGroup, phase: li * Math.PI }); // opposite phases
   }
+  root._legs = legGroups;
 
   // Jetpack
   const pack = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.38, 0.14), accent);
@@ -102,7 +110,38 @@ function buildPlayerModel(classColor = 0x4488ff) {
     root.add(nozzle);
   }
 
-  // Multitool (right hand)
+  // Arms (grouped for animation)
+  const armGroups = [];
+  for (let ai = 0; ai < 2; ai++) {
+    const side = ai === 0 ? -1 : 1;
+    const armGroup = new THREE.Group();
+    armGroup.position.set(side * 0.38, 1.05, 0); // pivot at shoulder
+    root.add(armGroup);
+
+    const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), suit);
+    armGroup.add(shoulder);
+
+    const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.075, 0.3, 8), suit);
+    upper.position.set(side * 0.04, -0.2, 0);
+    armGroup.add(upper);
+
+    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 5), accent);
+    elbow.position.set(side * 0.06, -0.37, 0);
+    armGroup.add(elbow);
+
+    const lower = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.065, 0.28, 8), suit);
+    lower.position.set(side * 0.06, -0.54, 0.04);
+    armGroup.add(lower);
+
+    const glove = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), dark);
+    glove.position.set(side * 0.06, -0.70, 0.06);
+    armGroup.add(glove);
+
+    armGroups.push({ group: armGroup, phase: ai * Math.PI }); // opposite phases
+  }
+  root._arms = armGroups;
+
+  // Multitool (right hand – attached to right arm group)
   const tool = new THREE.Group();
   const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.35, 8), accent);
   barrel.rotation.z = Math.PI / 2;
@@ -111,9 +150,9 @@ function buildPlayerModel(classColor = 0x4488ff) {
   handle.position.set(0, -0.06, 0);
   tool.add(barrel);
   tool.add(handle);
-  tool.position.set(0.44, 0.35, 0.10);
+  tool.position.set(0.06, -0.75, 0.10);
   tool.rotation.y = -0.3;
-  root.add(tool);
+  armGroups[1].group.add(tool); // right arm
 
   return root;
 }
@@ -159,6 +198,15 @@ export class Player {
     this._camDist   = 5.5;
     this._camTarget = new THREE.Vector3();
 
+    // ── Animation ─────────────────────────────────────────────────────────────
+    this._walkTime     = 0;
+    this._breathTime   = 0;
+    this._footTimer    = 0;   // seconds since last footstep sound
+    this._footInterval = 0.42; // seconds between footsteps at walk speed
+
+    // ── Callback hooks ────────────────────────────────────────────────────────
+    this.onFootstep = null;   // () => void – called each footstep while walking
+
     // ── Mesh ─────────────────────────────────────────────────────────────────
     this.model = buildPlayerModel(this.classColor);
     this.scene.add(this.model);
@@ -172,8 +220,7 @@ export class Player {
     this._thrustParts = this._buildThrustParticles();
     this.scene.add(this._thrustParts);
 
-    // ── Footdust ─────────────────────────────────────────────────────────────
-    this._footDust = this._buildFootDust();
+    // ── Footdust ─────────────────────────────────────────────────────────────    this._footDust = this._buildFootDust();
     this.scene.add(this._footDust);
 
     // ── Walk animation ───────────────────────────────────────────────────────
@@ -240,7 +287,9 @@ export class Player {
     if (input.right)   moveDir.addScaledVector(right, 1);
     if (moveDir.lengthSq() > 0) moveDir.normalize();
 
-    const spd = (input.sprint ? cfg.SPRINT_SPEED : cfg.WALK_SPEED) * (input._weatherSpeedMult ?? 1.0);
+    const spd = (input.sprint ? cfg.SPRINT_SPEED : cfg.WALK_SPEED)
+      * (input._weatherSpeedMult ?? 1.0)
+      * (input._statusSpeedMult  ?? 1.0);
 
     // ── Horizontal velocity ──────────────────────────────────────────────────
     const moving = moveDir.lengthSq() > 0;
@@ -318,7 +367,34 @@ export class Player {
     // ── Walk animation ────────────────────────────────────────────────────────
     if (moving && this._grounded) {
       this._walkTime += dt * spd * 0.5;
+      this._breathTime = 0; // reset breathing while walking
+
+      // Body bob
       this.model.position.y += Math.abs(Math.sin(this._walkTime * 6)) * 0.03;
+
+      // Leg swing — find leg groups stored on model._legs
+      if (this.model._legs) {
+        for (const leg of this.model._legs) {
+          const swing = Math.sin(this._walkTime * 6 + leg.phase) * 0.45;
+          leg.group.rotation.x = swing;
+        }
+      }
+
+      // Arm counter-swing (opposite phase to legs)
+      if (this.model._arms) {
+        for (const arm of this.model._arms) {
+          const swing = -Math.sin(this._walkTime * 6 + arm.phase) * 0.35;
+          arm.group.rotation.x = swing;
+        }
+      }
+
+      // Footstep audio
+      this._footTimer += dt;
+      const interval = this._footInterval / Math.max(0.5, spd / 10);
+      if (this._footTimer >= interval) {
+        this._footTimer = 0;
+        if (this.onFootstep) this.onFootstep();
+      }
 
       // Foot dust
       this._footDust.visible = true;
@@ -333,6 +409,26 @@ export class Player {
       fdPos.needsUpdate = true;
     } else {
       this._footDust.visible = false;
+      this._footTimer = 0;
+
+      // Reset leg rotations gradually
+      if (this.model._legs) {
+        for (const leg of this.model._legs) {
+          leg.group.rotation.x *= 0.85;
+        }
+      }
+      if (this.model._arms) {
+        for (const arm of this.model._arms) {
+          arm.group.rotation.x *= 0.85;
+        }
+      }
+
+      // Breathing idle bob (very subtle)
+      if (this._grounded) {
+        this._breathTime += dt;
+        const breathY = Math.sin(this._breathTime * 1.8) * 0.012;
+        this.model.position.y += breathY;
+      }
     }
 
     // ── Camera ───────────────────────────────────────────────────────────────

@@ -67,6 +67,40 @@ export class GameHUD {
     this._el.loading   = document.getElementById('loading-screen');
     this._el.loadBar   = document.getElementById('loading-bar');
     this._el.loadMsg   = document.getElementById('loading-msg');
+    // Inject lore tips
+    this._startLoreTips();
+  }
+
+  _startLoreTips() {
+    const TIPS = [
+      '💡 Hold SHIFT to sprint across alien terrain.',
+      '⚡ Jetpack fuel regenerates automatically when grounded.',
+      '🔍 Press F to scan your surroundings for resources and fauna.',
+      '⚙ Press B to deploy an Auto-Extractor near a resource node.',
+      '💊 Craft Medkits from Sodium + Oxygen and use them with number keys.',
+      '🛡 Shield Battery restores 60 shield — craft with Copper + Cobalt.',
+      '🌌 Explore different planet biomes for unique resources and creatures.',
+      '☠ Alpha creatures drop rare materials — approach with caution!',
+      '📜 Complete quests for XP and bonus resources to progress faster.',
+      '🚀 Collect Warp Cells to travel between star systems.',
+    ];
+    let tipIdx = 0;
+    const loadMsg = document.getElementById('loading-msg');
+    if (!loadMsg) return;
+    // Create tip element below loading-msg
+    const tipEl = document.createElement('div');
+    tipEl.id = 'loading-tip';
+    tipEl.style.cssText = 'color:#88ccff;font-size:0.8rem;margin-top:10px;opacity:0.85;transition:opacity 0.5s;max-width:340px;text-align:center;';
+    tipEl.textContent = TIPS[0];
+    loadMsg.parentNode?.insertBefore(tipEl, loadMsg.nextSibling);
+    this._loreTipInterval = setInterval(() => {
+      tipEl.style.opacity = '0';
+      setTimeout(() => {
+        tipIdx = (tipIdx + 1) % TIPS.length;
+        tipEl.textContent = TIPS[tipIdx];
+        tipEl.style.opacity = '0.85';
+      }, 500);
+    }, 3500);
   }
 
   setLoadingProgress(pct, msg) {
@@ -75,6 +109,7 @@ export class GameHUD {
   }
 
   hideLoading() {
+    if (this._loreTipInterval) { clearInterval(this._loreTipInterval); this._loreTipInterval = null; }
     if (this._el.loading) {
       this._el.loading.style.opacity = '0';
       this._el.loading.style.transition = 'opacity 0.6s';
@@ -325,6 +360,14 @@ export class GameHUD {
     this._el.questBar.appendChild(this._el.questFill);
     this._el.questTracker.append(this._el.questTitle, this._el.questObj, this._el.questBar);
     hud.appendChild(this._el.questTracker);
+
+    // ── Resource direction indicator ──────────────────────────────────────────
+    this._el.resIndicator = el('div', 'res-indicator hidden');
+    this._el.resArrow     = el('div', 'res-arrow', '▲');
+    this._el.resDist      = el('div', 'res-dist', '');
+    this._el.resType      = el('div', 'res-type', '');
+    this._el.resIndicator.append(this._el.resArrow, this._el.resDist, this._el.resType);
+    hud.appendChild(this._el.resIndicator);
   }
 
   _buildArcSVG(id, strokeColor, trackColor) {
@@ -473,27 +516,39 @@ export class GameHUD {
     const cont = this._el.techContent;
     if (!cont || !techTree) return;
     cont.innerHTML = '';
-    for (const [cat, items] of Object.entries(techTree.tree)) {
+    // techTree.tree returns the TECH_UPGRADES config set via setConfig()
+    const cfg = techTree._techConfig || {};
+    for (const [cat, items] of Object.entries(cfg)) {
       const catEl = el('div', 'tech-cat');
       catEl.appendChild(el('h3', 'tech-cat-name', cat));
       for (const [id, tech] of Object.entries(items)) {
-        const row = el('div', 'tech-row');
-        const unlocked = techTree.isUnlocked(cat, id);
-        const nameEl = el('span', `tech-name ${unlocked ? 'unlocked' : ''}`, tech.name);
+        const row     = el('div', 'tech-row');
+        const tier    = techTree.upgrades[`${cat}.${id}`] || 0;
+        const maxTier = tech.tiers.length;
+        const fullyUnlocked = tier >= maxTier;
+        const nameEl  = el('span', `tech-name ${fullyUnlocked ? 'unlocked' : ''}`,
+          tier > 0 ? `${tech.name} (Tier ${tier}/${maxTier})` : tech.name);
         row.appendChild(nameEl);
-        if (!unlocked) {
-          const btn = el('button', 'mm-btn tech-btn', 'UPGRADE');
+        if (!fullyUnlocked) {
+          const btn = el('button', 'mm-btn tech-btn', `UPGRADE Tier ${tier + 1}`);
           const canAfford = techTree.canAfford(cat, id, inventory);
           btn.disabled = !canAfford;
+          // Show cost
+          const tierDef = tech.tiers[tier];
+          if (tierDef) {
+            const costStr = Object.entries(tierDef.cost).map(([t,a])=>`${t}×${a}`).join(' ');
+            const costEl = el('span', 'tech-cost', ` [${costStr}]`);
+            row.appendChild(costEl);
+          }
           btn.addEventListener('click', () => {
             if (techTree.upgrade(cat, id, inventory)) {
-              this.showNotification(`Upgraded: ${tech.name}`, 'upgrade');
+              this.showNotification(`✅ Upgraded: ${tech.name} Tier ${tier + 1}`, 'upgrade');
               this._renderTechTree(techTree, inventory);
             }
           });
           row.appendChild(btn);
         } else {
-          row.appendChild(el('span', 'tech-done', '✔ INSTALLED'));
+          row.appendChild(el('span', 'tech-done', '✔ MAX TIER'));
         }
         catEl.appendChild(row);
       }
@@ -677,7 +732,7 @@ export class GameHUD {
   _bindMenuButtons() {}
 
   // ─── Main update ──────────────────────────────────────────────────────────────
-  update(dt, player, planet, ship, terrain, gameState, creatures) {
+  update(dt, player, planet, ship, terrain, gameState, creatures, mining) {
     if (!player) return;
     this._elapsed += dt;
     const stats = player.getStats();
@@ -760,7 +815,7 @@ export class GameHUD {
     }
 
     // Minimap
-    this._updateMinimap(pos, terrain, creatures, ship, planet);
+    this._updateMinimap(pos, terrain, creatures, ship, planet, mining);
 
     // Notification drain
     this._notifT -= dt;
@@ -789,7 +844,7 @@ export class GameHUD {
   }
 
   // ─── Minimap ──────────────────────────────────────────────────────────────────
-  _updateMinimap(playerPos, terrain, creatures, ship, planet) {
+  _updateMinimap(playerPos, terrain, creatures, ship, planet, mining) {
     const ctx = this._el.mmCtx;
     if (!ctx) return;
     const w = 160, h = 160, range = 300;
@@ -846,6 +901,17 @@ export class GameHUD {
       }
     }
 
+    // Resource node dots (orange)
+    if (mining) {
+      const nodes = mining.getNodesNear?.(playerPos, range) || [];
+      for (const n of nodes) {
+        const rx = w/2 + (n.pos.x - playerPos.x) / range * w * 0.5;
+        const ry = h/2 + (n.pos.z - playerPos.z) / range * h * 0.5;
+        ctx.fillStyle = '#ff8800';
+        ctx.beginPath(); ctx.arc(rx, ry, 2, 0, Math.PI*2); ctx.fill();
+      }
+    }
+
     // Player dot
     ctx.fillStyle = '#0af';
     ctx.beginPath(); ctx.arc(w/2, h/2, 4, 0, Math.PI*2); ctx.fill();
@@ -864,6 +930,16 @@ export class GameHUD {
   // ─── Notifications ────────────────────────────────────────────────────────────
   showNotification(text, type = 'info', duration = 3000) {
     if (!this._el.notifs) return;
+    // Dedup: ignore if same text shown in last 2s
+    const now = Date.now();
+    if (!this._notifSeen) this._notifSeen = new Map();
+    const last = this._notifSeen.get(text);
+    if (last && now - last < 2000) return;
+    this._notifSeen.set(text, now);
+    // Limit max simultaneous notifs
+    while (this._el.notifs.childElementCount >= 5) {
+      this._el.notifs.firstChild?.remove();
+    }
     const n = el('div', `notif notif-${type}`, text);
     this._el.notifs.appendChild(n);
     setTimeout(() => n.remove(), duration);
@@ -998,6 +1074,39 @@ export class GameHUD {
   selectQuickSlot(index) {
     if (!this._el.qslots) return;
     this._el.qslots.forEach((s, i) => s.slot.classList.toggle('active', i === index));
+  }
+
+  /** Populate quickslot icons from inventory slots 0–9 */
+  updateQuickBar(inventory) {
+    if (!this._el.qslots || !inventory) return;
+    this._el.qslots.forEach((s, i) => {
+      const slot = inventory.slots[i];
+      if (slot) {
+        // Use first 2 chars of type as icon + qty
+        s.icon.textContent = slot.type.slice(0, 3).toUpperCase();
+        s.qty.textContent  = slot.amount > 1 ? `×${slot.amount}` : '';
+        s.slot.classList.add('has-item');
+      } else {
+        s.icon.textContent = (i + 1).toString();
+        s.qty.textContent  = '';
+        s.slot.classList.remove('has-item');
+      }
+    });
+  }
+
+  /** Show a directional indicator arrow toward the nearest resource node.
+   *  angle: radians relative to camera yaw (0 = forward). null = hide. */
+  setResourceIndicator(angle, distance, type) {
+    if (!this._el.resIndicator) return;
+    if (angle == null) {
+      this._el.resIndicator.classList.add('hidden');
+      return;
+    }
+    this._el.resIndicator.classList.remove('hidden');
+    const deg = angle * 180 / Math.PI;
+    if (this._el.resArrow)    this._el.resArrow.style.transform = `rotate(${deg}deg)`;
+    if (this._el.resDist)     this._el.resDist.textContent      = `${Math.round(distance)}m`;
+    if (this._el.resType)     this._el.resType.textContent      = type || '';
   }
   // ─── HUD visibility ───────────────────────────────────────────────────────────
   showHUD() {

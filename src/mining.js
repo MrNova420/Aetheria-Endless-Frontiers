@@ -113,11 +113,17 @@ export class MiningSystem {
     this.scene = scene;
     this.inventory = inventory;
     this.nodes = new Map();
-    this._beamLine = null;
-    this._particles = null;
     this._miningTarget = null;
     this._miningProgress = 0;
     this._respawnQueue = [];
+
+    // Persistent beam — update positions in place rather than recreating
+    const beamPts = [new THREE.Vector3(), new THREE.Vector3()];
+    const beamGeo = new THREE.BufferGeometry().setFromPoints(beamPts);
+    const beamMat = new THREE.LineBasicMaterial({ color: 0xff4400, linewidth: 2 });
+    this._beamLine = new THREE.Line(beamGeo, beamMat);
+    this._beamLine.visible = false;
+    this.scene.add(this._beamLine);
   }
 
   spawnResourceNode(pos, resourceType, amount, planetSeed) {
@@ -235,21 +241,15 @@ export class MiningSystem {
   }
 
   _updateBeam(from, to) {
-    this._clearBeam();
-    const pts=[from.clone(),to.clone()];
-    const geo=new THREE.BufferGeometry().setFromPoints(pts);
-    const mat=new THREE.LineBasicMaterial({color:0xff4400,linewidth:2});
-    this._beamLine=new THREE.Line(geo,mat);
-    this.scene.add(this._beamLine);
+    const pos = this._beamLine.geometry.attributes.position;
+    pos.setXYZ(0, from.x, from.y, from.z);
+    pos.setXYZ(1, to.x,   to.y,   to.z);
+    pos.needsUpdate = true;
+    this._beamLine.visible = true;
   }
 
   _clearBeam(){
-    if(this._beamLine){
-      this.scene.remove(this._beamLine);
-      this._beamLine.geometry.dispose();
-      this._beamLine.material.dispose();
-      this._beamLine=null;
-    }
+    this._beamLine.visible = false;
   }
 
   getNodesNear(pos, radius) {
@@ -288,6 +288,11 @@ export class MiningSystem {
       });
     }
     this.nodes.clear();
-    this._clearBeam();
+    if(this._beamLine){
+      this.scene.remove(this._beamLine);
+      this._beamLine.geometry.dispose();
+      this._beamLine.material.dispose();
+      this._beamLine = null;
+    }
   }
 }

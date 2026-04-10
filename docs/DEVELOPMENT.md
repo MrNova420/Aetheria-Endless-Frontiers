@@ -570,3 +570,36 @@ Boss XP = 35 (same as normal, bosses are rare; designed to feel rewarding via lo
 | Death greyscale      | All materials set to #444 on `die()`                         |
 | `getHpPct()`         | Returns 0–1 for boss bar                                     |
 | `getNearestBoss()`   | Filters `_all` for alive isBoss creatures within radius      |
+
+---
+
+## 21. Integration Pass — AAA Polish (v3.1)
+
+### Bug Fixes
+| File | Bug | Fix |
+|------|-----|-----|
+| `player.js` | Status speed mult ignored — only weather mult applied | Combined `_weatherSpeedMult * _statusSpeedMult` |
+| `mining.js` | `_updateBeam` recreated `THREE.Line` every frame (GC leak) | Persistent beam geometry updated in-place |
+| `crafting.js` | `CraftingSystem.craft()` had no callback — quests never knew | Added `onCraft(recipeId, recipe)` callback hook |
+| `crafting.js` | `TechTree` missing `isUnlocked`, `canAfford`, `tree`; `upgrade()` missing config | Added all missing methods; `setConfig()` stores TECH_UPGRADES |
+| `game.js` | Tech upgrade bonuses never applied to Player stats | `TechTree.onUpgrade` → `_applyTechBonus(bonus)` |
+| `game.js` | `_toggleTech()` bypassed `showTechScreen()` | Now calls `_hud.showTechScreen(techTree, inventory)` |
+| `ui.js` | Quickslot bar never showed inventory items | Added `updateQuickBar(inventory)` called each tick |
+| `ui.js` | Notifications could stack unlimited | Dedup within 2s window; max 5 simultaneous |
+
+### New Features
+| Feature | Detail |
+|---------|--------|
+| **Leg/arm animation** | `buildPlayerModel()` now returns grouped limbs (`_legs`, `_arms`); `update()` rotates them for walk cycle |
+| **Arm counter-swing** | Arms swing in opposite phase to legs for realistic gait |
+| **Breathing idle** | Subtle camera/body sine oscillation when grounded and still |
+| **Footstep audio** | `Player.onFootstep` callback → `AudioManager.playOneShot('footstep')` on interval |
+| **Usable items** | Press quickslot key (1–0): Medkit heals +40 HP, Shield Battery restores +60 Shield |
+| **Resource indicator** | HUD arrow + distance + type label pointing to nearest resource node |
+| **Resource minimap dots** | Orange dots for resource nodes on the minimap |
+| **Tech cost display** | Each tech upgrade shows ingredient cost in the UI |
+| **Loading lore tips** | 10 rotating gameplay tips during loading (fade in/out every 3.5s) |
+| **Scanline overlay** | Subtle CSS scanline texture over HUD for film-grade sci-fi feel |
+| **Notification dedup** | Same notification ignored if shown within last 2 seconds |
+| **Danger notification** | `notif-danger` type has red pulsing glow |
+| **Craft XP** | Crafting awards 15 XP per successful craft |

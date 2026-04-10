@@ -30,6 +30,7 @@ import { WeatherSystem }       from './weather.js';
 import { ExtractorManager }   from './extractor.js';
 import { QuestSystem, QUEST_DEFS } from './quests.js';
 import { StatusEffectManager } from './status.js';
+import { TECH_UPGRADES, PLAYER_CONFIG as _PCFG, BIOME_COLORS } from './config.js';
 
 // ─── Game states ──────────────────────────────────────────────────────────────
 const GS = {
@@ -110,7 +111,13 @@ class Game {
     this._setLoad(70, 'Creating systems…');
     this._inventory    = new Inventory(48);
     this._crafting     = new CraftingSystem(this._inventory);
+    this._crafting.onCraft = (recipeId, recipe) => {
+      this._quests?.reportEvent('craft', { item: recipe.name || recipeId, amount: 1 });
+      this._awardXP(15);
+    };
     this._techTree     = new TechTree();
+    this._techTree.setConfig(TECH_UPGRADES);
+    this._techTree.onUpgrade = (cat, techId, bonus) => this._applyTechBonus(bonus);
     this._audio        = new AudioManager();
     this._setLoad(75, 'Loading star systems…');
     this._currentSystem = this._galaxy.getSystems()[0];
@@ -258,6 +265,10 @@ class Game {
   // ─── Player ──────────────────────────────────────────────────────────────────
   _setupPlayer() {
     this._player = new Player(this._scene, this._camera);
+    // Wire footstep audio
+    this._player.onFootstep = () => {
+      if (this._audio?.initialized) this._audio.playOneShot('footstep');
+    };
     // Spawn on terrain
     const spawnX = 0, spawnZ = 0;
     if (this._terrain) {
@@ -616,7 +627,11 @@ class Game {
   _toggleTech() {
     const s = document.getElementById('tech-screen');
     if (!s) return;
-    s.classList.toggle('hidden');
+    if (s.classList.contains('hidden')) {
+      this._hud.showTechScreen(this._techTree, this._inventory);
+    } else {
+      this._hud.hideTechScreen();
+    }
   }
 
   _toggleGalaxyMap() {
@@ -695,7 +710,7 @@ class Game {
     if (this._player && this._mining) {
       this._player._miningProgress = this._mining.getMiningProgress();
     }
-    this._hud.update(dt, this._player, this._currentPlanet, this._ship, this._terrain, gs, this._creatures);
+    this._hud.update(dt, this._player, this._currentPlanet, this._ship, this._terrain, gs, this._creatures, this._mining);
 
     this._composer.render();
   }
@@ -817,11 +832,60 @@ class Game {
       this._hud.updateHazardOverlay(this._currentPlanet.hazardType, this._currentPlanet);
     }
 
-    // HUD: update level/XP and quickslot selection
+    // HUD: update level/XP, quickslot bar, resource indicator
     this._hud.setLevel(this._level, this._xp, this._xpToNext);
+    this._hud.updateQuickBar?.(this._inventory);
+
+    // ─── Quickslot use ────────────────────────────────────────────────────────
     if (inp.quickSlot >= 0) {
       this._hud.selectQuickSlot(inp.quickSlot);
+      // Use item in that slot
+      const slot = this._inventory.slots[inp.quickSlot];
+      if (slot) {
+        let used = false;
+        if (slot.type === 'Medkit' && this._player.hp < this._player.maxHp) {
+          this._player.heal(40);
+          this._inventory.removeItem('Medkit', 1);
+          this._hud.showNotification('💊 Medkit used  +40 HP', 'success', 2000);
+          this._audio?.playOneShot('discovery');
+          used = true;
+        } else if (slot.type === 'Shield Battery' && this._player.shield < this._player.maxShield) {
+          this._player.shield = Math.min(this._player.maxShield, this._player.shield + 60);
+          this._player._shieldRegenTimer = 0;
+          this._inventory.removeItem('Shield Battery', 1);
+          this._hud.showNotification('🛡 Shield Battery used  +60 Shield', 'success', 2000);
+          this._audio?.playOneShot('ability');
+          used = true;
+        }
+        if (used) this._hud.updateQuickBar?.(this._inventory);
+      }
       inp.quickSlot = -1;
+    }
+
+    // ─── Resource indicator ───────────────────────────────────────────────────
+    if (this._mining) {
+      const nodes = this._mining.getNodesNear(pos, 200);
+      if (nodes.length > 0) {
+        // Find nearest
+        let nearest = nodes[0];
+        let nearDist = pos.distanceTo(nearest.pos);
+        for (const n of nodes) {
+          const d = pos.distanceTo(n.pos);
+          if (d < nearDist) { nearDist = d; nearest = n; }
+        }
+        if (nearDist > 6) {
+          // Direction in world → player-relative angle
+          const dx = nearest.pos.x - pos.x;
+          const dz = nearest.pos.z - pos.z;
+          const worldAngle = Math.atan2(dx, dz);
+          const relAngle   = worldAngle - (this._player._camYaw || 0);
+          this._hud.setResourceIndicator?.(relAngle, nearDist, nearest.resourceType);
+        } else {
+          this._hud.setResourceIndicator?.(null);
+        }
+      } else {
+        this._hud.setResourceIndicator?.(null);
+      }
     }
 
     // Player death
@@ -912,6 +976,39 @@ class Game {
       this._hud.showNotification(`⬆ LEVEL UP!  Now Level ${this._level}`, 'success', 3500);
       if (this._player) this._player.heal(30);
     }
+  }
+
+  // ─── Tech bonus application ──────────────────────────────────────────────────
+  _applyTechBonus(bonus) {
+    if (!this._player || !bonus) return;
+    for (const [stat, val] of Object.entries(bonus)) {
+      switch (stat) {
+        case 'shieldMax':
+          this._player.maxShield += val;
+          this._player.shield = Math.min(this._player.shield + val, this._player.maxShield);
+          break;
+        case 'jetpackCapacity':
+          this._player.jetpackFuel = Math.min(this._player.jetpackFuel + val, _PCFG.JETPACK_FUEL + val);
+          break;
+        case 'lifeSupportRate':
+          // Applied per-tick via player.lifeSupportDrainMult; track cumulative
+          this._player._techLifeSupportBonus = (this._player._techLifeSupportBonus || 0) + val;
+          break;
+        case 'hazardProtection':
+          this._player.hazardProt += val;
+          break;
+        case 'miningSpeed':
+          // Mining speed boost applied as multiplier
+          this._player._techMiningMult = (this._player._techMiningMult || 1.0) + (val - 1.0);
+          break;
+        case 'scanRange':
+          this._player._techScanBonus = (this._player._techScanBonus || 0) + val;
+          break;
+        default:
+          break;
+      }
+    }
+    this._hud.showNotification('⚙ Tech bonus applied!', 'upgrade', 2000);
   }
 
   // ─── Creature loot drop ─────────────────────────────────────────────────────

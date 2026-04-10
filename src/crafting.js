@@ -154,6 +154,7 @@ export class CraftingSystem {
   constructor(inventory) {
     this.inventory = inventory;
     this.knownBlueprints = new Set(Object.keys(RECIPES));
+    this.onCraft = null; // (recipeId, recipe) => void – called on successful craft
   }
 
   canCraft(recipeId) {
@@ -172,6 +173,7 @@ export class CraftingSystem {
     for (const [type, amount] of Object.entries(recipe.outputs)) {
       this.inventory.addItem(type, amount);
     }
+    if (this.onCraft) this.onCraft(recipeId, recipe);
     return true;
   }
 
@@ -187,12 +189,47 @@ export class CraftingSystem {
 export class TechTree {
   constructor() {
     this.upgrades = {};
+    this.onUpgrade = null; // (category, techId, bonuses) => void – called on successful upgrade
+  }
+
+  /** Build the "tree" property that ui.js iterates over */
+  get tree() {
+    const { TECH_UPGRADES } = (typeof window !== 'undefined' ? window._aetheriaCfg || {} : {});
+    // We import TECH_UPGRADES at file top; build a compatible shape for _renderTechTree
+    // ui.js expects: { [cat]: { [id]: { name, tiers } } }
+    return this._techConfig || {};
+  }
+
+  /** Call once to supply the tech config from config.js */
+  setConfig(techConfig) {
+    this._techConfig = techConfig;
+  }
+
+  /** Whether a specific tech item has at least one tier installed */
+  isUnlocked(category, techId) {
+    return (this.upgrades[`${category}.${techId}`] || 0) > 0;
+  }
+
+  /** Whether the player can afford the next tier */
+  canAfford(category, techId, inventory) {
+    if (!this._techConfig) return false;
+    const key  = `${category}.${techId}`;
+    const tier = this.upgrades[key] || 0;
+    const def  = this._techConfig[category]?.[techId];
+    if (!def || tier >= def.tiers.length) return false;
+    const cost = def.tiers[tier].cost;
+    for (const [type, amount] of Object.entries(cost)) {
+      if (inventory.getAmount(type) < amount) return false;
+    }
+    return true;
   }
 
   upgrade(category, tech, inventory, techConfig) {
+    const cfg = techConfig || this._techConfig;
+    if (!cfg) return false;
     const key = `${category}.${tech}`;
     const tier = (this.upgrades[key] || 0);
-    const techDef = techConfig[category]?.[tech];
+    const techDef = cfg[category]?.[tech];
     if (!techDef) return false;
     if (tier >= techDef.tiers.length) return false;
     const tierDef = techDef.tiers[tier];
@@ -203,16 +240,18 @@ export class TechTree {
       inventory.removeItem(type, amount);
     }
     this.upgrades[key] = tier + 1;
+    if (this.onUpgrade) this.onUpgrade(category, tech, tierDef.bonus);
     return true;
   }
 
   getUnlocked() { return { ...this.upgrades }; }
 
   getStats(techConfig) {
+    const cfg = techConfig || this._techConfig || {};
     const stats = {};
     for (const [key, tier] of Object.entries(this.upgrades)) {
       const [cat, tech] = key.split('.');
-      const def = techConfig[cat]?.[tech];
+      const def = cfg[cat]?.[tech];
       if (!def) continue;
       for (let i = 0; i < tier; i++) {
         if (def.tiers[i]) {
