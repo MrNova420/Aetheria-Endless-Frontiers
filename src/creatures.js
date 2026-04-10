@@ -4,11 +4,12 @@
  * Each creature is built from basic Three.js geometry – no external assets needed.
  */
 import * as THREE from 'three';
+import { PhysicsBody, PHYSICS } from './physics.js';
 
 // ─── Seeded RNG ───────────────────────────────────────────────────────────────
 function seededRng(seed) {
   let s = (seed >>> 0) || 1;
-  return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 0xFFFFFFFF; };
+  return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 0x100000000; };
 }
 
 // ─── Genome generation ────────────────────────────────────────────────────────
@@ -38,11 +39,27 @@ function generateGenome(seed) {
 function buildCreatureMesh(genome) {
   const root  = new THREE.Group();
   const bs    = genome.bodySize;
-  const bMat  = new THREE.MeshLambertMaterial({ color: genome.bodyColor });
-  const eMat  = new THREE.MeshLambertMaterial({
-    color   : genome.isBiolum ? genome.patternColor : genome.bodyColor,
-    emissive: genome.isBiolum ? genome.patternColor : new THREE.Color(0, 0, 0),
-    emissiveIntensity: genome.isBiolum ? 0.6 : 0,
+
+  // PBR body material — rougher for big beasts, shinier for exotic
+  const roughness = genome.isBoss ? 0.55 : (genome.isBiolum ? 0.30 : 0.70);
+  const metalness = genome.isBoss ? 0.25 : (genome.isBiolum ? 0.10 : 0.05);
+
+  const bMat = new THREE.MeshStandardMaterial({
+    color     : genome.bodyColor,
+    roughness, metalness,
+  });
+  const eMat = new THREE.MeshStandardMaterial({
+    color             : genome.isBiolum ? genome.patternColor : genome.bodyColor,
+    emissive          : genome.isBiolum ? new THREE.Color(genome.patternColor) : new THREE.Color(0x000000),
+    emissiveIntensity : genome.isBiolum ? 1.4 : (genome.isBoss ? 0.5 : 0),
+    roughness         : roughness * 0.7,
+    metalness         : metalness,
+  });
+  const eyeMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    emissive: new THREE.Color(genome.eyeCount > 2 ? genome.patternColor : 0xffffff),
+    emissiveIntensity: genome.isBoss ? 2.5 : 1.2,
+    roughness: 0.05, metalness: 0.0,
   });
 
   // Body
@@ -67,7 +84,7 @@ function buildCreatureMesh(genome) {
   for (let e = 0; e < genome.eyeCount; e++) {
     const eye = new THREE.Mesh(
       new THREE.SphereGeometry(bs * 0.12, 6, 6),
-      new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.8 })
+      eyeMat
     );
     const a = (e / genome.eyeCount) * Math.PI - Math.PI / 2;
     eye.position.set(
@@ -82,7 +99,7 @@ function buildCreatureMesh(genome) {
   for (let h = 0; h < genome.hornCount; h++) {
     const horn = new THREE.Mesh(
       new THREE.ConeGeometry(bs * 0.08, bs * 0.5, 5),
-      new THREE.MeshLambertMaterial({ color: genome.patternColor })
+      new THREE.MeshStandardMaterial({ color: genome.patternColor, roughness: 0.4, metalness: 0.1 })
     );
     const a = (h / genome.hornCount) * Math.PI * 2;
     horn.position.set(
@@ -141,9 +158,12 @@ function buildCreatureMesh(genome) {
     for (let w = 0; w < 2; w++) {
       const wing = new THREE.Mesh(
         new THREE.PlaneGeometry(bs * 2, bs * 1.2),
-        new THREE.MeshLambertMaterial({
+        new THREE.MeshStandardMaterial({
           color: genome.patternColor, side: THREE.DoubleSide,
-          transparent: true, opacity: 0.7
+          transparent: true, opacity: 0.72,
+          roughness: 0.5, metalness: 0.0,
+          emissive: genome.isBiolum ? new THREE.Color(genome.patternColor) : new THREE.Color(0x000000),
+          emissiveIntensity: genome.isBiolum ? 0.4 : 0,
         })
       );
       wing.position.set(0, bs * genome.scale + bs * 0.3, (w === 0 ? 1 : -1) * bs);
@@ -159,114 +179,388 @@ function buildCreatureMesh(genome) {
   return root;
 }
 
+// ─── Boss genome ─────────────────────────────────────────────────────────────
+function generateBossGenome(seed, planetType) {
+  const r      = seededRng(seed);
+  const base   = generateGenome(seed);
+  const TINTS  = {
+    LUSH:'#22aa44', BARREN:'#cc8833', TOXIC:'#88ff00', FROZEN:'#88ccff',
+    BURNING:'#ff4400', EXOTIC:'#dd44ff', DEAD:'#888888', OCEAN:'#2244ff'
+  };
+  const tint = new THREE.Color(TINTS[planetType] || '#ff4400');
+  return {
+    ...base,
+    isBoss       : true,
+    scale        : 3.0 + r() * 1.5,
+    bodySize     : 1.4,
+    aggression   : 'hostile',
+    maxHp        : 500 + Math.floor(r() * 500),
+    speed        : 3 + r() * 4,
+    bodyColor    : tint.clone().multiplyScalar(0.6),
+    patternColor : tint,
+    hornCount    : 3 + Math.floor(r() * 3),
+    isBiolum     : true,
+    wingCount    : r() < 0.4 ? 2 : 0,
+  };
+}
+
+// ─── Biome palette tinting ────────────────────────────────────────────────────
+const BIOME_TINTS = {
+  LUSH   : { h: 0.35, s: 0.5 },
+  BARREN : { h: 0.08, s: 0.4 },
+  TOXIC  : { h: 0.25, s: 0.7 },
+  FROZEN : { h: 0.60, s: 0.4 },
+  BURNING: { h: 0.04, s: 0.7 },
+  EXOTIC : { h: 0.78, s: 0.6 },
+  DEAD   : { h: 0.00, s: 0.0 },
+  OCEAN  : { h: 0.62, s: 0.5 },
+};
+
+function tintGenomeForBiome(genome, planetType) {
+  const bt = BIOME_TINTS[planetType];
+  if (!bt) return genome;
+  const blended = genome.bodyColor.clone();
+  const orig = { h: 0, s: 0, l: 0 };
+  blended.getHSL(orig);
+  // Lerp hue and saturation toward biome tint
+  blended.setHSL(
+    orig.h * 0.5 + bt.h * 0.5,
+    Math.min(1, orig.s * 0.5 + bt.s * 0.5),
+    orig.l
+  );
+  return { ...genome, bodyColor: blended };
+}
+
 // ─── Creature class ───────────────────────────────────────────────────────────
-const STATE = { IDLE: 0, WANDERING: 1, FLEEING: 2, ATTACKING: 3, DEAD: 4 };
+/**
+ * State machine for creature AI.
+ * PATROL  : slow wander along waypoints, low alert
+ * ALERT   : detected player, orienting + calling pack
+ * CHASE   : actively pursuing player
+ * ATTACK  : within melee range, striking
+ * RECOIL  : brief pause after striking (recovery frames)
+ * FLEE    : retreating (passive/injured hostile)
+ * DEAD    : corpse fade-out
+ */
+export const CREATURE_STATE = { PATROL:0, ALERT:1, CHASE:2, ATTACK:3, RECOIL:4, FLEE:5, DEAD:6 };
+/** Back-compat alias */
+export const CREATURE_STATE_LEGACY = {
+  IDLE:0, WANDERING:0, FLEEING:5, ATTACKING:2, DEAD:6
+};
+const STATE = CREATURE_STATE;
+
+/** Detection and behaviour radii per aggression type. */
+const AI_PARAMS = {
+  hostile: { detectR:28, alertR:18, attackR:2.2, fleeHpPct:0.18, packCallR:20, chargeR:12 },
+  curious: { detectR:20, alertR:12, attackR:3.0, fleeHpPct:0.0,  packCallR:0,  chargeR:0  },
+  passive: { detectR:12, alertR:0,  attackR:0,   fleeHpPct:1.0,  packCallR:0,  chargeR:0  },
+};
 
 class Creature {
   constructor(scene, position, genome) {
     this.scene   = scene;
     this.genome  = genome;
     this.hp      = genome.maxHp;
-    this.state   = STATE.IDLE;
-    this._stateTimer = 2 + Math.random() * 3;
-    this._walkTime   = 0;
-    this._velocity   = new THREE.Vector3();
-    this._target     = null;
-    this._wanderDir  = new THREE.Vector3(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
+    this.state   = STATE.PATROL;
+    this._stateTimer  = 1.5 + Math.random() * 2;
+    this._attackTimer = 0;
+    this._recoilTimer = 0;
+    this._alertTimer  = 0;
+    this._walkTime    = 0;
+    this._flashTimer  = 0;
+
+    // Physics body for proper gravity + separation
+    this._body = new PhysicsBody({
+      position: position.clone(),
+      mass: genome.mass ?? 60,
+      radius: PHYSICS.CREATURE_RADIUS * (genome.scale ?? 1),
+      height: genome.bodySize * 2 * (genome.scale ?? 1),
+    });
+    this._body.grounded = false;
+
+    this._velocity   = this._body.velocity;   // alias
+    this._wanderDir  = new THREE.Vector3(Math.random()-0.5, 0, Math.random()-0.5).normalize();
+    this._patrolWaypoints = this._genWaypoints(position);
+    this._waypointIdx = 0;
+    this._target     = null;   // player position (Vector3)
+    this._removed    = false;
+
+    // Pack reference (set by CreatureManager)
+    this.packId = null;
 
     this.mesh = buildCreatureMesh(genome);
     this.mesh.position.copy(position);
     this.scene.add(this.mesh);
   }
 
-  update(dt, playerPos, getHeightAt) {
-    if (this.state === STATE.DEAD) return;
+  _genWaypoints(origin) {
+    const pts = [];
+    for (let i = 0; i < 4; i++) {
+      const angle = (i / 4) * Math.PI * 2 + Math.random() * 0.5;
+      const r = 8 + Math.random() * 20;
+      pts.push(new THREE.Vector3(
+        origin.x + Math.cos(angle) * r,
+        origin.y,
+        origin.z + Math.sin(angle) * r,
+      ));
+    }
+    return pts;
+  }
 
-    this._stateTimer -= dt;
-    const pos = this.mesh.position;
+  update(dt, playerPos, getHeightAt, pack) {
+    if (this.state === STATE.DEAD) {
+      this._dieTimer = (this._dieTimer || 0) + dt;
+      if (this._dieTimer >= 3.0 && !this._removed) {
+        this._removed = true;
+        this.scene.remove(this.mesh);
+        this.mesh.traverse(c => {
+          if (c.geometry) c.geometry.dispose();
+          if (c.material)  c.material.dispose();
+        });
+      }
+      return;
+    }
 
-    // State transitions
-    if (this._stateTimer <= 0) {
-      const distToPlayer = pos.distanceTo(playerPos);
-      if (this.genome.aggression === 'hostile' && distToPlayer < 20) {
-        this.state = STATE.ATTACKING;
-        this._stateTimer = 3;
-      } else if (this.genome.aggression === 'curious' && distToPlayer < 15) {
-        this.state = STATE.WANDERING;
-        this._wanderDir.subVectors(playerPos, pos).setY(0).normalize();
-        this._stateTimer = 2;
-      } else if (distToPlayer < 10) {
-        this.state = STATE.FLEEING;
-        this._wanderDir.subVectors(pos, playerPos).setY(0).normalize();
-        this._stateTimer = 4;
-      } else {
-        this.state = STATE.WANDERING;
-        this._wanderDir.set(Math.random() - 0.5, 0, Math.random() - 0.5).normalize();
-        this._stateTimer = 2 + Math.random() * 4;
-        if (Math.random() < 0.3) this.state = STATE.IDLE;
+    const pos    = this._body.position;
+    const vel    = this._body.velocity;
+    const params = AI_PARAMS[this.genome.aggression] || AI_PARAMS.passive;
+    const dist   = pos.distanceTo(playerPos);
+    const gravity= 22; // simplified – could use planet gravity
+
+    // ── Timers ────────────────────────────────────────────────────────────
+    this._stateTimer  -= dt;
+    this._attackTimer -= dt;
+    this._recoilTimer -= dt;
+
+    // ── State transitions ────────────────────────────────────────────────
+    if (this.state !== STATE.DEAD) {
+      this._updateStateTransition(dist, params, playerPos, pack);
+    }
+
+    // ── Movement ─────────────────────────────────────────────────────────
+    let targetSpeed = 0;
+    let moveDir = new THREE.Vector3();
+
+    switch (this.state) {
+      case STATE.PATROL: {
+        if (this._patrolWaypoints.length) {
+          const wp = this._patrolWaypoints[this._waypointIdx];
+          const toWp = new THREE.Vector3().subVectors(wp, pos).setY(0);
+          if (toWp.length() < 2) {
+            this._waypointIdx = (this._waypointIdx + 1) % this._patrolWaypoints.length;
+          } else {
+            moveDir.copy(toWp).normalize();
+          }
+        }
+        targetSpeed = this.genome.speed * 0.3;
+        break;
+      }
+      case STATE.ALERT: {
+        // Face player, brief pause (alerting)
+        moveDir.subVectors(playerPos, pos).setY(0).normalize();
+        targetSpeed = 0;  // stationary but watching
+        this._alertTimer += dt;
+        if (this._alertTimer > 1.2) this.state = STATE.CHASE;
+        break;
+      }
+      case STATE.CHASE: {
+        moveDir.subVectors(playerPos, pos).setY(0);
+        const flatDist = moveDir.length();
+        if (flatDist > 0.1) moveDir.normalize();
+        targetSpeed = this.genome.speed * 1.0;
+        // Boss charge: if within chargeR, dash at 2× speed
+        if (this.genome.isBoss && dist < params.chargeR && this._stateTimer <= 0) {
+          targetSpeed = this.genome.speed * 2.0;
+        }
+        break;
+      }
+      case STATE.ATTACK: {
+        // Hold position near player
+        moveDir.subVectors(playerPos, pos).setY(0).normalize();
+        targetSpeed = 0.5;
+        // Strike on timer
+        if (this._attackTimer <= 0 && dist < params.attackR + 0.5) {
+          this._attackTimer = this.genome.attackCooldown ?? 1.2;
+          this._recoilTimer = 0.25;
+          this.state = STATE.RECOIL;
+          // Signal a hit (game.js detects via creature.pendingDamage)
+          this.pendingDamage = this.genome.damage ?? 10;
+        }
+        break;
+      }
+      case STATE.RECOIL: {
+        // Brief stumble-back
+        moveDir.subVectors(pos, playerPos).setY(0).normalize();
+        targetSpeed = this.genome.speed * 0.4;
+        if (this._recoilTimer <= 0) {
+          this.state = dist < params.attackR + 1 ? STATE.ATTACK : STATE.CHASE;
+        }
+        break;
+      }
+      case STATE.FLEE: {
+        moveDir.subVectors(pos, playerPos).setY(0).normalize();
+        // Flee to random direction mixed with away-from-player
+        const rand = new THREE.Vector3(Math.random()-0.5, 0, Math.random()-0.5).normalize();
+        moveDir.lerp(rand, 0.3).normalize();
+        targetSpeed = this.genome.speed * 1.1;
+        // Recover after fleeing far enough
+        if (dist > 30) this.state = STATE.PATROL;
+        break;
       }
     }
 
-    // Movement
-    let speed = 0;
-    if (this.state === STATE.WANDERING) speed = this.genome.speed * 0.5;
-    else if (this.state === STATE.FLEEING) speed = this.genome.speed;
-    else if (this.state === STATE.ATTACKING) {
-      this._wanderDir.subVectors(playerPos, pos).setY(0).normalize();
-      speed = this.genome.speed * 0.8;
+    // ── Acceleration toward target speed ─────────────────────────────────
+    if (moveDir.lengthSq() > 0) {
+      const targetVx = moveDir.x * targetSpeed;
+      const targetVz = moveDir.z * targetSpeed;
+      const accel = this._body.grounded ? PHYSICS.ACCEL_GROUND * 0.5 : PHYSICS.ACCEL_AIR * 0.3;
+      vel.x += (targetVx - vel.x) * Math.min(accel * dt, 1);
+      vel.z += (targetVz - vel.z) * Math.min(accel * dt, 1);
+      if (targetSpeed > 0.1) {
+        this.mesh.rotation.y = Math.atan2(moveDir.x, moveDir.z);
+      }
     }
 
-    if (speed > 0) {
-      pos.x += this._wanderDir.x * speed * dt;
-      pos.z += this._wanderDir.z * speed * dt;
-      // Face direction of movement
-      this.mesh.rotation.y = Math.atan2(this._wanderDir.x, this._wanderDir.z);
+    // ── Physics: gravity + terrain ────────────────────────────────────────
+    if (!this._body.grounded) {
+      vel.y -= gravity * dt;
+      if (vel.y < PHYSICS.TERMINAL_VELOCITY) vel.y = PHYSICS.TERMINAL_VELOCITY;
     }
+    // Friction
+    {
+      const f = Math.pow(this._body.friction, dt * 60);
+      vel.x *= f; vel.z *= f;
+    }
+    // Integrate
+    pos.addScaledVector(vel, dt);
 
-    // Stick to terrain
+    // Terrain snap + slope check
     if (getHeightAt) {
       const groundY = getHeightAt(pos.x, pos.z);
-      pos.y = groundY;
+      if (pos.y <= groundY + PHYSICS.STEP_HEIGHT * 0.5) {
+        if (vel.y < 0) vel.y = 0;
+        pos.y = groundY;
+        this._body.grounded = true;
+      } else {
+        this._body.grounded = false;
+      }
     }
 
-    // Leg walk animation
-    this._walkTime += dt * speed * 0.5;
+    // Sync mesh
+    this.mesh.position.copy(pos);
+
+    // ── Walk animation ────────────────────────────────────────────────────
+    const spd = Math.sqrt(vel.x*vel.x + vel.z*vel.z);
+    this._walkTime += dt * spd * 0.5;
     if (this.mesh._legs) {
       for (const leg of this.mesh._legs) {
         leg.group.rotation.x = Math.sin(this._walkTime + leg.phase) * 0.5;
       }
     }
-
-    // Body bob
     if (this.mesh._body) {
-      this.mesh._body.position.y = this.genome.bodySize * this.genome.scale +
-        Math.abs(Math.sin(this._walkTime * 2)) * 0.1;
+      this.mesh._body.position.y = this.genome.bodySize * (this.genome.scale ?? 1) +
+        Math.abs(Math.sin(this._walkTime * 2)) * 0.06;
+    }
+
+    // ── Damage flash ─────────────────────────────────────────────────────
+    this._updateFlash(dt);
+  }
+
+  _updateStateTransition(dist, params, playerPos, pack) {
+    switch (this.state) {
+      case STATE.PATROL:
+        if (this.genome.aggression === 'hostile' && dist < params.detectR) {
+          this.state = STATE.ALERT;
+          this._alertTimer = 0;
+          this._stateTimer = 1.5;
+          // Alert pack
+          if (pack && params.packCallR > 0) {
+            for (const c of pack) {
+              if (c !== this && c.state === STATE.PATROL &&
+                  c.mesh.position.distanceTo(this.mesh.position) < params.packCallR) {
+                c.state = STATE.CHASE;
+                c._stateTimer = 5;
+              }
+            }
+          }
+        } else if (this.genome.aggression === 'passive' && dist < params.detectR) {
+          this.state = STATE.FLEE;
+        } else if (this.genome.aggression === 'curious' && dist < params.detectR) {
+          this.state = STATE.CHASE; // approach curiously
+        }
+        break;
+      case STATE.ALERT:
+        if (dist > params.detectR * 1.4) this.state = STATE.PATROL;
+        break;
+      case STATE.CHASE:
+        if (dist < params.attackR) { this.state = STATE.ATTACK; this._attackTimer = 0.3; }
+        else if (dist > params.detectR * 1.8) this.state = STATE.PATROL;
+        // Flee if low hp
+        if ((this.hp / this.genome.maxHp) < params.fleeHpPct) this.state = STATE.FLEE;
+        break;
+      case STATE.ATTACK:
+        if (dist > params.attackR + 1.5) this.state = STATE.CHASE;
+        if ((this.hp / this.genome.maxHp) < params.fleeHpPct) this.state = STATE.FLEE;
+        break;
+      case STATE.FLEE:
+        if (dist > 35) { this.state = STATE.PATROL; this._stateTimer = 3; }
+        break;
     }
   }
 
   takeDamage(amount) {
     this.hp -= amount;
-    if (this.hp <= 0) this.die();
-    else {
-      this.state = STATE.FLEEING;
-      this._stateTimer = 5;
+    if (this.hp <= 0) {
+      this.die();
+    } else {
+      if (this.genome.aggression === 'hostile' && this.state !== STATE.CHASE && this.state !== STATE.ATTACK) {
+        this.state = STATE.CHASE;
+        this._stateTimer = 5;
+      } else if (this.genome.aggression === 'passive') {
+        this.state = STATE.FLEE;
+      }
+      this._flashTimer = 0.18;
     }
     return this.hp <= 0;
   }
 
-  die() {
-    this.state = STATE.DEAD;
-    // Fall over
-    this.mesh.rotation.z = Math.PI / 2;
-    setTimeout(() => {
-      this.scene.remove(this.mesh);
-      this.mesh.traverse(c => { if (c.geometry) c.geometry.dispose(); });
-    }, 3000);
+  _updateFlash(dt) {
+    if (this._flashTimer <= 0) return;
+    this._flashTimer -= dt;
+    const flash = this._flashTimer > 0;
+    this.mesh.traverse(c => {
+      if (c.isMesh && c.material) {
+        if (flash) {
+          if (!c.material._origColor) c.material._origColor = c.material.color.clone();
+          c.material.color.set(0xff2222);
+          if (c.material.emissive) c.material.emissive.set(0xff0000);
+        } else {
+          if (c.material._origColor) c.material.color.copy(c.material._origColor);
+          if (c.material.emissive)   c.material.emissive.set(0x000000);
+          c.material._origColor = null;
+        }
+      }
+    });
   }
 
-  getPosition() { return this.mesh.position; }
+  die() {
+    this.state = STATE.DEAD;
+    this._dieTimer = 0;
+    this._removed  = false;
+    this.mesh.rotation.z = Math.PI / 2;
+    this.mesh.traverse(c => {
+      if (c.isMesh && c.material) {
+        c.material.color?.set(0x444444);
+        if (c.material.emissive) c.material.emissive.set(0x000000);
+      }
+    });
+  }
+
+  getPosition() { return this._body.position.clone(); }
   isAlive()     { return this.state !== STATE.DEAD; }
   isDead()      { return this.state === STATE.DEAD; }
+  isBoss()      { return !!this.genome.isBoss; }
+  getHpPct()    { return this.hp / this.genome.maxHp; }
 }
 
 // ─── Manager ──────────────────────────────────────────────────────────────────
@@ -293,12 +587,28 @@ export class CreatureManager {
       const wy = getHeightAt(wx, wz);
       if (wy < (this.planet.waterLevel || 0) + 1) continue;
       const seed    = Math.floor(rng() * 0xFFFFFF) ^ (cx * 397 + cz * 113 + i * 7);
-      const genome  = generateGenome(seed);
+      let genome    = generateGenome(seed);
+      genome        = tintGenomeForBiome(genome, this.planet.type);
       const pos     = new THREE.Vector3(wx, wy, wz);
       const cr      = new Creature(this.scene, pos, genome);
       creatures.push(cr);
       this._all.push(cr);
     }
+
+    // Rare boss spawn (5% chance per chunk, once per chunk)
+    if (rng() < 0.05 && density > 0) {
+      const bx  = originX + (rng() - 0.5) * 150;
+      const bz  = originZ + (rng() - 0.5) * 150;
+      const by  = getHeightAt(bx, bz);
+      if (by >= (this.planet.waterLevel || 0) + 1) {
+        const bseed  = Math.floor(rng() * 0xFFFFFF) ^ (cx * 1999 + cz * 3571);
+        const bgenome = generateBossGenome(bseed, this.planet.type);
+        const boss   = new Creature(this.scene, new THREE.Vector3(bx, by, bz), bgenome);
+        creatures.push(boss);
+        this._all.push(boss);
+      }
+    }
+
     this._chunks.set(key, creatures);
   }
 
@@ -315,15 +625,60 @@ export class CreatureManager {
   }
 
   update(dt, playerPos, getHeightAt) {
-    for (const cr of this._all) {
-      if (cr.isAlive()) cr.update(dt, playerPos, getHeightAt);
+    // Assign pack IDs on first group of close hostiles
+    const hostile = this._all.filter(c => c.isAlive() && c.genome.aggression === 'hostile');
+
+    // Separation between all alive creatures (sphere push)
+    for (let i = 0; i < this._all.length; i++) {
+      const a = this._all[i];
+      if (!a.isAlive()) continue;
+      for (let j = i + 1; j < this._all.length; j++) {
+        const b = this._all[j];
+        if (!b.isAlive()) continue;
+        const dx = a._body.position.x - b._body.position.x;
+        const dz = a._body.position.z - b._body.position.z;
+        const dist2 = dx*dx + dz*dz;
+        const minD  = (a._body.radius + b._body.radius);
+        if (dist2 < minD * minD && dist2 > 0.001) {
+          const d = Math.sqrt(dist2);
+          const overlap = minD - d;
+          const nx = dx / d, nz = dz / d;
+          const half = overlap * 0.5;
+          a._body.position.x += nx * half;
+          a._body.position.z += nz * half;
+          b._body.position.x -= nx * half;
+          b._body.position.z -= nz * half;
+        }
+      }
     }
-    // Clean dead
-    this._all = this._all.filter(c => c.isAlive());
+
+    for (const cr of this._all) {
+      cr.update(dt, playerPos, getHeightAt, hostile);
+    }
+    // Clean fully-removed corpses
+    this._all = this._all.filter(c => !c._removed);
+  }
+
+  /** Drain any pending melee hits; returns array of {damage, creature} */
+  drainPendingHits() {
+    const hits = [];
+    for (const cr of this._all) {
+      if (cr.pendingDamage != null) {
+        hits.push({ damage: cr.pendingDamage, creature: cr });
+        cr.pendingDamage = null;
+      }
+    }
+    return hits;
   }
 
   getNearbyCreatures(pos, radius) {
     return this._all.filter(c => c.isAlive() && c.getPosition().distanceTo(pos) <= radius);
+  }
+
+  getNearestBoss(pos, radius = 60) {
+    const bosses = this._all.filter(c => c.isAlive() && c.isBoss() && c.getPosition().distanceTo(pos) <= radius);
+    if (!bosses.length) return null;
+    return bosses.reduce((a, b) => a.getPosition().distanceTo(pos) < b.getPosition().distanceTo(pos) ? a : b);
   }
 
   dispose() {

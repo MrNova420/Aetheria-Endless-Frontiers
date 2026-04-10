@@ -103,7 +103,7 @@ set MISSING=0
 if not exist "server.js"      ( echo   MISSING: server.js       & set MISSING=1 )
 if not exist "index.html"     ( echo   MISSING: index.html      & set MISSING=1 )
 if not exist "src\game.js"    ( echo   MISSING: src\game.js     & set MISSING=1 )
-if not exist "src\world.js"   ( echo   MISSING: src\world.js    & set MISSING=1 )
+if not exist "src\universe.js" ( echo   MISSING: src\universe.js & set MISSING=1 )
 if not exist "src\player.js"  ( echo   MISSING: src\player.js   & set MISSING=1 )
 if %MISSING% EQU 0 (
     echo   All core game files present.
@@ -111,9 +111,19 @@ if %MISSING% EQU 0 (
     echo   WARNING: Some files missing – game may not work correctly.
 )
 
+:: ── Install npm packages ──────────────────────────────────────
+echo.
+echo [3/5] Installing npm packages...
+if exist "package.json" (
+    call npm install --no-optional
+    if %ERRORLEVEL% EQU 0 ( echo   npm packages installed. ) else ( echo   WARNING: npm install had errors. )
+) else (
+    echo   No package.json found - skipping.
+)
+
 :: ── Kill any existing server on port ──────────────────────────
 echo.
-echo [3/4] Freeing port %PORT%...
+echo [4/5] Freeing port %PORT%...
 for /f "tokens=5" %%P in ('netstat -ano ^| findstr ":%PORT% " 2^>nul') do (
     taskkill /PID %%P /F >nul 2>&1
 )
@@ -121,7 +131,7 @@ echo   Port %PORT% is free.
 
 :: ── Start server ──────────────────────────────────────────────
 echo.
-echo [4/4] Starting game server...
+echo [5/5] Starting game server...
 start /B "" node server.js %PORT%
 timeout /t 2 /nobreak >nul
 

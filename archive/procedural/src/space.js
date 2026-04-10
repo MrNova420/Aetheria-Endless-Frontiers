@@ -7,7 +7,7 @@ import { PlanetGenerator } from './planet.js';
 
 function seededRng(seed) {
   let s=(seed>>>0)||1;
-  return ()=>{s=(Math.imul(s,1664525)+1013904223)>>>0;return s/0xFFFFFFFF;};
+  return ()=>{s=(Math.imul(s,1664525)+1013904223)>>>0;return s/0x100000000;};
 }
 
 export class SpaceScene {
@@ -81,11 +81,14 @@ export class SpaceScene {
     this.skyMat.uniforms.uNebulaColor2.value.copy(nc2);
     this.skyMat.uniforms.uNebulaColor3.value.copy(nc3);
 
-    // Sun
+    // Sun – use MeshStandardMaterial so emissive works and the bloom pass picks it up
     const sunGeo = new THREE.SphereGeometry(800, 32, 16);
-    const sunMat = new THREE.MeshBasicMaterial({
+    const sunMat = new THREE.MeshStandardMaterial({
       color: new THREE.Color(systemData.starColor || '#ffeeaa'),
-      emissive: new THREE.Color(systemData.starColor || '#ffeeaa')
+      emissive: new THREE.Color(systemData.starColor || '#ffeeaa'),
+      emissiveIntensity: 1.0,
+      roughness: 1.0,
+      metalness: 0.0,
     });
     this.sunMesh = new THREE.Mesh(sunGeo, sunMat);
     this.sunMesh.position.set(0, 0, 0);
@@ -209,11 +212,31 @@ export class SpaceScene {
   }
 
   _clearSystem() {
-    for (const m of this.planetMeshes) { this.scene.remove(m); m.geometry.dispose(); m.material.dispose(); }
+    for (const m of this.planetMeshes) {
+      this.scene.remove(m);
+      m.geometry.dispose();
+      m.material.dispose();
+    }
     this.planetMeshes = [];
-    if (this.sunMesh) { this.scene.remove(this.sunMesh); }
-    if (this.stationMesh) { this.scene.remove(this.stationMesh); }
-    if (this.asteroidMesh) { this.scene.remove(this.asteroidMesh); this.asteroidMesh.geometry.dispose(); }
+    if (this.sunMesh) {
+      this.sunMesh.traverse(c => {
+        if (c.geometry) c.geometry.dispose();
+        if (c.material) c.material.dispose();
+      });
+      this.scene.remove(this.sunMesh);
+    }
+    if (this.stationMesh) {
+      this.stationMesh.traverse(c => {
+        if (c.geometry) c.geometry.dispose();
+        if (c.material) c.material.dispose();
+      });
+      this.scene.remove(this.stationMesh);
+    }
+    if (this.asteroidMesh) {
+      this.scene.remove(this.asteroidMesh);
+      this.asteroidMesh.geometry.dispose();
+      this.asteroidMesh.material.dispose();
+    }
     this.sunMesh = null; this.stationMesh = null; this.asteroidMesh = null;
   }
 
@@ -248,6 +271,6 @@ export class SpaceScene {
   dispose() {
     this._clearSystem();
     if (this.skyMesh) { this.scene.remove(this.skyMesh); this.skyMesh.geometry.dispose(); this.skyMat.dispose(); }
-    if (this.starPoints) { this.scene.remove(this.starPoints); this.starPoints.geometry.dispose(); }
+    if (this.starPoints) { this.scene.remove(this.starPoints); this.starPoints.geometry.dispose(); this.starPoints.material.dispose(); }
   }
 }

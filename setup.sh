@@ -124,9 +124,18 @@ fi
 
 ok "Node.js $(node --version)  /  npm $(npm --version)"
 
+# ─── Install npm dependencies ─────────────────────────────────────────────────
+step "Installing npm packages"
+if [ -f "package.json" ]; then
+  npm install --no-optional 2>&1 | tail -5
+  ok "npm packages installed"
+else
+  warn "No package.json found – skipping npm install"
+fi
+
 # ─── Verify project files ─────────────────────────────────────────────────────
 step "Verifying game files"
-REQUIRED=(server.js index.html src/game.js src/world.js src/player.js)
+REQUIRED=(server.js index.html src/game.js src/player.js src/universe.js)
 ALL_OK=true
 for f in "${REQUIRED[@]}"; do
   if [ -f "$f" ]; then ok "$f"; else warn "MISSING: $f"; ALL_OK=false; fi

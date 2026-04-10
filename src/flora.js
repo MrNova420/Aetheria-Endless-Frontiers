@@ -196,6 +196,24 @@ export class FloraManager {
 
   update(dt, windTime) {
     this._windTime += dt;
+    // Drive FloraShader uTime + wind uniforms for all flora meshes
+    const t = this._windTime;
+    const windAngle = t * 0.15;
+    const windX = Math.cos(windAngle);
+    const windZ = Math.sin(windAngle);
+    const windStr = 0.25 + Math.sin(t * 0.5) * 0.15;
+    for (const [, flora] of this._chunkFlora) {
+      for (const g of flora) {
+        g.traverse(obj => {
+          if (obj.material?.uniforms) {
+            if (obj.material.uniforms.uTime)         obj.material.uniforms.uTime.value = t;
+            if (obj.material.uniforms.uWindDir)      obj.material.uniforms.uWindDir.value.set(windX, 0, windZ);
+            if (obj.material.uniforms.uWindStrength) obj.material.uniforms.uWindStrength.value = windStr;
+            if (obj.material.uniforms.uSunDir)       obj.material.uniforms.uSunDir.value.set(0.4, 0.8, 0.3);
+          }
+        });
+      }
+    }
   }
 
   dispose() {

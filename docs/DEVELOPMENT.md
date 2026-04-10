@@ -30,8 +30,11 @@ index.html
         ├── src/planet.js  ← generates planet data (seed → config object)
         ├── src/terrain.js ← chunks terrain mesh from planet config
         ├── src/flora.js   ← instanced plants spawned on terrain
-        ├── src/creatures.js ← AI fauna spawned per chunk
+        ├── src/creatures.js ← AI fauna spawned per chunk (+ boss variant)
         ├── src/mining.js  ← resource nodes + extraction
+        ├── src/extractor.js ← Auto-Extractor factory elements (Satisfactory-style)
+        ├── src/quests.js  ← quest/objective system with chain support
+        ├── src/status.js  ← player status effects (burning, frozen, poisoned, …)
         ├── src/player.js  ← input → physics → camera
         ├── src/ship.js    ← 3-mode flight (LANDED/ATM/SPACE)
         ├── src/space.js   ← space scene (stars, planets, station)
@@ -39,7 +42,7 @@ index.html
         ├── src/inventory.js ← 48-slot item grid
         ├── src/crafting.js  ← recipes + tech tree
         ├── src/audio.js   ← Web Audio API sounds
-        ├── src/ui.js      ← HUD, menus, notifications
+        ├── src/ui.js      ← HUD, menus, notifications, quest tracker, boss bar
         ├── src/shaders.js ← custom GLSL (terrain, atm, water, flora, space)
         ├── src/noise.js   ← simplex/perlin noise utils
         └── src/config.js  ← all numeric constants
@@ -410,9 +413,193 @@ Open browser DevTools (F12) and check the Console for:
 
 Useful dev commands in browser console:
 ```js
-window.game.state          // current game state string
-window.game._player.hp     // player HP
-window.game._inventory     // inventory object
-window.game._currentPlanet // current planet config
-window.game._assets.stats  // { total, loaded, failed, real }
+window.game.state              // current game state string
+window.game._player.hp         // player HP
+window.game._level             // current player level
+window.game._xp                // current XP
+window.game._inventory         // inventory object
+window.game._currentPlanet     // current planet config
+window.game._assets.stats      // { total, loaded, failed, real }
+window.game._weather?.getWeatherName()  // active weather
+// Give yourself items:
+window.game._inventory.addItem('Gold', 50);
+// Award XP:
+window.game._awardXP(500);
+// Warp to a specific system:
+window.game._galaxy.getSystems()[3]  // pick a system
 ```
+
+---
+
+## 13. Combat System
+
+The player fires a blaster shot on **right-click** (or gamepad R2). The weapon:
+- Deals `ATTACK_DAMAGE = 25` points per hit
+- Has `ATTACK_COOLDOWN = 0.5s` between shots
+- Targets the nearest alive creature within `ATTACK_RANGE = 12` units
+- Plays `attack_shoot` SFX, then `creature_kill` SFX on death
+- Awards `XP_PER_KILL = 35` XP per kill
+- Has a 55 % chance to drop a loot resource node at the kill site
+
+Hostile creatures counter-attack automatically every `COMBAT_TICK_INTERVAL` seconds if within melee range.
+
+---
+
+## 14. XP & Leveling
+
+```
+XP awarded by:
+  Mine cycle completion  → +30 XP per cycle
+  Creature kill          → +35 XP
+  System warp            → +50 XP
+  Scanner discovery      → (future)
+
+Level formula:
+  xpToNext(n) = floor(100 × 1.35^(n-1))
+
+Level-up effects:
+  • +30 HP heal
+  • Fanfare SFX + level-up flash
+  • Notification toast
+```
+
+To add new XP sources, call `game._awardXP(amount)` from any tick method.
+
+---
+
+## 15. Weather Gameplay Effects
+
+| Weather | Speed Mult | Life Support Drain |
+|---------|-----------|-------------------|
+| Normal  | 1.0 ×     | —                 |
+| Storm   | 0.7 ×     | —                 |
+| Sandstorm | 0.45 ×  | —                 |
+| Blizzard  | 0.45 ×  | −2/s              |
+| Toxic Fog | 1.0 ×   | −4/s              |
+
+Effects are applied each tick in `_tickSurface()` and propagated via `inp._weatherSpeedMult` to the player controller.
+
+---
+
+## 16. Status Effects System (`src/status.js`)
+
+`StatusEffectManager` handles short-term buffs/debuffs applied by environment or combat.
+
+```
+apply(effectId)          – apply or refresh effect
+remove(effectId)         – manually clear
+has(effectId)            – check active
+update(dt, player)       – tick DoT, decrement duration, return expired list
+getSpeedMult()           – combined movement speed multiplier from all effects
+getHudIcons()            – array of { icon, label, remaining } for HUD chips
+serialize() / load()     – persist/restore
+```
+
+| Effect    | Duration | HP DoT | LS Drain | Speed | Applied by               |
+|-----------|----------|--------|----------|-------|--------------------------|
+| burning   | 6 s      | 8/s    | —        | 1.0 × | BURNING planet type       |
+| frozen    | 8 s      | —      | 1.5/s    | 0.5 × | Blizzard weather          |
+| poisoned  | 10 s     | 4/s    | 3/s      | 0.9 × | Toxic Fog weather         |
+| energised | 15 s     | —      | —        | 1.4 × | EXOTIC planet Aurora      |
+| shielded  | 12 s     | —      | —        | 1.0 × | craft Shield Battery (TBD)|
+
+---
+
+## 17. Quest System (`src/quests.js`)
+
+`QuestSystem` tracks multi-objective quests and fires events for the HUD.
+
+```
+start(questId)                    – activate quest; auto-chains on complete
+reportEvent(type, payload)        – feed game events (kill/collect/scan/warp/craft)
+getHudSummary()                   – first incomplete objective for quest tracker HUD
+on('started'|'progress'|'completed', handler)
+serialize() / load()
+```
+
+**Starter quest chain:**
+1. `first_steps` – Collect 100 Carbon + 50 Ferrite Dust → reward 200 XP + Di-Hydrogen
+2. `survival_basics` – Kill 3 creatures + craft Warp Cell → reward 500 XP + Chromatic Metal
+3. `explorer_path` – Scan 5 times + warp to new system → reward 1000 XP + Emeril/Indium
+
+---
+
+## 18. Auto-Extractor (`src/extractor.js`)
+
+Satisfactory-inspired factory module. Deploy near resource nodes to auto-harvest.
+
+**Crafting cost:** 80 Pure Ferrite + 2 Carbon Nanotubes + 40 Copper  
+**Deploy:** Press `B` on planet surface  
+**Harvest:** 5 units every 10 seconds from nearest node within 14 world-units  
+**Visual:** Animated piston + spinning drill head + tether beam to target node  
+**Persistence:** Extractor positions saved as `extractors[]` in save slot v3
+
+```
+ExtractorManager.place(position, playerInventory, miningSystem)
+ExtractorManager.update(dt, miningSystem)
+ExtractorManager.serialize() / load(data, miningSystem)
+ExtractorManager.getCraftCost()
+```
+
+---
+
+## 19. Boss Creatures
+
+Boss creatures spawn with 5% probability per chunk on planets with `faunaDensity > 0`.
+
+| Property     | Value                               |
+|--------------|-------------------------------------|
+| Scale        | 3.0 – 4.5 ×                         |
+| HP           | 500 – 1000                          |
+| Aggression   | Always hostile                      |
+| Biome tint   | Vivid planet-palette color          |
+| Bioluminescent | Always                           |
+| Boss bar     | Shown when within 60 world-units   |
+| HP bar color | Green → Orange → Red as HP drops  |
+
+Boss XP = 35 (same as normal, bosses are rare; designed to feel rewarding via loot drop).
+
+---
+
+## 20. Creature Enhancements
+
+| Feature              | Detail                                                       |
+|----------------------|--------------------------------------------------------------|
+| Biome tinting        | `tintGenomeForBiome()` lerps hue+saturation toward BIOME_TINTS |
+| Damage flash         | 180ms red overlay via `_updateFlash(dt)` in `Creature.update()` |
+| Death greyscale      | All materials set to #444 on `die()`                         |
+| `getHpPct()`         | Returns 0–1 for boss bar                                     |
+| `getNearestBoss()`   | Filters `_all` for alive isBoss creatures within radius      |
+
+---
+
+## 21. Integration Pass — AAA Polish (v3.1)
+
+### Bug Fixes
+| File | Bug | Fix |
+|------|-----|-----|
+| `player.js` | Status speed mult ignored — only weather mult applied | Combined `_weatherSpeedMult * _statusSpeedMult` |
+| `mining.js` | `_updateBeam` recreated `THREE.Line` every frame (GC leak) | Persistent beam geometry updated in-place |
+| `crafting.js` | `CraftingSystem.craft()` had no callback — quests never knew | Added `onCraft(recipeId, recipe)` callback hook |
+| `crafting.js` | `TechTree` missing `isUnlocked`, `canAfford`, `tree`; `upgrade()` missing config | Added all missing methods; `setConfig()` stores TECH_UPGRADES |
+| `game.js` | Tech upgrade bonuses never applied to Player stats | `TechTree.onUpgrade` → `_applyTechBonus(bonus)` |
+| `game.js` | `_toggleTech()` bypassed `showTechScreen()` | Now calls `_hud.showTechScreen(techTree, inventory)` |
+| `ui.js` | Quickslot bar never showed inventory items | Added `updateQuickBar(inventory)` called each tick |
+| `ui.js` | Notifications could stack unlimited | Dedup within 2s window; max 5 simultaneous |
+
+### New Features
+| Feature | Detail |
+|---------|--------|
+| **Leg/arm animation** | `buildPlayerModel()` now returns grouped limbs (`_legs`, `_arms`); `update()` rotates them for walk cycle |
+| **Arm counter-swing** | Arms swing in opposite phase to legs for realistic gait |
+| **Breathing idle** | Subtle camera/body sine oscillation when grounded and still |
+| **Footstep audio** | `Player.onFootstep` callback → `AudioManager.playOneShot('footstep')` on interval |
+| **Usable items** | Press quickslot key (1–0): Medkit heals +40 HP, Shield Battery restores +60 Shield |
+| **Resource indicator** | HUD arrow + distance + type label pointing to nearest resource node |
+| **Resource minimap dots** | Orange dots for resource nodes on the minimap |
+| **Tech cost display** | Each tech upgrade shows ingredient cost in the UI |
+| **Loading lore tips** | 10 rotating gameplay tips during loading (fade in/out every 3.5s) |
+| **Scanline overlay** | Subtle CSS scanline texture over HUD for film-grade sci-fi feel |
+| **Notification dedup** | Same notification ignored if shown within last 2 seconds |
+| **Danger notification** | `notif-danger` type has red pulsing glow |
+| **Craft XP** | Crafting awards 15 XP per successful craft |

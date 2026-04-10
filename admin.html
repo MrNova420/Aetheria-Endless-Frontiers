@@ -1,0 +1,1436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AETHERIA — Admin Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #010810; --bg2: #060f1c; --panel: rgba(0,15,35,0.92);
+  --border: rgba(0,180,255,0.2); --cyan: #00dcff; --green: #00ff88;
+  --orange: #ff9900; --red: #ff3333; --text: #c8d8e8; --dim: #5a7a9a;
+  --font-head: 'Orbitron', monospace; --font-mono: 'Share Tech Mono', monospace;
+  --radius: 6px; --glow: 0 0 12px rgba(0,220,255,0.4);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  overflow-x: hidden;
+}
+
+/* ─── BACKGROUND GRID ─── */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: 0;
+  background-image:
+    linear-gradient(rgba(0,180,255,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,180,255,0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+}
+
+/* ─── LOGIN ─── */
+#login-screen {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg);
+}
+
+.login-box {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 48px 40px;
+  width: min(420px, 92vw);
+  text-align: center;
+  box-shadow: var(--glow), 0 0 60px rgba(0,0,0,0.8);
+}
+
+.login-logo {
+  font-family: var(--font-head);
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--cyan);
+  letter-spacing: 4px;
+  margin-bottom: 6px;
+  text-shadow: var(--glow);
+}
+
+.login-sub {
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 2px;
+  margin-bottom: 36px;
+}
+
+.login-box label {
+  display: block;
+  text-align: left;
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+.login-box input[type="password"],
+.login-box input[type="text"] {
+  width: 100%;
+  background: rgba(0,180,255,0.06);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--cyan);
+  font-family: var(--font-mono);
+  font-size: 15px;
+  padding: 12px 16px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  margin-bottom: 20px;
+}
+
+.login-box input:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 8px rgba(0,220,255,0.3);
+}
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  background: transparent;
+  border: 1px solid var(--cyan);
+  border-radius: var(--radius);
+  color: var(--cyan);
+  font-family: var(--font-head);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  padding: 10px 24px;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s, color 0.2s;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  background: rgba(0,220,255,0.12);
+  box-shadow: var(--glow);
+}
+
+.btn:active { transform: scale(0.97); }
+
+.btn-full { width: 100%; }
+
+.btn-sm {
+  font-size: 10px;
+  padding: 5px 12px;
+  letter-spacing: 1px;
+}
+
+.btn-danger { border-color: var(--red); color: var(--red); }
+.btn-danger:hover { background: rgba(255,51,51,0.12); box-shadow: 0 0 12px rgba(255,51,51,0.4); }
+
+.btn-warn { border-color: var(--orange); color: var(--orange); }
+.btn-warn:hover { background: rgba(255,153,0,0.12); box-shadow: 0 0 12px rgba(255,153,0,0.4); }
+
+.btn-green { border-color: var(--green); color: var(--green); }
+.btn-green:hover { background: rgba(0,255,136,0.12); box-shadow: 0 0 12px rgba(0,255,136,0.4); }
+
+#login-error {
+  color: var(--red);
+  font-size: 12px;
+  margin-top: 12px;
+  min-height: 18px;
+}
+
+/* ─── DASHBOARD ─── */
+#dashboard {
+  display: none;
+  flex-direction: column;
+  height: 100vh;
+  position: relative;
+  z-index: 1;
+}
+
+/* ─── HEADER ─── */
+.dash-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0,8,16,0.95);
+  backdrop-filter: blur(10px);
+  flex-shrink: 0;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.header-logo {
+  font-family: var(--font-head);
+  font-size: 14px;
+  font-weight: 900;
+  color: var(--cyan);
+  letter-spacing: 3px;
+  text-shadow: var(--glow);
+  white-space: nowrap;
+}
+
+.header-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--dim);
+  margin-right: 6px;
+  transition: background 0.3s;
+}
+
+.status-dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.status-dot.offline { background: var(--red); box-shadow: 0 0 6px var(--red); }
+
+.header-stat {
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.header-stat span {
+  color: var(--cyan);
+  font-weight: bold;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ─── TABS ─── */
+.tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg2);
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab-bar::-webkit-scrollbar { display: none; }
+
+.tab-btn {
+  font-family: var(--font-head);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  color: var(--dim);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 14px 20px;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+  white-space: nowrap;
+}
+
+.tab-btn:hover { color: var(--text); }
+
+.tab-btn.active {
+  color: var(--cyan);
+  border-bottom-color: var(--cyan);
+  text-shadow: 0 0 8px rgba(0,220,255,0.5);
+}
+
+/* ─── CONTENT ─── */
+.tab-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.tab-content::-webkit-scrollbar { width: 6px; }
+.tab-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.tab-pane { display: none; }
+.tab-pane.active { display: block; }
+
+/* ─── CARDS & GRIDS ─── */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.card-title {
+  font-family: var(--font-head);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--cyan);
+  margin-bottom: 16px;
+  text-transform: uppercase;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.stat-card {
+  background: rgba(0,180,255,0.05);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  text-align: center;
+}
+
+.stat-value {
+  font-family: var(--font-head);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--cyan);
+  line-height: 1;
+  margin-bottom: 6px;
+}
+
+.stat-label {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: var(--dim);
+  text-transform: uppercase;
+}
+
+/* ─── PING CHART ─── */
+.chart-wrap {
+  height: 80px;
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--border);
+}
+
+.chart-bar {
+  flex: 1;
+  background: var(--cyan);
+  border-radius: 2px 2px 0 0;
+  opacity: 0.7;
+  transition: height 0.3s;
+  min-width: 6px;
+}
+
+.chart-label {
+  font-size: 10px;
+  color: var(--dim);
+  text-align: right;
+  margin-top: 4px;
+}
+
+/* ─── TABLES ─── */
+.table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+thead th {
+  font-family: var(--font-head);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--dim);
+  text-transform: uppercase;
+  padding: 10px 14px;
+  text-align: left;
+  background: rgba(0,180,255,0.06);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+tbody tr {
+  border-bottom: 1px solid rgba(0,180,255,0.06);
+  transition: background 0.15s;
+}
+
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: rgba(0,180,255,0.04); }
+
+tbody td {
+  padding: 10px 14px;
+  color: var(--text);
+  vertical-align: middle;
+}
+
+.td-mono { font-family: var(--font-mono); font-size: 12px; color: var(--dim); }
+.td-name { color: var(--cyan); font-weight: 600; }
+.td-hp { color: var(--green); }
+.td-hp.low { color: var(--orange); }
+.td-hp.critical { color: var(--red); }
+
+.faction-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  font-family: var(--font-head);
+  font-weight: 600;
+  border: 1px solid;
+}
+
+.faction-gek     { border-color: #ffcc00; color: #ffcc00; background: rgba(255,204,0,0.08); }
+.faction-vykeen  { border-color: #ff4444; color: #ff4444; background: rgba(255,68,68,0.08); }
+.faction-korvax  { border-color: #44aaff; color: #44aaff; background: rgba(68,170,255,0.08); }
+.faction-atlas   { border-color: #cc44ff; color: #cc44ff; background: rgba(204,68,255,0.08); }
+.faction-outlaw  { border-color: #ff8800; color: #ff8800; background: rgba(255,136,0,0.08); }
+.faction-sentinel{ border-color: #00ffcc; color: #00ffcc; background: rgba(0,255,204,0.08); }
+
+/* ─── CHAT ─── */
+.chat-feed {
+  height: 380px;
+  overflow-y: auto;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat-feed::-webkit-scrollbar { width: 6px; }
+.chat-feed::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.chat-msg {
+  display: grid;
+  grid-template-columns: 120px 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 13px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.chat-msg:hover { background: rgba(0,180,255,0.04); }
+
+.chat-name { color: var(--cyan); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-text { color: var(--text); word-break: break-word; }
+.chat-time { color: var(--dim); font-size: 11px; white-space: nowrap; }
+
+.announce-form {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.announce-form input[type="text"],
+.announce-form select {
+  background: rgba(0,180,255,0.06);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 9px 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.announce-form input[type="text"] { width: 100%; }
+
+.announce-form input:focus,
+.announce-form select:focus {
+  border-color: var(--cyan);
+}
+
+.announce-form select option {
+  background: var(--bg2);
+}
+
+/* ─── CONSOLE ─── */
+.console-feed {
+  height: 420px;
+  overflow-y: auto;
+  background: rgba(0,0,0,0.5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.7;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.console-feed::-webkit-scrollbar { width: 6px; }
+.console-feed::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.log-line { display: block; white-space: pre-wrap; word-break: break-all; }
+.log-info  { color: var(--text); }
+.log-warn  { color: var(--orange); }
+.log-error { color: var(--red); }
+.log-debug { color: var(--dim); }
+
+.console-controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+/* ─── UNIVERSE INFO ─── */
+.universe-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.u-item {
+  background: rgba(0,180,255,0.04);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.u-label {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: var(--dim);
+  text-transform: uppercase;
+}
+
+.u-value {
+  font-family: var(--font-head);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--cyan);
+}
+
+.galaxy-bar {
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  height: 8px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.galaxy-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--cyan), var(--green));
+  border-radius: 20px;
+  transition: width 0.5s;
+}
+
+/* ─── ECONOMY ─── */
+.price-cell {
+  font-family: var(--font-mono);
+  color: var(--green);
+}
+
+.vol-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vol-bar-bg {
+  flex: 1;
+  height: 6px;
+  background: rgba(0,180,255,0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.vol-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--cyan);
+}
+
+/* ─── FLOATING ACTIONS ─── */
+.fab-group {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 50;
+}
+
+.fab {
+  width: 46px; height: 46px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--cyan);
+  font-size: 18px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: box-shadow 0.2s, transform 0.15s, border-color 0.2s;
+  backdrop-filter: blur(10px);
+  position: relative;
+}
+
+.fab:hover {
+  box-shadow: var(--glow);
+  border-color: var(--cyan);
+  transform: scale(1.08);
+}
+
+.fab[data-tip]::before {
+  content: attr(data-tip);
+  position: absolute;
+  right: 54px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+.fab:hover[data-tip]::before { opacity: 1; }
+
+/* ─── TOAST ─── */
+#toast-area {
+  position: fixed;
+  top: 80px; right: 20px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  font-size: 12px;
+  color: var(--text);
+  animation: toastIn 0.25s ease, toastOut 0.3s ease 2.7s forwards;
+  max-width: 280px;
+  pointer-events: auto;
+}
+
+.toast.success { border-color: var(--green); color: var(--green); }
+.toast.warn    { border-color: var(--orange); color: var(--orange); }
+.toast.error   { border-color: var(--red); color: var(--red); }
+
+@keyframes toastIn  { from { opacity:0; transform: translateX(20px); } to { opacity:1; transform: translateX(0); } }
+@keyframes toastOut { from { opacity:1; } to { opacity:0; transform: translateX(20px); } }
+
+/* ─── LOADING SPINNER ─── */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  gap: 12px;
+  color: var(--dim);
+  font-size: 12px;
+  letter-spacing: 2px;
+}
+
+.spinner {
+  width: 20px; height: 20px;
+  border: 2px solid var(--border);
+  border-top-color: var(--cyan);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ─── OFFLINE BANNER ─── */
+.offline-banner {
+  background: rgba(255,51,51,0.12);
+  border: 1px solid var(--red);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  color: var(--red);
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-align: center;
+  margin-bottom: 16px;
+  display: none;
+}
+
+/* ─── SCROLLBAR ─── */
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+
+/* ─── RESPONSIVE ─── */
+@media (max-width: 600px) {
+  .dash-header { padding: 10px 14px; }
+  .header-meta { gap: 10px; }
+  .tab-content { padding: 12px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .announce-form { grid-template-columns: 1fr; }
+  .announce-form select { width: 100%; }
+  .chat-msg { grid-template-columns: 90px 1fr; }
+  .chat-time { display: none; }
+  .fab-group { bottom: 16px; right: 16px; }
+  .card { padding: 14px; }
+}
+
+@media (max-width: 420px) {
+  .header-logo { font-size: 11px; letter-spacing: 2px; }
+  .tab-btn { padding: 12px 12px; font-size: 9px; }
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════ LOGIN ══ -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">AETHERIA</div>
+    <div class="login-sub">ADMIN CONSOLE // SECURE ACCESS</div>
+    <label for="token-input">ACCESS TOKEN</label>
+    <input type="password" id="token-input" placeholder="Enter admin token…" autocomplete="off" spellcheck="false">
+    <button class="btn btn-full" id="login-btn" onclick="doLogin()">⬡ ACCESS SYSTEM</button>
+    <div id="login-error"></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════ DASHBOARD ══ -->
+<div id="dashboard">
+
+  <!-- Header -->
+  <header class="dash-header">
+    <div class="header-logo">⬡ AETHERIA ADMIN</div>
+    <div class="header-meta">
+      <span class="header-stat">
+        <span class="status-dot" id="hdr-dot"></span>
+        <span id="hdr-status">OFFLINE</span>
+      </span>
+      <span class="header-stat">PLAYERS: <span id="hdr-players">—</span></span>
+      <span class="header-stat">UPTIME: <span id="hdr-uptime">—</span></span>
+      <span class="header-stat">v<span id="hdr-version">—</span></span>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-sm btn-danger" onclick="doLogout()">LOGOUT</button>
+    </div>
+  </header>
+
+  <!-- Tabs -->
+  <nav class="tab-bar">
+    <button class="tab-btn active" data-tab="overview">Overview</button>
+    <button class="tab-btn" data-tab="players">Players</button>
+    <button class="tab-btn" data-tab="universe">Universe</button>
+    <button class="tab-btn" data-tab="buildings">Buildings</button>
+    <button class="tab-btn" data-tab="economy">Economy</button>
+    <button class="tab-btn" data-tab="chat">Chat</button>
+    <button class="tab-btn" data-tab="console">Console</button>
+  </nav>
+
+  <!-- Content -->
+  <main class="tab-content">
+
+    <!-- ── OVERVIEW ── -->
+    <div class="tab-pane active" id="tab-overview">
+      <div id="overview-offline" class="offline-banner">⚠ SERVER OFFLINE — Cannot reach API</div>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="ov-players">—</div>
+          <div class="stat-label">Online Players</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="ov-uptime">—</div>
+          <div class="stat-label">Uptime</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="ov-version">—</div>
+          <div class="stat-label">Version</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="ov-ping">—</div>
+          <div class="stat-label">Ping (ms)</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Response Time History (last 20)</div>
+        <div class="chart-wrap" id="ping-chart"></div>
+        <div class="chart-label">ms</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Server Status</div>
+        <table style="width:auto">
+          <tbody id="status-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── PLAYERS ── -->
+    <div class="tab-pane" id="tab-players">
+      <div id="players-offline" class="offline-banner">⚠ SERVER OFFLINE — Cannot reach API</div>
+      <div class="card">
+        <div class="card-title" style="display:flex;justify-content:space-between">
+          <span>Connected Players</span>
+          <button class="btn btn-sm" onclick="loadPlayers()">↻ Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th></th>
+                <th>Name</th>
+                <th>Position</th>
+                <th>HP</th>
+                <th>Faction</th>
+                <th>Joined</th>
+                <th>Last Seen</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="players-tbody">
+              <tr><td colspan="8" class="loading"><div class="spinner"></div> LOADING…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── UNIVERSE ── -->
+    <div class="tab-pane" id="tab-universe">
+      <div id="universe-offline" class="offline-banner">⚠ SERVER OFFLINE — Cannot reach API</div>
+      <div class="universe-grid" id="universe-grid"></div>
+      <div class="card">
+        <div class="card-title">Galaxy Progress</div>
+        <div style="margin-bottom:8px;font-size:12px;color:var(--dim)">GALAXY INDEX</div>
+        <div class="galaxy-bar"><div class="galaxy-bar-fill" id="galaxy-bar-fill" style="width:0%"></div></div>
+        <div style="margin-top:6px;font-size:11px;color:var(--dim)" id="galaxy-bar-label"></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-green" onclick="forceSave()">💾 Force Save Universe</button>
+      </div>
+    </div>
+
+    <!-- ── BUILDINGS ── -->
+    <div class="tab-pane" id="tab-buildings">
+      <div id="buildings-offline" class="offline-banner">⚠ SERVER OFFLINE — Cannot reach API</div>
+      <div class="card">
+        <div class="card-title" style="display:flex;justify-content:space-between">
+          <span>Placed Buildings</span>
+          <button class="btn btn-sm" onclick="loadBuildings()">↻ Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>System</th>
+                <th>Position</th>
+                <th>Owner</th>
+                <th>HP</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="buildings-tbody">
+              <tr><td colspan="6" class="loading"><div class="spinner"></div> LOADING…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ECONOMY ── -->
+    <div class="tab-pane" id="tab-economy">
+      <div id="economy-offline" class="offline-banner">⚠ SERVER OFFLINE — Cannot reach API</div>
+      <div class="card">
+        <div class="card-title" style="display:flex;justify-content:space-between">
+          <span>Top 10 Traded Items</span>
+          <button class="btn btn-sm" onclick="loadEconomy()">↻ Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Item</th>
+                <th>Buy Count</th>
+                <th>Sell Count</th>
+                <th>Avg Price (u)</th>
+                <th>Volume</th>
+              </tr>
+            </thead>
+            <tbody id="economy-tbody">
+              <tr><td colspan="6" class="loading"><div class="spinner"></div> LOADING…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CHAT ── -->
+    <div class="tab-pane" id="tab-chat">
+      <div id="chat-offline" class="offline-banner">⚠ SERVER OFFLINE — Cannot reach API</div>
+      <div class="card">
+        <div class="card-title" style="display:flex;justify-content:space-between">
+          <span>Chat Feed (last 50)</span>
+          <button class="btn btn-sm" onclick="loadChat()">↻ Refresh</button>
+        </div>
+        <div class="chat-feed" id="chat-feed">
+          <div class="loading"><div class="spinner"></div> LOADING…</div>
+        </div>
+        <div class="card-title" style="margin-top:4px">Broadcast Announcement</div>
+        <div class="announce-form">
+          <input type="text" id="announce-text" placeholder="Announcement message…" maxlength="256">
+          <select id="announce-severity">
+            <option value="info">INFO</option>
+            <option value="warn">WARN</option>
+            <option value="danger">DANGER</option>
+          </select>
+          <button class="btn" onclick="sendAnnouncement()">📡 BROADCAST</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CONSOLE ── -->
+    <div class="tab-pane" id="tab-console">
+      <div id="console-offline" class="offline-banner">⚠ SERVER OFFLINE — Cannot reach API</div>
+      <div class="card">
+        <div class="card-title" style="display:flex;justify-content:space-between">
+          <span>Server Log (last 20)</span>
+          <button class="btn btn-sm" onclick="loadLogs()">↻ Refresh</button>
+        </div>
+        <div class="console-feed" id="console-feed">
+          <span class="log-debug">Awaiting log data…</span>
+        </div>
+        <div class="console-controls">
+          <button class="btn btn-sm btn-danger" onclick="clearConsole()">✕ Clear</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- Floating Action Buttons -->
+<div class="fab-group" id="fab-group" style="display:none">
+  <div class="fab" data-tip="Refresh Now" onclick="refreshAll()" title="Refresh">↻</div>
+  <div class="fab" data-tip="Save State" onclick="forceSave()" title="Save">💾</div>
+  <div class="fab" data-tip="Announcement" onclick="focusAnnounce()" title="Announce">📡</div>
+</div>
+
+<!-- Toast area -->
+<div id="toast-area"></div>
+
+<script>
+// ═══════════════════════════════════════ STATE ══
+const STATE = {
+  token: '',
+  pingHistory: Array(20).fill(0),
+  autoRefreshTimer: null,
+};
+
+// ═══════════════════════════════════════ AUTH ══
+function doLogin() {
+  const t = document.getElementById('token-input').value.trim();
+  if (!t) { showLoginError('Token required.'); return; }
+  STATE.token = t;
+  sessionStorage.setItem('aetheria_admin_token', t);
+  document.getElementById('login-error').textContent = 'Verifying…';
+  apiFetch('/admin/status')
+    .then(data => {
+      showDashboard();
+    })
+    .catch(() => {
+      // Allow login anyway; server may be temporarily unreachable
+      showDashboard();
+    });
+}
+
+function doLogout() {
+  clearInterval(STATE.autoRefreshTimer);
+  sessionStorage.removeItem('aetheria_admin_token');
+  STATE.token = '';
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('fab-group').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('token-input').value = '';
+  document.getElementById('login-error').textContent = '';
+}
+
+function showLoginError(msg) {
+  document.getElementById('login-error').textContent = msg;
+}
+
+function showDashboard() {
+  document.getElementById('login-screen').style.display = 'none';
+  const dash = document.getElementById('dashboard');
+  dash.style.display = 'flex';
+  document.getElementById('fab-group').style.display = 'flex';
+  refreshAll();
+  STATE.autoRefreshTimer = setInterval(refreshAll, 5000);
+}
+
+// ═══════════════════════════════════════ API ══
+async function apiFetch(path, opts = {}) {
+  const sep = path.includes('?') ? '&' : '?';
+  const url = `${path}${sep}token=${encodeURIComponent(STATE.token)}`;
+  const start = Date.now();
+  const res = await fetch(url, { ...opts, signal: AbortSignal.timeout(8000) });
+  const ping = Date.now() - start;
+  updatePing(ping);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function apiPost(path, body = {}) {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: STATE.token, ...body }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// ═══════════════════════════════════════ PING CHART ══
+function updatePing(ms) {
+  STATE.pingHistory.push(ms);
+  if (STATE.pingHistory.length > 20) STATE.pingHistory.shift();
+  renderPingChart();
+}
+
+function renderPingChart() {
+  const chart = document.getElementById('ping-chart');
+  const max = Math.max(...STATE.pingHistory, 1);
+  chart.innerHTML = STATE.pingHistory.map(v => {
+    const pct = Math.max(4, Math.round((v / max) * 68));
+    const hue = v < 100 ? 'var(--green)' : v < 300 ? 'var(--orange)' : 'var(--red)';
+    return `<div class="chart-bar" style="height:${pct}px;background:${hue}" title="${v}ms"></div>`;
+  }).join('');
+  const latest = STATE.pingHistory[STATE.pingHistory.length - 1];
+  document.getElementById('ov-ping').textContent = latest + 'ms';
+}
+
+// ═══════════════════════════════════════ TABS ══
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    loadTabData(btn.dataset.tab);
+  });
+});
+
+function loadTabData(tab) {
+  switch (tab) {
+    case 'players':   loadPlayers();   break;
+    case 'universe':  loadUniverse();  break;
+    case 'buildings': loadBuildings(); break;
+    case 'economy':   loadEconomy();   break;
+    case 'chat':      loadChat();      break;
+    case 'console':   loadLogs();      break;
+  }
+}
+
+// ═══════════════════════════════════════ REFRESH ══
+function refreshAll() {
+  loadOverview();
+  const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;
+  if (activeTab && activeTab !== 'overview') loadTabData(activeTab);
+}
+
+// ═══════════════════════════════════════ OVERVIEW ══
+function loadOverview() {
+  const offBanner = document.getElementById('overview-offline');
+  apiFetch('/admin/status')
+    .then(d => {
+      offBanner.style.display = 'none';
+      const dot = document.getElementById('hdr-dot');
+      dot.className = 'status-dot ' + (d.online ? 'online' : 'offline');
+      document.getElementById('hdr-status').textContent = d.online ? 'ONLINE' : 'OFFLINE';
+      document.getElementById('hdr-players').textContent = d.playerCount ?? '—';
+      document.getElementById('hdr-uptime').textContent = formatUptime(d.uptime ?? 0);
+      document.getElementById('hdr-version').textContent = d.version ?? '—';
+      document.getElementById('ov-players').textContent = d.playerCount ?? '—';
+      document.getElementById('ov-uptime').textContent = formatUptime(d.uptime ?? 0);
+      document.getElementById('ov-version').textContent = d.version ?? '—';
+
+      const rows = [
+        ['Status',   `<span style="color:${d.online?'var(--green)':'var(--red)'}">● ${d.online?'ONLINE':'OFFLINE'}</span>`],
+        ['Players',  d.playerCount ?? '—'],
+        ['Max Players', d.maxPlayers ?? '—'],
+        ['Uptime',   formatUptime(d.uptime ?? 0)],
+        ['Version',  d.version ?? '—'],
+        ['Region',   d.region ?? '—'],
+        ['Galaxy',   d.galaxy ?? '—'],
+        ['Systems Loaded', d.systemsLoaded ?? '—'],
+      ];
+      document.getElementById('status-table').innerHTML = rows.map(([k, v]) =>
+        `<tr><td style="padding:6px 14px;color:var(--dim);font-size:11px;letter-spacing:1px;white-space:nowrap">${k}</td>
+             <td style="padding:6px 14px;color:var(--text)">${v}</td></tr>`
+      ).join('');
+    })
+    .catch(() => {
+      offBanner.style.display = 'block';
+      document.getElementById('hdr-dot').className = 'status-dot offline';
+      document.getElementById('hdr-status').textContent = 'OFFLINE';
+      document.getElementById('status-table').innerHTML =
+        '<tr><td colspan="2" style="color:var(--red);padding:12px 14px">⚠ Server offline</td></tr>';
+    });
+}
+
+// ═══════════════════════════════════════ PLAYERS ══
+function loadPlayers() {
+  const tbody = document.getElementById('players-tbody');
+  const offBanner = document.getElementById('players-offline');
+  tbody.innerHTML = '<tr><td colspan="8"><div class="loading"><div class="spinner"></div> LOADING…</div></td></tr>';
+
+  apiFetch('/admin/players')
+    .then(players => {
+      offBanner.style.display = 'none';
+      if (!players || !players.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--dim)">No players connected</td></tr>';
+        return;
+      }
+      tbody.innerHTML = players.map(p => {
+        const pos = p.position ? `${p.position.x?.toFixed(0)},${p.position.y?.toFixed(0)},${p.position.z?.toFixed(0)}` : '—';
+        const hp = p.hp ?? 100;
+        const hpMax = p.hpMax ?? 100;
+        const hpPct = Math.round((hp / hpMax) * 100);
+        const hpClass = hpPct > 60 ? 'td-hp' : hpPct > 30 ? 'td-hp low' : 'td-hp critical';
+        const factionClass = 'faction-' + (p.faction || 'gek').toLowerCase().replace(/[^a-z]/g,'');
+        const avatar = p.avatar || avatarForFaction(p.faction);
+        return `<tr>
+          <td style="font-size:20px;text-align:center">${avatar}</td>
+          <td class="td-name">${esc(p.name || 'Unknown')}</td>
+          <td class="td-mono">${pos}</td>
+          <td class="${hpClass}">${hp}/${hpMax}</td>
+          <td><span class="faction-badge ${factionClass}">${esc(p.faction || 'None')}</span></td>
+          <td class="td-mono" style="font-size:11px">${formatTime(p.joinTime)}</td>
+          <td class="td-mono" style="font-size:11px">${formatTime(p.lastSeen)}</td>
+          <td style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn btn-sm btn-warn" onclick="kickPlayer('${esc(p.id)}','${esc(p.name)}')">KICK</button>
+            <button class="btn btn-sm btn-danger" onclick="banPlayer('${esc(p.ip||p.id)}','${esc(p.name)}')">BAN</button>
+          </td>
+        </tr>`;
+      }).join('');
+    })
+    .catch(() => {
+      offBanner.style.display = 'block';
+      tbody.innerHTML = '<tr><td colspan="8" style="color:var(--red);padding:14px">⚠ Server offline</td></tr>';
+    });
+}
+
+function kickPlayer(id, name) {
+  if (!confirm(`Kick player "${name}"?`)) return;
+  apiPost('/admin/kick', { playerId: id })
+    .then(() => { toast(`Kicked ${name}`, 'warn'); loadPlayers(); })
+    .catch(e => toast(`Kick failed: ${e.message}`, 'error'));
+}
+
+function banPlayer(ip, name) {
+  if (!confirm(`Ban player "${name}" (IP: ${ip})?`)) return;
+  apiPost('/admin/ban', { ip })
+    .then(() => { toast(`Banned ${name}`, 'error'); loadPlayers(); })
+    .catch(e => toast(`Ban failed: ${e.message}`, 'error'));
+}
+
+// ═══════════════════════════════════════ UNIVERSE ══
+function loadUniverse() {
+  const grid = document.getElementById('universe-grid');
+  const offBanner = document.getElementById('universe-offline');
+  grid.innerHTML = '<div class="loading"><div class="spinner"></div> LOADING…</div>';
+
+  apiFetch('/admin/status')
+    .then(d => {
+      offBanner.style.display = 'none';
+      const fields = [
+        ['Galaxy Name',      d.galaxyName ?? '—'],
+        ['Galaxy Index',     d.galaxyIndex !== undefined ? `${d.galaxyIndex} / 255` : '—'],
+        ['Current Region',   d.region ?? '—'],
+        ['Systems Visited',  d.systemsVisited ?? '—'],
+        ['Total Buildings',  d.totalBuildings ?? '—'],
+        ['Active Factions',  d.activeFactions ?? '—'],
+      ];
+      grid.innerHTML = fields.map(([label, value]) =>
+        `<div class="u-item"><div class="u-label">${label}</div><div class="u-value">${value}</div></div>`
+      ).join('');
+
+      const idx = d.galaxyIndex ?? 0;
+      const pct = ((idx / 255) * 100).toFixed(1);
+      document.getElementById('galaxy-bar-fill').style.width = pct + '%';
+      document.getElementById('galaxy-bar-label').textContent = `${pct}% explored (${idx} / 255)`;
+    })
+    .catch(() => {
+      offBanner.style.display = 'block';
+      grid.innerHTML = '<div style="color:var(--red)">⚠ Server offline</div>';
+    });
+}
+
+function forceSave() {
+  apiPost('/admin/save')
+    .then(() => toast('Universe saved!', 'success'))
+    .catch(e => toast(`Save failed: ${e.message}`, 'error'));
+}
+
+// ═══════════════════════════════════════ BUILDINGS ══
+function loadBuildings() {
+  const tbody = document.getElementById('buildings-tbody');
+  const offBanner = document.getElementById('buildings-offline');
+  tbody.innerHTML = '<tr><td colspan="6"><div class="loading"><div class="spinner"></div> LOADING…</div></td></tr>';
+
+  apiFetch('/admin/buildings')
+    .then(buildings => {
+      offBanner.style.display = 'none';
+      if (!buildings || !buildings.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--dim)">No buildings placed</td></tr>';
+        return;
+      }
+      tbody.innerHTML = buildings.map(b => {
+        const pos = b.position ? `${b.position.x?.toFixed(0)},${b.position.y?.toFixed(0)},${b.position.z?.toFixed(0)}` : '—';
+        const hp = b.hp ?? 100;
+        const hpMax = b.hpMax ?? 100;
+        const hpPct = Math.round((hp / hpMax) * 100);
+        const hpClass = hpPct > 60 ? 'td-hp' : hpPct > 30 ? 'td-hp low' : 'td-hp critical';
+        return `<tr>
+          <td class="td-name">${esc(b.type || 'Unknown')}</td>
+          <td class="td-mono">${esc(b.system || '—')}</td>
+          <td class="td-mono">${pos}</td>
+          <td style="color:var(--cyan)">${esc(b.owner || '—')}</td>
+          <td class="${hpClass}">${hp}/${hpMax}</td>
+          <td><button class="btn btn-sm btn-danger" onclick="removeBuilding('${esc(b.id)}')">REMOVE</button></td>
+        </tr>`;
+      }).join('');
+    })
+    .catch(() => {
+      offBanner.style.display = 'block';
+      tbody.innerHTML = '<tr><td colspan="6" style="color:var(--red);padding:14px">⚠ Server offline</td></tr>';
+    });
+}
+
+function removeBuilding(id) {
+  if (!confirm('Remove this building?')) return;
+  apiPost('/admin/remove-building', { buildingId: id })
+    .then(() => { toast('Building removed', 'warn'); loadBuildings(); })
+    .catch(e => toast(`Remove failed: ${e.message}`, 'error'));
+}
+
+// ═══════════════════════════════════════ ECONOMY ══
+function loadEconomy() {
+  const tbody = document.getElementById('economy-tbody');
+  const offBanner = document.getElementById('economy-offline');
+  tbody.innerHTML = '<tr><td colspan="6"><div class="loading"><div class="spinner"></div> LOADING…</div></td></tr>';
+
+  apiFetch('/admin/economy')
+    .then(items => {
+      offBanner.style.display = 'none';
+      if (!items || !items.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:var(--dim)">No economy data</td></tr>';
+        return;
+      }
+      const maxVol = Math.max(...items.map(i => (i.buyCount || 0) + (i.sellCount || 0)), 1);
+      tbody.innerHTML = items.slice(0, 10).map((item, idx) => {
+        const vol = (item.buyCount || 0) + (item.sellCount || 0);
+        const volPct = Math.round((vol / maxVol) * 100);
+        return `<tr>
+          <td style="color:var(--dim);font-size:12px">${idx + 1}</td>
+          <td class="td-name">${esc(item.name || 'Unknown')}</td>
+          <td style="color:var(--green)">${(item.buyCount || 0).toLocaleString()}</td>
+          <td style="color:var(--orange)">${(item.sellCount || 0).toLocaleString()}</td>
+          <td class="price-cell">${(item.avgPrice || 0).toLocaleString()} u</td>
+          <td>
+            <div class="vol-bar-wrap">
+              <div class="vol-bar-bg"><div class="vol-bar-fill" style="width:${volPct}%"></div></div>
+              <span style="font-size:10px;color:var(--dim);white-space:nowrap">${vol.toLocaleString()}</span>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    })
+    .catch(() => {
+      offBanner.style.display = 'block';
+      tbody.innerHTML = '<tr><td colspan="6" style="color:var(--red);padding:14px">⚠ Server offline</td></tr>';
+    });
+}
+
+// ═══════════════════════════════════════ CHAT ══
+function loadChat() {
+  const feed = document.getElementById('chat-feed');
+  const offBanner = document.getElementById('chat-offline');
+
+  apiFetch('/admin/chat')
+    .then(messages => {
+      offBanner.style.display = 'none';
+      if (!messages || !messages.length) {
+        feed.innerHTML = '<div style="color:var(--dim);text-align:center;padding:20px">No messages yet</div>';
+        return;
+      }
+      feed.innerHTML = messages.slice(-50).map(m =>
+        `<div class="chat-msg">
+          <span class="chat-name">${esc(m.name || 'System')}</span>
+          <span class="chat-text">${esc(m.text || '')}</span>
+          <span class="chat-time">${formatTime(m.time)}</span>
+        </div>`
+      ).join('');
+      feed.scrollTop = feed.scrollHeight;
+    })
+    .catch(() => {
+      offBanner.style.display = 'block';
+      feed.innerHTML = '<div style="color:var(--red);padding:12px">⚠ Server offline</div>';
+    });
+}
+
+function sendAnnouncement() {
+  const text = document.getElementById('announce-text').value.trim();
+  const severity = document.getElementById('announce-severity').value;
+  if (!text) { toast('Enter announcement text', 'warn'); return; }
+
+  apiPost('/admin/announce', { text, severity })
+    .then(() => {
+      toast('Announcement sent!', 'success');
+      document.getElementById('announce-text').value = '';
+      setTimeout(loadChat, 500);
+    })
+    .catch(e => toast(`Announce failed: ${e.message}`, 'error'));
+}
+
+function focusAnnounce() {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelector('[data-tab="chat"]').classList.add('active');
+  document.getElementById('tab-chat').classList.add('active');
+  loadChat();
+  setTimeout(() => document.getElementById('announce-text').focus(), 100);
+}
+
+// ═══════════════════════════════════════ CONSOLE ══
+function loadLogs() {
+  const feed = document.getElementById('console-feed');
+  const offBanner = document.getElementById('console-offline');
+
+  apiFetch('/admin/logs')
+    .then(lines => {
+      offBanner.style.display = 'none';
+      if (!lines || !lines.length) {
+        feed.innerHTML = '<span class="log-debug">No log entries</span>';
+        return;
+      }
+      feed.innerHTML = lines.slice(-20).map(line => {
+        const cls = /error|err|fatal/i.test(line) ? 'log-error'
+                  : /warn/i.test(line) ? 'log-warn'
+                  : /debug/i.test(line) ? 'log-debug'
+                  : 'log-info';
+        return `<span class="log-line ${cls}">${esc(line)}</span>`;
+      }).join('');
+      feed.scrollTop = feed.scrollHeight;
+    })
+    .catch(() => {
+      offBanner.style.display = 'block';
+      feed.innerHTML = '<span class="log-error">⚠ Server offline</span>';
+    });
+}
+
+function clearConsole() {
+  document.getElementById('console-feed').innerHTML = '<span class="log-debug">Console cleared.</span>';
+}
+
+// ═══════════════════════════════════════ HELPERS ══
+function esc(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatUptime(seconds) {
+  if (!seconds && seconds !== 0) return '—';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+function formatTime(ts) {
+  if (!ts) return '—';
+  try {
+    const d = new Date(ts);
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch { return '—'; }
+}
+
+function avatarForFaction(faction) {
+  const map = { gek: '🟡', vykeen: '🔴', korvax: '🔵', atlas: '🟣', outlaws: '🟠', sentinel: '🟢' };
+  return map[(faction || '').toLowerCase()] || '⬡';
+}
+
+function toast(msg, type = 'success') {
+  const area = document.getElementById('toast-area');
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  area.appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
+
+// ═══════════════════════════════════════ INIT ══
+(function init() {
+  const saved = sessionStorage.getItem('aetheria_admin_token');
+  if (saved) {
+    STATE.token = saved;
+    showDashboard();
+  }
+
+  document.getElementById('token-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+
+  document.getElementById('announce-text').addEventListener('keydown', e => {
+    if (e.key === 'Enter') sendAnnouncement();
+  });
+})();
+</script>
+</body>
+</html>

@@ -27,27 +27,27 @@ function buildFerriteNode() {
   const g = new THREE.Group(); g.add(m); return g;
 }
 
-function buildCopperNode() {
+function buildCopperNode(rng) {
   const g = new THREE.Group();
   for (let i=0;i<3;i++) {
     const m = new THREE.Mesh(
       new THREE.OctahedronGeometry(0.35,0),
       new THREE.MeshPhongMaterial({ color:0xcc6622, emissive:0x442200, emissiveIntensity:0.3, shininess:80 })
     );
-    m.position.set((Math.random()-0.5)*0.6, 0.3+i*0.3, (Math.random()-0.5)*0.6);
+    m.position.set((rng()-0.5)*0.6, 0.3+i*0.3, (rng()-0.5)*0.6);
     g.add(m);
   }
   return g;
 }
 
-function buildGoldNode() {
+function buildGoldNode(rng) {
   const g = new THREE.Group();
   for (let i=0;i<2;i++) {
     const m = new THREE.Mesh(
       new THREE.DodecahedronGeometry(0.3,0),
       new THREE.MeshPhongMaterial({ color:0xddaa00, emissive:0x553300, emissiveIntensity:0.5, shininess:120 })
     );
-    m.position.set((Math.random()-0.5)*0.5, 0.3+i*0.35, (Math.random()-0.5)*0.5);
+    m.position.set((rng()-0.5)*0.5, 0.3+i*0.35, (rng()-0.5)*0.5);
     g.add(m);
   }
   return g;
@@ -90,22 +90,22 @@ function buildEmerilNode() {
 }
 
 const NODE_BUILDERS = {
-  'Carbon':        () => buildCarbonNode(0x44aa22),
-  'Ferrite Dust':  () => buildFerriteNode(),
-  'Copper':        () => buildCopperNode(),
-  'Gold':          () => buildGoldNode(),
-  'Uranium':       () => buildUraniumNode(),
-  'Di-Hydrogen':   () => buildDiHydrogenNode(),
-  'Emeril':        () => buildEmerilNode(),
-  'Sodium':        () => buildCarbonNode(0xffdd44),
-  'Oxygen':        () => buildCarbonNode(0x88ddff),
-  'Cobalt':        () => buildCarbonNode(0x4455ff),
-  'Titanium':      () => buildFerriteNode(),
-  'Pure Ferrite':  () => buildFerriteNode(),
-  'Condensed Carbon': () => buildCarbonNode(0x336633),
-  'Platinum':      () => buildGoldNode(),
-  'Chromatic Metal':  () => buildCopperNode(),
-  'Indium':        () => buildEmerilNode()
+  'Carbon':        (_r) => buildCarbonNode(0x44aa22),
+  'Ferrite Dust':  (_r) => buildFerriteNode(),
+  'Copper':        (rng) => buildCopperNode(rng),
+  'Gold':          (rng) => buildGoldNode(rng),
+  'Uranium':       (_r) => buildUraniumNode(),
+  'Di-Hydrogen':   (_r) => buildDiHydrogenNode(),
+  'Emeril':        (_r) => buildEmerilNode(),
+  'Sodium':        (_r) => buildCarbonNode(0xffdd44),
+  'Oxygen':        (_r) => buildCarbonNode(0x88ddff),
+  'Cobalt':        (_r) => buildCarbonNode(0x4455ff),
+  'Titanium':      (_r) => buildFerriteNode(),
+  'Pure Ferrite':  (_r) => buildFerriteNode(),
+  'Condensed Carbon': (_r) => buildCarbonNode(0x336633),
+  'Platinum':      (rng) => buildGoldNode(rng),
+  'Chromatic Metal':  (rng) => buildCopperNode(rng),
+  'Indium':        (_r) => buildEmerilNode()
 };
 
 export class MiningSystem {
@@ -113,17 +113,24 @@ export class MiningSystem {
     this.scene = scene;
     this.inventory = inventory;
     this.nodes = new Map();
-    this._beamLine = null;
-    this._particles = null;
     this._miningTarget = null;
     this._miningProgress = 0;
     this._respawnQueue = [];
+
+    // Persistent beam — update positions in place rather than recreating
+    const beamPts = [new THREE.Vector3(), new THREE.Vector3()];
+    const beamGeo = new THREE.BufferGeometry().setFromPoints(beamPts);
+    const beamMat = new THREE.LineBasicMaterial({ color: 0xff4400, linewidth: 2 });
+    this._beamLine = new THREE.Line(beamGeo, beamMat);
+    this._beamLine.visible = false;
+    this.scene.add(this._beamLine);
   }
 
   spawnResourceNode(pos, resourceType, amount, planetSeed) {
     const id = _nodeId++;
-    const builder = NODE_BUILDERS[resourceType] || (() => buildFerriteNode());
-    const group = builder();
+    const nodeRng = this._rng(((planetSeed || 0) ^ id * 2654435761) >>> 0);
+    const builder = NODE_BUILDERS[resourceType] || ((_r) => buildFerriteNode());
+    const group = builder(nodeRng);
     group.position.copy(pos);
     group.userData.nodeId = id;
     group.userData.resourceType = resourceType;
@@ -234,21 +241,15 @@ export class MiningSystem {
   }
 
   _updateBeam(from, to) {
-    this._clearBeam();
-    const pts=[from.clone(),to.clone()];
-    const geo=new THREE.BufferGeometry().setFromPoints(pts);
-    const mat=new THREE.LineBasicMaterial({color:0xff4400,linewidth:2});
-    this._beamLine=new THREE.Line(geo,mat);
-    this.scene.add(this._beamLine);
+    const pos = this._beamLine.geometry.attributes.position;
+    pos.setXYZ(0, from.x, from.y, from.z);
+    pos.setXYZ(1, to.x,   to.y,   to.z);
+    pos.needsUpdate = true;
+    this._beamLine.visible = true;
   }
 
   _clearBeam(){
-    if(this._beamLine){
-      this.scene.remove(this._beamLine);
-      this._beamLine.geometry.dispose();
-      this._beamLine.material.dispose();
-      this._beamLine=null;
-    }
+    this._beamLine.visible = false;
   }
 
   getNodesNear(pos, radius) {
@@ -287,6 +288,11 @@ export class MiningSystem {
       });
     }
     this.nodes.clear();
-    this._clearBeam();
+    if(this._beamLine){
+      this.scene.remove(this._beamLine);
+      this._beamLine.geometry.dispose();
+      this._beamLine.material.dispose();
+      this._beamLine = null;
+    }
   }
 }

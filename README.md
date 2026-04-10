@@ -1,8 +1,8 @@
 # 🌌 Aetheria: Endless Frontiers
 
-A No Man's Sky-inspired 3D browser RPG with procedural worlds, real-time exploration, ship flight, crafting, and mobile support via Capacitor.
+A No Man's Sky-inspired 3D browser RPG with procedural worlds, real-time exploration, combat, ship flight, crafting, and mobile support via Capacitor.
 
-> **Beta Release** – fully playable in any WebGL2 browser, no install required.
+> **Beta 2** – fully playable in any WebGL2 browser, no install required.
 
 ---
 
@@ -23,6 +23,29 @@ python3 -m http.server 8080
 
 ### Method 3 – Direct file
 Open `index.html` directly in Chrome/Firefox (some features require a server).
+
+---
+
+## 🎮 Controls
+
+| Key / Input | Action |
+|-------------|--------|
+| `W A S D` | Move |
+| `Shift` | Sprint |
+| `Space` | Jetpack thrust |
+| `F` | Scanner pulse |
+| `Left click` (held) | Mine resource node |
+| `Right click` | Attack nearest creature |
+| `1` – `0` | Select quickslot |
+| `B` | Deploy Auto-Extractor at current position |
+| `G` | Enter / Exit ship |
+| `Tab` | Inventory |
+| `N` | Crafting menu |
+| `T` | Tech tree |
+| `M` | Galaxy map |
+| `P` | Manual save |
+| `O` | Load save |
+| `Esc` | Pause |
 
 ---
 

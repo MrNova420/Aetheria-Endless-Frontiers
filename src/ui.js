@@ -9,6 +9,11 @@ const RARITY_COLORS = {
   epic: '#9c27b0', legendary: '#ffd700', mythic: '#ff6600',
 };
 
+const WIND_DISPLAY_THRESHOLD = 1.5;  // m/s – show wind speed label above this strength
+const PULSE_BASE              = 0.03; // minimum vignette opacity base
+const PULSE_SPEED             = 2.0;  // radians/sec for vignette pulse sine wave
+const PULSE_AMPLITUDE         = 0.07; // max additional opacity from pulse
+
 // ─── Tiny DOM helpers ─────────────────────────────────────────────────────────
 function el(tag, cls, txt) {
   const e = document.createElement(tag);
@@ -40,6 +45,7 @@ export class GameHUD {
     this._notifQ  = [];
     this._notifT  = 0;
     this._state   = 'surface'; // 'surface' | 'ship' | 'space'
+    this._elapsed = 0;         // accumulated game time for frame-rate-independent effects
   }
 
   init() {
@@ -61,6 +67,40 @@ export class GameHUD {
     this._el.loading   = document.getElementById('loading-screen');
     this._el.loadBar   = document.getElementById('loading-bar');
     this._el.loadMsg   = document.getElementById('loading-msg');
+    // Inject lore tips
+    this._startLoreTips();
+  }
+
+  _startLoreTips() {
+    const TIPS = [
+      '💡 Hold SHIFT to sprint across alien terrain.',
+      '⚡ Jetpack fuel regenerates automatically when grounded.',
+      '🔍 Press F to scan your surroundings for resources and fauna.',
+      '⚙ Press B to deploy an Auto-Extractor near a resource node.',
+      '💊 Craft Medkits from Sodium + Oxygen and use them with number keys.',
+      '🛡 Shield Battery restores 60 shield — craft with Copper + Cobalt.',
+      '🌌 Explore different planet biomes for unique resources and creatures.',
+      '☠ Alpha creatures drop rare materials — approach with caution!',
+      '📜 Complete quests for XP and bonus resources to progress faster.',
+      '🚀 Collect Warp Cells to travel between star systems.',
+    ];
+    let tipIdx = 0;
+    const loadMsg = document.getElementById('loading-msg');
+    if (!loadMsg) return;
+    // Create tip element below loading-msg
+    const tipEl = document.createElement('div');
+    tipEl.id = 'loading-tip';
+    tipEl.style.cssText = 'color:#88ccff;font-size:0.8rem;margin-top:10px;opacity:0.85;transition:opacity 0.5s;max-width:340px;text-align:center;';
+    tipEl.textContent = TIPS[0];
+    loadMsg.parentNode?.insertBefore(tipEl, loadMsg.nextSibling);
+    this._loreTipInterval = setInterval(() => {
+      tipEl.style.opacity = '0';
+      setTimeout(() => {
+        tipIdx = (tipIdx + 1) % TIPS.length;
+        tipEl.textContent = TIPS[tipIdx];
+        tipEl.style.opacity = '0.85';
+      }, 500);
+    }, 3500);
   }
 
   setLoadingProgress(pct, msg) {
@@ -69,6 +109,7 @@ export class GameHUD {
   }
 
   hideLoading() {
+    if (this._loreTipInterval) { clearInterval(this._loreTipInterval); this._loreTipInterval = null; }
     if (this._el.loading) {
       this._el.loading.style.opacity = '0';
       this._el.loading.style.transition = 'opacity 0.6s';
@@ -114,170 +155,131 @@ export class GameHUD {
     const hud = document.getElementById('hud');
     if (!hud) return;
 
-    // ── Vitals (bottom-left) ──────────────────────────────────────────────────
-    const vitals = el('div', 'hud-vitals');
+    // ── Reference elements already present in index.html ─────────────────────
+    this._el.hpRing       = document.getElementById('ring-hp');
+    this._el.shRing       = document.getElementById('ring-sh');
+    this._el.hpVal        = document.getElementById('hp-val');
+    this._el.shVal        = document.getElementById('sh-val');
+    this._el.jpFill       = document.getElementById('jp-fill');
+    this._el.lsBar        = document.getElementById('bar-lifesup');
+    this._el.hzBar        = document.getElementById('bar-hazard');
+    this._el.locPlanet    = document.getElementById('loc-planet');
+    this._el.locBiome     = document.getElementById('loc-biome');
+    this._el.locCoords    = document.getElementById('loc-coords');
+    this._el.lvlNum       = document.getElementById('lvl-num');
+    this._el.lvlLbl       = document.getElementById('lvl-class');
+    this._el.xpFill       = document.getElementById('xp-bar');
+    this._el.xpTxt        = document.getElementById('xp-txt');
+    this._el.compassInner = document.getElementById('compass-strip');
+    this._el.miningRing   = document.getElementById('mine-ring');
+    this._el.miningArc    = document.getElementById('mine-arc');
+    this._el.scanRing     = document.getElementById('scan-ring');
+    this._el.notifs       = document.getElementById('notifications');
+    this._el.bossBar      = document.getElementById('boss-bar');
+    this._el.bossName     = document.getElementById('boss-name');
+    this._el.bossFill     = document.getElementById('boss-fill');
+    this._el.flightHud    = document.getElementById('flight-hud');
+    this._el.speedVal     = document.getElementById('spd-val');
+    this._el.altVal       = document.getElementById('alt-val');
+    this._el.interact     = document.getElementById('interact-prompt');
+    this._el.dmgLayer     = document.getElementById('dmg-layer');
+    this._el.minimap      = document.getElementById('minimap');
+    this._el.mmCtx        = this._el.minimap?.getContext('2d') ?? null;
+    this._el.crosshair    = document.getElementById('crosshair');
 
-    // Health arc
-    const hpWrap = el('div', 'vital-wrap');
-    const hpSvg  = this._buildArcSVG('hp-arc', '#0f8', '#09553a');
-    hpWrap.appendChild(hpSvg);
-    const hpLbl = el('div', 'vital-label');
-    this._el.hpVal = el('span', 'vital-val', '100');
-    this._el.hpMax = el('span', 'vital-sub', '/100');
-    const hpIco = el('span', 'vital-icon', '❤');
-    hpLbl.append(hpIco, this._el.hpVal, this._el.hpMax);
-    hpWrap.appendChild(hpLbl);
-    vitals.appendChild(hpWrap);
-
-    // Shield arc
-    const shWrap = el('div', 'vital-wrap');
-    const shSvg  = this._buildArcSVG('sh-arc', '#4af', '#1a3a55');
-    shWrap.appendChild(shSvg);
-    const shLbl = el('div', 'vital-label');
-    this._el.shVal = el('span', 'vital-val', '80');
-    this._el.shMax = el('span', 'vital-sub', '/80');
-    const shIco = el('span', 'vital-icon', '🛡');
-    shLbl.append(shIco, this._el.shVal, this._el.shMax);
-    shWrap.appendChild(shLbl);
-    vitals.appendChild(shWrap);
-
-    // Jetpack bar
-    const jpWrap = el('div', 'jetpack-wrap');
-    const jpLbl  = el('div', 'jp-label', '⚡ JETPACK');
-    const jpBar  = el('div', 'jp-bar-outer');
-    this._el.jpInner = el('div', 'jp-bar-inner');
-    jpBar.appendChild(this._el.jpInner);
-    jpWrap.append(jpLbl, jpBar);
-    vitals.appendChild(jpWrap);
-
-    hud.appendChild(vitals);
-
-    // ── Top hazard/life-support bars ──────────────────────────────────────────
-    const hazard = el('div', 'hazard-bars');
-    const lsRow  = el('div', 'hazard-row');
-    lsRow.appendChild(el('span', 'hazard-icon', '🌬'));
-    lsRow.appendChild(el('span', 'hazard-lbl', 'LIFE SUPPORT'));
-    const lsBar  = el('div', 'hazard-bar-outer');
-    this._el.lsBar = el('div', 'hazard-bar-inner ls-bar');
-    lsBar.appendChild(this._el.lsBar);
-    lsRow.appendChild(lsBar);
-    hazard.appendChild(lsRow);
-
-    const hzRow  = el('div', 'hazard-row');
-    hzRow.appendChild(el('span', 'hazard-icon', '☢'));
-    hzRow.appendChild(el('span', 'hazard-lbl', 'HAZARD'));
-    const hzBar  = el('div', 'hazard-bar-outer');
-    this._el.hzBar = el('div', 'hazard-bar-inner hz-bar');
-    hzBar.appendChild(this._el.hzBar);
-    hzRow.appendChild(hzBar);
-    hazard.appendChild(hzRow);
-    hud.appendChild(hazard);
-
-    // ── Planet / Location (top-left) ─────────────────────────────────────────
-    const loc = el('div', 'hud-location');
-    this._el.locPlanet = el('span', 'loc-planet', 'Loading…');
-    this._el.locBiome  = el('span', 'loc-biome', '');
-    this._el.locCoords = el('span', 'loc-coords', '');
-    loc.append(this._el.locPlanet, this._el.locBiome, this._el.locCoords);
-    hud.appendChild(loc);
-
-    // ── Level / XP (top-right) ────────────────────────────────────────────────
-    const lvl = el('div', 'hud-level');
-    this._el.lvlNum = el('span', 'level-num', 'Lv 1');
-    const xpWrap = el('div', 'xp-bar-wrap');
-    this._el.xpBar = el('div', 'xp-bar');
-    xpWrap.appendChild(this._el.xpBar);
-    this._el.xpTxt = el('span', 'xp-txt', '0 / 100 XP');
-    lvl.append(this._el.lvlNum, xpWrap, this._el.xpTxt);
-    hud.appendChild(lvl);
-
-    // ── Compass (top-centre) ──────────────────────────────────────────────────
-    const compass = el('div', 'hud-compass');
-    this._el.compass = compass;
-    const compassInner = el('div', 'compass-inner');
-    this._el.compassInner = compassInner;
-    for (const dir of ['N','NE','E','SE','S','SW','W','NW','N']) {
-      const d = el('span', 'compass-dir', dir);
-      compassInner.appendChild(d);
-    }
-    const compassNeedle = el('div', 'compass-needle', '▾');
-    compass.append(compassInner, compassNeedle);
-    hud.appendChild(compass);
-
-    // ── Crosshair ─────────────────────────────────────────────────────────────
-    const xh = el('div', 'crosshair');
-    xh.innerHTML = '<div class="ch-h"></div><div class="ch-v"></div>';
-    hud.appendChild(xh);
-    this._el.crosshair = xh;
-
-    // ── Interaction prompt ────────────────────────────────────────────────────
-    this._el.interact = el('div', 'interact-prompt hidden', '');
-    hud.appendChild(this._el.interact);
-
-    // ── Mining progress ring ──────────────────────────────────────────────────
-    this._el.miningRing = el('div', 'mining-ring hidden');
-    const mr = this._buildArcSVG('mining-arc', '#f80', '#552200');
-    mr.setAttribute('width', '80'); mr.setAttribute('height', '80');
-    this._el.miningRing.appendChild(mr);
-    hud.appendChild(this._el.miningRing);
-    this._el.miningArc = mr;
-
-    // ── Notification feed ─────────────────────────────────────────────────────
-    this._el.notifs = el('div', 'notifications');
-    hud.appendChild(this._el.notifs);
-
-    // ── Boss bar ──────────────────────────────────────────────────────────────
-    const bossBar = el('div', 'boss-bar hidden');
-    this._el.bossName = el('div', 'boss-name', 'BOSS');
-    const bossOuter = el('div', 'boss-bar-outer');
-    this._el.bossFill = el('div', 'boss-bar-fill');
-    bossOuter.appendChild(this._el.bossFill);
-    bossBar.append(this._el.bossName, bossOuter);
-    hud.appendChild(bossBar);
-    this._el.bossBar = bossBar;
-
-    // ── Damage numbers layer ──────────────────────────────────────────────────
-    this._el.dmgLayer = el('div', 'dmg-layer');
-    hud.appendChild(this._el.dmgLayer);
-
-    // ── Minimap ───────────────────────────────────────────────────────────────
-    const mmWrap  = el('div', 'minimap-wrap');
-    this._el.minimap = document.createElement('canvas');
-    this._el.minimap.width  = 160;
-    this._el.minimap.height = 160;
-    this._el.minimap.className = 'minimap';
-    this._el.mmCtx = this._el.minimap.getContext('2d');
-    mmWrap.appendChild(this._el.minimap);
-    hud.appendChild(mmWrap);
-
-    // ── Flight controls indicator (shown in ship mode) ────────────────────────
-    this._el.flightHud = el('div', 'flight-hud hidden');
-    this._el.speedVal  = el('span', 'flight-stat', '0');
-    this._el.altVal    = el('span', 'flight-stat', '0');
-    const fRow1 = el('div', 'flight-row');
-    fRow1.append(el('span', 'flight-lbl', 'SPD'), this._el.speedVal);
-    const fRow2 = el('div', 'flight-row');
-    fRow2.append(el('span', 'flight-lbl', 'ALT'), this._el.altVal);
-    this._el.flightHud.append(fRow1, fRow2);
-    hud.appendChild(this._el.flightHud);
-
-    // ── Quick-slot bar (bottom) ───────────────────────────────────────────────
-    const qbar = el('div', 'quick-bar');
+    // Quick-slots: 5 slots in HTML (#q0–#q4)
     this._el.qslots = [];
-    for (let i = 0; i < 10; i++) {
-      const slot = el('div', 'q-slot');
-      const icon = el('div', 'q-icon', '');
-      const key  = el('div', 'q-key', String(i + 1));
-      const qty  = el('div', 'q-qty', '');
-      slot.append(icon, key, qty);
-      qbar.appendChild(slot);
-      this._el.qslots.push({ slot, icon, qty });
+    for (let i = 0; i < 5; i++) {
+      const slot = document.getElementById(`q${i}`);
+      if (slot) {
+        const icon = slot.querySelector('.q-icon');
+        const qty  = slot.querySelector('.q-qty');
+        this._el.qslots.push({ slot, icon, qty });
+      }
     }
-    hud.appendChild(qbar);
 
-    // ── Scanning ring ─────────────────────────────────────────────────────────
-    this._el.scanRing = el('div', 'scan-ring hidden');
-    hud.appendChild(this._el.scanRing);
+    // ── Create elements not present in index.html ─────────────────────────────
+
+    // Danger vignette (low HP pulsing border)
+    this._el.dangerVignette = el('div', 'danger-vignette');
+    document.body.appendChild(this._el.dangerVignette);
+
+    // Damage flash overlay
+    this._el.damageFlash = el('div', 'damage-flash');
+    document.body.appendChild(this._el.damageFlash);
+
+    // Status effects row
+    this._el.statusRow = el('div', 'status-row');
+    hud.appendChild(this._el.statusRow);
+
+    // Quest tracker
+    this._el.questTracker = el('div', 'quest-tracker hidden');
+    this._el.questTitle   = el('div', 'quest-title', '');
+    this._el.questObj     = el('div', 'quest-obj',   '');
+    this._el.questBar     = el('div', 'quest-bar-outer');
+    this._el.questFill    = el('div', 'quest-bar-fill');
+    this._el.questBar.appendChild(this._el.questFill);
+    this._el.questTracker.append(this._el.questTitle, this._el.questObj, this._el.questBar);
+    hud.appendChild(this._el.questTracker);
+
+    // Resource direction indicator
+    this._el.resIndicator = el('div', 'res-indicator hidden');
+    this._el.resArrow     = el('div', 'res-arrow', '▲');
+    this._el.resDist      = el('div', 'res-dist', '');
+    this._el.resType      = el('div', 'res-type', '');
+    this._el.resIndicator.append(this._el.resArrow, this._el.resDist, this._el.resType);
+    hud.appendChild(this._el.resIndicator);
+
+    // Space navigation HUD
+    this._el.spaceNav        = el('div', 'space-nav hidden');
+    this._el.spaceNavDist    = el('div', 'space-nav-row', '');
+    this._el.spaceNavNearest = el('div', 'space-nav-row', '');
+    this._el.spaceNavAU      = el('div', 'space-nav-row', '');
+    this._el.spaceNav.append(
+      el('div', 'space-nav-title', '🛸 NAVIGATION'),
+      this._el.spaceNavDist,
+      this._el.spaceNavNearest,
+      this._el.spaceNavAU,
+    );
+    hud.appendChild(this._el.spaceNav);
+
+    // Wanted level / sentinel stars – NEW
+    this._el.wantedBar   = el('div', 'wanted-bar hidden');
+    this._el.wantedStars = [];
+    for (let i = 0; i < 5; i++) {
+      const star = el('span', 'wanted-star', '★');
+      this._el.wantedBar.appendChild(star);
+      this._el.wantedStars.push(star);
+    }
+    hud.appendChild(this._el.wantedBar);
+
+    // Currency display – NEW
+    this._el.currencyRow = el('div', 'currency-row hidden');
+    const unitsItem      = el('div', 'currency-item');
+    this._el.unitsVal    = el('span', 'currency-val', '0');
+    unitsItem.append(el('span', 'currency-icon', '💰'), this._el.unitsVal, el('span', 'currency-lbl', 'UNITS'));
+    const nanitesItem    = el('div', 'currency-item');
+    this._el.nanitesVal  = el('span', 'currency-val nanites', '0');
+    nanitesItem.append(el('span', 'currency-icon', '🔵'), this._el.nanitesVal, el('span', 'currency-lbl', 'NANITES'));
+    this._el.currencyRow.append(unitsItem, nanitesItem);
+    hud.appendChild(this._el.currencyRow);
+
+    // Hazard vignette (full-screen overlay for environmental effects)
+    this._el.vignette = el('div', 'hazard-vignette');
+    hud.appendChild(this._el.vignette);
+
+    // Scan results panel
+    this._el.scanPanel = el('div', 'scan-panel hidden');
+    hud.appendChild(this._el.scanPanel);
+
+    // Weather label appended to the hazard section if present
+    this._el.weatherLbl = el('span', 'haz-weather', 'Clear');
+    const hazardWrap = document.getElementById('hud-hazard');
+    if (hazardWrap) {
+      const wxRow = el('div', 'haz-row');
+      wxRow.append(el('span', 'haz-icon', '🌤'), el('span', 'haz-lbl', 'WEATHER'), this._el.weatherLbl);
+      hazardWrap.appendChild(wxRow);
+    }
   }
 
   _buildArcSVG(id, strokeColor, trackColor) {
@@ -426,27 +428,39 @@ export class GameHUD {
     const cont = this._el.techContent;
     if (!cont || !techTree) return;
     cont.innerHTML = '';
-    for (const [cat, items] of Object.entries(techTree.tree)) {
+    // techTree.tree returns the TECH_UPGRADES config set via setConfig()
+    const cfg = techTree._techConfig || {};
+    for (const [cat, items] of Object.entries(cfg)) {
       const catEl = el('div', 'tech-cat');
       catEl.appendChild(el('h3', 'tech-cat-name', cat));
       for (const [id, tech] of Object.entries(items)) {
-        const row = el('div', 'tech-row');
-        const unlocked = techTree.isUnlocked(cat, id);
-        const nameEl = el('span', `tech-name ${unlocked ? 'unlocked' : ''}`, tech.name);
+        const row     = el('div', 'tech-row');
+        const tier    = techTree.upgrades[`${cat}.${id}`] || 0;
+        const maxTier = tech.tiers.length;
+        const fullyUnlocked = tier >= maxTier;
+        const nameEl  = el('span', `tech-name ${fullyUnlocked ? 'unlocked' : ''}`,
+          tier > 0 ? `${tech.name} (Tier ${tier}/${maxTier})` : tech.name);
         row.appendChild(nameEl);
-        if (!unlocked) {
-          const btn = el('button', 'mm-btn tech-btn', 'UPGRADE');
+        if (!fullyUnlocked) {
+          const btn = el('button', 'mm-btn tech-btn', `UPGRADE Tier ${tier + 1}`);
           const canAfford = techTree.canAfford(cat, id, inventory);
           btn.disabled = !canAfford;
+          // Show cost
+          const tierDef = tech.tiers[tier];
+          if (tierDef) {
+            const costStr = Object.entries(tierDef.cost).map(([t,a])=>`${t}×${a}`).join(' ');
+            const costEl = el('span', 'tech-cost', ` [${costStr}]`);
+            row.appendChild(costEl);
+          }
           btn.addEventListener('click', () => {
             if (techTree.upgrade(cat, id, inventory)) {
-              this.showNotification(`Upgraded: ${tech.name}`, 'upgrade');
+              this.showNotification(`✅ Upgraded: ${tech.name} Tier ${tier + 1}`, 'upgrade');
               this._renderTechTree(techTree, inventory);
             }
           });
           row.appendChild(btn);
         } else {
-          row.appendChild(el('span', 'tech-done', '✔ INSTALLED'));
+          row.appendChild(el('span', 'tech-done', '✔ MAX TIER'));
         }
         catEl.appendChild(row);
       }
@@ -463,21 +477,71 @@ export class GameHUD {
     this._el.galaxyCanvas = el('canvas', 'galaxy-canvas');
     this._el.galaxyCanvas.width  = 700;
     this._el.galaxyCanvas.height = 500;
+    // System info + warp row
+    const infoRow = el('div', 'galaxy-info-row');
+    this._el.galaxyWarpInfo = el('span', 'galaxy-sys-info', 'Click a star to select');
+    this._el.galaxyWarpBtn  = el('button', 'mm-btn primary hidden', '🚀 WARP (1 Warp Cell)');
+    this._el.galaxyWarpBtn.addEventListener('click', () => {
+      if (this._galaxySelected && this._galaxyOnWarp) {
+        this._galaxyOnWarp(this._galaxySelected);
+      }
+    });
+    infoRow.append(this._el.galaxyWarpInfo, this._el.galaxyWarpBtn);
     const closeBtn = el('button', 'mm-btn', 'CLOSE (M)');
     closeBtn.addEventListener('click', () => this.hideGalaxyMap());
-    panel.append(title, this._el.galaxyCanvas, closeBtn);
+    panel.append(title, this._el.galaxyCanvas, infoRow, closeBtn);
     this._el.galaxyScreen.appendChild(panel);
     document.body.appendChild(this._el.galaxyScreen);
   }
 
-  showGalaxyMap(galaxy, currentSystemId) {
+  showGalaxyMap(galaxy, currentSystemId, onWarp) {
     this._el.galaxyScreen.classList.remove('hidden');
+    this._galaxyOnWarp = onWarp || null;
     this._renderGalaxyCanvas(galaxy, currentSystemId);
+    // Store for click handling
+    this._galaxyData = { galaxy, currentSystemId };
+    // Wire click on canvas for system selection
+    if (this._el.galaxyCanvas && !this._el.galaxyCanvas._wired) {
+      this._el.galaxyCanvas._wired = true;
+      this._el.galaxyCanvas.addEventListener('click', (e) => {
+        if (!this._galaxyData) return;
+        const { galaxy: g, currentSystemId: curId } = this._galaxyData;
+        const rect = this._el.galaxyCanvas.getBoundingClientRect();
+        const mx = (e.clientX - rect.left) * (this._el.galaxyCanvas.width / rect.width);
+        const my = (e.clientY - rect.top)  * (this._el.galaxyCanvas.height / rect.height);
+        const systems = g.getLoadedSystems ? g.getLoadedSystems() : (g.getSystems ? g.getSystems() : []);
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (const s of systems) { minX=Math.min(minX,s.position.x); maxX=Math.max(maxX,s.position.x); minY=Math.min(minY,s.position.y); maxY=Math.max(maxY,s.position.y); }
+        const w = this._el.galaxyCanvas.width, h = this._el.galaxyCanvas.height;
+        const toScreen = (gx, gy) => ({
+          sx: ((gx - minX) / (maxX - minX + 0.001)) * (w - 40) + 20,
+          sy: ((gy - minY) / (maxY - minY + 0.001)) * (h - 40) + 20,
+        });
+        let best = null, bestDist = 18;
+        for (const sys of systems) {
+          const { sx, sy } = toScreen(sys.position.x, sys.position.y);
+          const d = Math.hypot(sx - mx, sy - my);
+          if (d < bestDist) { bestDist = d; best = sys; }
+        }
+        if (best) {
+          this._galaxySelected = best;
+          this._renderGalaxyCanvas(g, curId, best.id);
+          // Show warp info
+          if (this._el.galaxyWarpInfo) {
+            this._el.galaxyWarpInfo.textContent = `${best.name}  ·  ${best.starType}-class  ·  ${best.economy}  ·  ${best.planets?.length || '?'} planets`;
+            this._el.galaxyWarpBtn.classList.toggle('hidden', best.id === curId);
+          }
+        }
+      });
+    }
   }
 
-  hideGalaxyMap() { this._el.galaxyScreen.classList.add('hidden'); }
+  hideGalaxyMap() {
+    this._el.galaxyScreen.classList.add('hidden');
+    this._galaxySelected = null;
+  }
 
-  _renderGalaxyCanvas(galaxy, currentId) {
+  _renderGalaxyCanvas(galaxy, currentId, selectedId) {
     const canvas = this._el.galaxyCanvas;
     if (!canvas || !galaxy) return;
     const ctx = canvas.getContext('2d');
@@ -485,8 +549,15 @@ export class GameHUD {
     ctx.fillStyle = '#030818';
     ctx.fillRect(0, 0, w, h);
 
-    const systems = galaxy.getSystems();
-    // Find bounds
+    // Background star dust
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    const rng = this._galaxyBgRng || (this._galaxyBgRng = (() => {
+      let s = 0x1234abcd;
+      return () => { s=(Math.imul(s,1664525)+1013904223)>>>0; return s/0x100000000; };
+    })());
+    for (let i = 0; i < 400; i++) ctx.fillRect(rng()*w, rng()*h, rng() > 0.97 ? 2 : 1, 1);
+
+    const systems = galaxy.getLoadedSystems ? galaxy.getLoadedSystems() : (galaxy.getSystems ? galaxy.getSystems() : []);
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     for (const s of systems) { minX=Math.min(minX,s.position.x); maxX=Math.max(maxX,s.position.x); minY=Math.min(minY,s.position.y); maxY=Math.max(maxY,s.position.y); }
     const toScreen = (gx, gy) => ({
@@ -494,25 +565,6 @@ export class GameHUD {
       sy: ((gy - minY) / (maxY - minY + 0.001)) * (h - 40) + 20,
     });
 
-    // Draw systems
-    for (const sys of systems) {
-      const { sx, sy } = toScreen(sys.position.x, sys.position.y);
-      const isCurrent = sys.id === currentId;
-      ctx.beginPath();
-      ctx.arc(sx, sy, isCurrent ? 6 : 3, 0, Math.PI * 2);
-      ctx.fillStyle = isCurrent ? '#0af' : (sys.starColor || '#fff');
-      ctx.fill();
-      if (isCurrent) {
-        ctx.strokeStyle = '#0af';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(sx, sy, 12, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.fillStyle = '#0af';
-        ctx.font = '10px Share Tech Mono, monospace';
-        ctx.fillText(sys.name, sx + 8, sy - 8);
-      }
-    }
     // Warp range circle
     const cur = systems.find(s => s.id === currentId);
     if (cur) {
@@ -521,9 +573,41 @@ export class GameHUD {
       ctx.strokeStyle = 'rgba(0,170,255,0.3)';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(sx, sy, 80, 0, Math.PI * 2);
+      ctx.arc(sx, sy, 120, 0, Math.PI * 2);
       ctx.stroke();
       ctx.setLineDash([]);
+    }
+
+    // Draw systems
+    for (const sys of systems) {
+      const { sx, sy } = toScreen(sys.position.x, sys.position.y);
+      const isCurrent  = sys.id === currentId;
+      const isSelected = sys.id === selectedId;
+      const r = isCurrent ? 6 : 3;
+      // Glow
+      const grd = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 3);
+      grd.addColorStop(0, sys.starColor || '#fff');
+      grd.addColorStop(1, 'transparent');
+      ctx.beginPath(); ctx.arc(sx, sy, r * 3, 0, Math.PI * 2);
+      ctx.fillStyle = grd; ctx.fill();
+      // Core
+      ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.fillStyle = isCurrent ? '#0af' : (sys.starColor || '#fff');
+      ctx.fill();
+      if (isCurrent) {
+        ctx.strokeStyle = '#0af'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(sx, sy, r + 5, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = '#0af';
+        ctx.font = '10px "Share Tech Mono", monospace';
+        ctx.fillText(sys.name, sx + r + 4, sy - r);
+      }
+      if (isSelected && !isCurrent) {
+        ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(sx, sy, r + 8, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = '#ffd700';
+        ctx.font = '10px "Share Tech Mono", monospace';
+        ctx.fillText(sys.name, sx + r + 4, sy - r);
+      }
     }
   }
 
@@ -560,23 +644,27 @@ export class GameHUD {
   _bindMenuButtons() {}
 
   // ─── Main update ──────────────────────────────────────────────────────────────
-  update(dt, player, planet, ship, terrain, gameState) {
+  update(dt, player, planet, ship, terrain, gameState, creatures, mining) {
     if (!player) return;
+    this._elapsed += dt;
     const stats = player.getStats();
 
-    // Health arc
-    const hpSvg = document.querySelector('#hud .vital-wrap:nth-child(1) svg');
-    if (hpSvg?._arc) this._setArcFill(hpSvg, stats.hp / stats.maxHp);
+    // Health arc (SVG circle via stroke-dashoffset, dasharray=188)
+    if (this._el.hpRing) {
+      const hpPct = Math.max(0, Math.min(1, stats.hp / stats.maxHp));
+      this._el.hpRing.style.strokeDashoffset = String(188 * (1 - hpPct));
+    }
     if (this._el.hpVal) this._el.hpVal.textContent = stats.hp;
-    if (this._el.hpMax) this._el.hpMax.textContent = '/' + stats.maxHp;
 
     // Shield arc
-    const shSvg = document.querySelector('#hud .vital-wrap:nth-child(2) svg');
-    if (shSvg?._arc) this._setArcFill(shSvg, stats.shield / stats.maxShield);
+    if (this._el.shRing) {
+      const shPct = Math.max(0, Math.min(1, stats.shield / stats.maxShield));
+      this._el.shRing.style.strokeDashoffset = String(188 * (1 - shPct));
+    }
     if (this._el.shVal) this._el.shVal.textContent = stats.shield;
 
     // Jetpack bar
-    if (this._el.jpInner) this._el.jpInner.style.height = (stats.jetpack / stats.maxJetpack * 100) + '%';
+    if (this._el.jpFill) this._el.jpFill.style.height = (stats.jetpack / stats.maxJetpack * 100) + '%';
 
     // Life support
     if (this._el.lsBar) this._el.lsBar.style.width = stats.lifeSup + '%';
@@ -588,10 +676,14 @@ export class GameHUD {
     }
 
     // Location
+    const pos = player.getPosition();
     if (planet && this._el.locPlanet) {
       this._el.locPlanet.textContent = planet.name || 'Unknown Planet';
     }
-    const pos = player.getPosition();
+    if (planet && this._el.locBiome) {
+      const biome = terrain ? terrain.getBiomeAt?.(pos.x, pos.z) : null;
+      this._el.locBiome.textContent = biome ? biome.type : (planet.type || '');
+    }
     if (this._el.locCoords) {
       this._el.locCoords.textContent = `${pos.x.toFixed(0)}, ${pos.y.toFixed(0)}, ${pos.z.toFixed(0)}`;
     }
@@ -614,11 +706,20 @@ export class GameHUD {
       if (this._el.flightHud) this._el.flightHud.classList.add('hidden');
     }
 
-    // Mining ring
+    // Mining ring – update arc with actual progress
     if (player.isMining) {
       if (this._el.miningRing) this._el.miningRing.classList.remove('hidden');
+      if (this._el.miningArc && player._miningProgress != null) {
+        this._el.miningArc.style.strokeDashoffset = String(150 * (1 - player._miningProgress));
+      }
     } else {
       if (this._el.miningRing) this._el.miningRing.classList.add('hidden');
+    }
+
+    // Danger vignette – show when HP < 30 %
+    if (this._el.dangerVignette) {
+      const hpPct = stats.hp / stats.maxHp;
+      this._el.dangerVignette.classList.toggle('active', hpPct < 0.30);
     }
 
     // Scan ring
@@ -629,14 +730,36 @@ export class GameHUD {
     }
 
     // Minimap
-    this._updateMinimap(pos, terrain);
+    this._updateMinimap(pos, terrain, creatures, ship, planet, mining);
 
     // Notification drain
     this._notifT -= dt;
   }
 
+  // ─── Damage flash (call on player hit) ────────────────────────────────────────
+  flashDamage() {
+    if (!this._el.damageFlash) return;
+    const el2 = this._el.damageFlash;
+    el2.classList.remove('flash');
+    void el2.offsetWidth; // reflow to restart animation
+    el2.classList.add('flash');
+    setTimeout(() => el2.classList.remove('flash'), 400);
+  }
+
+  // ─── Level-up flash ───────────────────────────────────────────────────────────
+  flashLevelUp() {
+    const f = document.createElement('div');
+    f.className = 'levelup-flash';
+    f.style.position = 'fixed';
+    f.style.inset = '0';
+    f.style.pointerEvents = 'none';
+    f.style.zIndex = '8';
+    document.body.appendChild(f);
+    setTimeout(() => f.remove(), 1300);
+  }
+
   // ─── Minimap ──────────────────────────────────────────────────────────────────
-  _updateMinimap(playerPos, terrain) {
+  _updateMinimap(playerPos, terrain, creatures, ship, planet, mining) {
     const ctx = this._el.mmCtx;
     if (!ctx) return;
     const w = 160, h = 160, range = 300;
@@ -645,6 +768,8 @@ export class GameHUD {
     // Background
     ctx.fillStyle = 'rgba(0,8,20,0.85)';
     ctx.beginPath(); ctx.arc(w/2, h/2, w/2, 0, Math.PI*2); ctx.fill();
+
+    const waterLevel = planet?.waterLevel ?? 10;
 
     // Terrain height sample grid
     if (terrain) {
@@ -656,10 +781,49 @@ export class GameHUD {
           const sy = terrain.getHeightAt(wx, wz);
           const nx = (dx + 10) / 20 * w;
           const ny = (dz + 10) / 20 * h;
-          const bright = Math.min(1, sy / 50);
-          ctx.fillStyle = `rgba(0,${Math.floor(bright*120+40)},${Math.floor(bright*80+30)},0.7)`;
+          if (sy < waterLevel) {
+            ctx.fillStyle = `rgba(20,60,180,0.7)`;
+          } else {
+            const bright = Math.min(1, sy / 50);
+            ctx.fillStyle = `rgba(0,${Math.floor(bright*120+40)},${Math.floor(bright*80+30)},0.7)`;
+          }
           ctx.fillRect(nx - 4, ny - 4, 8, 8);
         }
+      }
+    }
+
+    // Creature dots
+    if (creatures) {
+      const nearby = creatures.getNearbyCreatures?.(playerPos, range) || [];
+      for (const cr of nearby) {
+        const cp = cr.getPosition();
+        const cx = w/2 + (cp.x - playerPos.x) / range * w * 0.5;
+        const cy = h/2 + (cp.z - playerPos.z) / range * h * 0.5;
+        const hostile = cr.genome?.aggression === 'hostile';
+        ctx.fillStyle = hostile ? '#ff4422' : '#44dd88';
+        ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI*2); ctx.fill();
+      }
+    }
+
+    // Ship dot
+    if (ship) {
+      const sp = ship.getPosition?.();
+      if (sp) {
+        const sx = w/2 + (sp.x - playerPos.x) / range * w * 0.5;
+        const sy2 = h/2 + (sp.z - playerPos.z) / range * h * 0.5;
+        ctx.fillStyle = '#ffcc00';
+        ctx.beginPath(); ctx.arc(sx, sy2, 3.5, 0, Math.PI*2); ctx.fill();
+      }
+    }
+
+    // Resource node dots (orange)
+    if (mining) {
+      const nodes = mining.getNodesNear?.(playerPos, range) || [];
+      for (const n of nodes) {
+        const rx = w/2 + (n.pos.x - playerPos.x) / range * w * 0.5;
+        const ry = h/2 + (n.pos.z - playerPos.z) / range * h * 0.5;
+        ctx.fillStyle = '#ff8800';
+        ctx.beginPath(); ctx.arc(rx, ry, 2, 0, Math.PI*2); ctx.fill();
       }
     }
 
@@ -681,6 +845,16 @@ export class GameHUD {
   // ─── Notifications ────────────────────────────────────────────────────────────
   showNotification(text, type = 'info', duration = 3000) {
     if (!this._el.notifs) return;
+    // Dedup: ignore if same text shown in last 2s
+    const now = Date.now();
+    if (!this._notifSeen) this._notifSeen = new Map();
+    const last = this._notifSeen.get(text);
+    if (last && now - last < 2000) return;
+    this._notifSeen.set(text, now);
+    // Limit max simultaneous notifs
+    while (this._el.notifs.childElementCount >= 5) {
+      this._el.notifs.firstChild?.remove();
+    }
     const n = el('div', `notif notif-${type}`, text);
     this._el.notifs.appendChild(n);
     setTimeout(() => n.remove(), duration);
@@ -702,9 +876,42 @@ export class GameHUD {
     if (this._el.bossBar)  this._el.bossBar.classList.remove('hidden');
     if (this._el.bossName) this._el.bossName.textContent = name;
     if (this._el.bossFill) this._el.bossFill.style.width = (pct * 100) + '%';
+    // Red glow when below 25%
+    if (this._el.bossFill) {
+      this._el.bossFill.style.background = pct < 0.25 ? '#ff2200' : pct < 0.5 ? '#ff6600' : '#cc0000';
+    }
   }
   hideBossBar() {
     if (this._el.bossBar) this._el.bossBar.classList.add('hidden');
+  }
+
+  // ─── Status effects row ───────────────────────────────────────────────────────
+  setStatusEffects(icons) {
+    const row = this._el.statusRow;
+    if (!row) return;
+    row.innerHTML = '';
+    for (const s of (icons || [])) {
+      const chip = el('div', 'status-chip');
+      chip.title  = `${s.label} (${s.remaining}s)`;
+      chip.textContent = `${s.icon} ${s.remaining}s`;
+      row.appendChild(chip);
+    }
+  }
+
+  // ─── Quest tracker ────────────────────────────────────────────────────────────
+  setQuestSummary(summary) {
+    if (!this._el.questTracker) return;
+    if (!summary) {
+      this._el.questTracker.classList.add('hidden');
+      return;
+    }
+    this._el.questTracker.classList.remove('hidden');
+    if (this._el.questTitle) this._el.questTitle.textContent = summary.title;
+    if (this._el.questObj)   this._el.questObj.textContent   = summary.label;
+    if (this._el.questFill) {
+      const pct = summary.target > 0 ? Math.min(1, summary.progress / summary.target) : 0;
+      this._el.questFill.style.width = (pct * 100) + '%';
+    }
   }
 
   // ─── Interaction prompt ───────────────────────────────────────────────────────
@@ -720,6 +927,102 @@ export class GameHUD {
     this.showNotification(`📡 ${entity.name || 'Unknown Entity'} – SCANNED`, 'scan', 4000);
   }
 
+  // ─── Weather indicator ────────────────────────────────────────────────────────
+  setWeather(name, windStrength) {
+    if (!this._el.weatherLbl) return;
+    const icons = {
+      Clear: '☀', Rain: '🌧', Storm: '⛈', Snow: '🌨', Blizzard: '❄',
+      Sandstorm: '🌪', 'Toxic Fog': '☁', Aurora: '✨',
+    };
+    const icon = icons[name] || '🌤';
+    this._el.weatherLbl.textContent = `${icon} ${name}${windStrength > WIND_DISPLAY_THRESHOLD ? ` · Wind ${windStrength.toFixed(1)}` : ''}`;
+  }
+
+  // ─── Hazard vignette overlay ──────────────────────────────────────────────────
+  updateHazardOverlay(hazardType, planet) {
+    if (!this._el.vignette) return;
+    const HAZARD_COLORS = {
+      heat:      'rgba(200, 60, 0,',
+      cold:      'rgba(0, 80, 200,',
+      toxic:     'rgba(50, 180, 0,',
+      radiation: 'rgba(180, 220, 0,',
+      exotic:    'rgba(120, 0, 200,',
+    };
+    const col = HAZARD_COLORS[hazardType];
+    const intensity = Math.min(1, ((planet?.toxicity || 0) + (planet?.radiation || 0)) * 1.5);
+    if (col && intensity > 0.05) {
+      const pulse = PULSE_BASE + Math.abs(Math.sin(this._elapsed * PULSE_SPEED)) * PULSE_AMPLITUDE;
+      this._el.vignette.style.boxShadow = `inset 0 0 120px 40px ${col}${(intensity * 0.4 + pulse).toFixed(3)})`;
+    } else {
+      this._el.vignette.style.boxShadow = '';
+    }
+  }
+
+  // ─── Scan results panel ───────────────────────────────────────────────────────
+  showScanResults(lines) {
+    const panel = this._el.scanPanel;
+    if (!panel) return;
+    panel.innerHTML = '';
+    const title = el('div', 'scan-title', '📡 ANALYSIS VISOR');
+    panel.appendChild(title);
+    for (const line of lines) {
+      const row = el('div', 'scan-line', line);
+      panel.appendChild(row);
+    }
+    const close = el('button', 'scan-close', '✕');
+    close.addEventListener('click', () => panel.classList.add('hidden'));
+    panel.appendChild(close);
+    panel.classList.remove('hidden');
+    // Auto-dismiss after 8 s
+    clearTimeout(this._scanDismissTimer);
+    this._scanDismissTimer = setTimeout(() => panel.classList.add('hidden'), 8000);
+  }
+
+  // ─── Level / XP ───────────────────────────────────────────────────────────────
+  setLevel(level, xp, xpToNext) {
+    if (this._el.lvlNum)  this._el.lvlNum.textContent  = `Lv ${level}`;
+    if (this._el.xpFill)  this._el.xpFill.style.width  = `${Math.min(100, (xp / xpToNext) * 100).toFixed(1)}%`;
+    if (this._el.xpTxt)   this._el.xpTxt.textContent   = `${xp} / ${xpToNext} XP`;
+  }
+
+  // ─── Quickslot selection ──────────────────────────────────────────────────────
+  selectQuickSlot(index) {
+    if (!this._el.qslots) return;
+    this._el.qslots.forEach((s, i) => s.slot.classList.toggle('active', i === index));
+  }
+
+  /** Populate quickslot icons from inventory slots 0–9 */
+  updateQuickBar(inventory) {
+    if (!this._el.qslots || !inventory) return;
+    this._el.qslots.forEach((s, i) => {
+      const slot = inventory.slots[i];
+      if (slot) {
+        // Use first 2 chars of type as icon + qty
+        s.icon.textContent = slot.type.slice(0, 3).toUpperCase();
+        s.qty.textContent  = slot.amount > 1 ? `×${slot.amount}` : '';
+        s.slot.classList.add('has-item');
+      } else {
+        s.icon.textContent = (i + 1).toString();
+        s.qty.textContent  = '';
+        s.slot.classList.remove('has-item');
+      }
+    });
+  }
+
+  /** Show a directional indicator arrow toward the nearest resource node.
+   *  angle: radians relative to camera yaw (0 = forward). null = hide. */
+  setResourceIndicator(angle, distance, type) {
+    if (!this._el.resIndicator) return;
+    if (angle == null) {
+      this._el.resIndicator.classList.add('hidden');
+      return;
+    }
+    this._el.resIndicator.classList.remove('hidden');
+    const deg = angle * 180 / Math.PI;
+    if (this._el.resArrow)    this._el.resArrow.style.transform = `rotate(${deg}deg)`;
+    if (this._el.resDist)     this._el.resDist.textContent      = `${Math.round(distance)}m`;
+    if (this._el.resType)     this._el.resType.textContent      = type || '';
+  }
   // ─── HUD visibility ───────────────────────────────────────────────────────────
   showHUD() {
     const hud = document.getElementById('hud');
@@ -732,6 +1035,138 @@ export class GameHUD {
 
   setGameState(state) {
     this._state = state;
+  }
+
+  // ─── Wanted level (sentinel stars) ───────────────────────────────────────────
+  setWantedLevel(level, flashPct = 0) {
+    const bar   = this._el.wantedBar;
+    const stars = this._el.wantedStars;
+    if (!bar || !stars) return;
+    if (level > 0) {
+      bar.classList.remove('hidden');
+      stars.forEach((s, i) => {
+        s.className = 'wanted-star';
+        if (i < level) s.classList.add(flashPct > 0.7 ? 'alert' : 'active');
+      });
+    } else {
+      bar.classList.add('hidden');
+    }
+  }
+
+  // ─── Currency display ─────────────────────────────────────────────────────────
+  setCurrency(units, nanites) {
+    if (this._el.unitsVal)   this._el.unitsVal.textContent   = typeof units   === 'number' ? units.toLocaleString()   : String(units   ?? 0);
+    if (this._el.nanitesVal) this._el.nanitesVal.textContent = typeof nanites === 'number' ? nanites.toLocaleString() : String(nanites ?? 0);
+    if (this._el.currencyRow) this._el.currencyRow.classList.remove('hidden');
+  }
+
+  // ─── Discovery popup ──────────────────────────────────────────────────────────
+  showDiscovery(icon, name, detail, duration = 5000) {
+    const disc = document.getElementById('discovery');
+    if (!disc) return;
+    const iconEl = disc.querySelector('.disc-icon');
+    const nameEl = document.getElementById('disc-name');
+    if (iconEl) iconEl.textContent = icon || '📡';
+    if (nameEl) nameEl.textContent = name || 'Unknown Entity';
+    let detailEl = disc.querySelector('.disc-detail');
+    if (detail) {
+      if (!detailEl) {
+        detailEl = el('div', 'disc-detail');
+        const content = disc.querySelector('.disc-content');
+        (content || disc).appendChild(detailEl);
+      }
+      detailEl.textContent = detail;
+    } else if (detailEl) {
+      detailEl.remove();
+    }
+    disc.classList.remove('hidden');
+    clearTimeout(this._discoveryTimer);
+    this._discoveryTimer = setTimeout(() => disc.classList.add('hidden'), duration);
+  }
+
+  // ─── Space navigation distances ───────────────────────────────────────────────
+  setSpaceDistances(distKm, nearestName, nearestKm) {
+    if (!this._el.spaceNav) return;
+    this._el.spaceNav.classList.remove('hidden');
+    if (this._el.spaceNavDist)    this._el.spaceNavDist.textContent    = `📍 ${Math.round(distKm)} km from origin`;
+    if (this._el.spaceNavNearest) this._el.spaceNavNearest.textContent = `⭐ ${nearestName || '—'} · ${Math.round(nearestKm)} km`;
+    if (this._el.spaceNavAU)      this._el.spaceNavAU.textContent      = `🌌 ${(distKm / 149598000).toFixed(4)} AU`;
+  }
+
+  // ─── Help overlay ─────────────────────────────────────────────────────────────
+  showHelpOverlay(topic) {
+    if (!this._el.helpOverlay) {
+      this._el.helpOverlay = el('div', 'help-overlay hidden');
+      document.body.appendChild(this._el.helpOverlay);
+    }
+    const TOPICS = {
+      controls: {
+        title: 'CONTROLS',
+        html: `
+          <div class="help-section"><h3>Movement</h3>
+            <p class="help-tip"><span class="help-key">WASD</span> Move · <span class="help-key">Space</span> Jump / Jetpack · <span class="help-key">Shift</span> Sprint</p>
+          </div>
+          <div class="help-section"><h3>Combat</h3>
+            <p class="help-tip"><span class="help-key">LMB</span> Fire / Mine · <span class="help-key">RMB</span> Aim · <span class="help-key">R</span> Reload</p>
+          </div>
+          <div class="help-section"><h3>Menus</h3>
+            <p class="help-tip"><span class="help-key">Tab</span> Inventory · <span class="help-key">N</span> Crafting · <span class="help-key">T</span> Tech · <span class="help-key">M</span> Galaxy Map</p>
+          </div>
+          <div class="help-section"><h3>Interaction</h3>
+            <p class="help-tip"><span class="help-key">G</span> Interact · <span class="help-key">F</span> Enter/Exit Ship · <span class="help-key">E</span> Scanner</p>
+          </div>`,
+      },
+      crafting: {
+        title: 'CRAFTING',
+        html: `
+          <div class="help-section"><h3>How to Craft</h3>
+            <p class="help-tip">Press <span class="help-key">N</span> to open the crafting menu. Collect resources by mining planets with your multi-tool.</p>
+          </div>
+          <div class="help-section"><h3>Key Resources</h3>
+            <p class="help-tip">Carbon · Ferrite Dust · Di-Hydrogen · Chromatic Metal · Warp Cell</p>
+          </div>`,
+      },
+      universe: {
+        title: 'UNIVERSE',
+        html: `
+          <div class="help-section"><h3>Exploration</h3>
+            <p class="help-tip">Enter your ship and use the Galaxy Map (<span class="help-key">M</span>) to warp between star systems. Each system has unique planets, economies, and hazards.</p>
+          </div>
+          <div class="help-section"><h3>Galaxies</h3>
+            <p class="help-tip">Reach a new galaxy via the Atlas Path quest chain. Each galaxy contains thousands of unique star systems.</p>
+          </div>`,
+      },
+      buildings: {
+        title: 'BASE BUILDING',
+        html: `
+          <div class="help-section"><h3>Placing Structures</h3>
+            <p class="help-tip">Enter build mode to place structures. Structures snap to the terrain and provide resources, shelter, and fast-travel points.</p>
+          </div>`,
+      },
+      multiplayer: {
+        title: 'MULTIPLAYER',
+        html: `
+          <div class="help-section"><h3>Co-op</h3>
+            <p class="help-tip">Multiplayer features are in development. Stay tuned for co-op exploration, trading, and base sharing.</p>
+          </div>`,
+      },
+    };
+    const data = TOPICS[topic] || TOPICS.controls;
+    this._el.helpOverlay.innerHTML = `
+      <div class="help-panel">
+        <div class="help-header">
+          <span class="help-title">${data.title}</span>
+          <span class="help-close" id="_help-close">✕</span>
+        </div>
+        <div class="help-body">${data.html}</div>
+      </div>`;
+    this._el.helpOverlay.classList.remove('hidden');
+    const closeBtn = this._el.helpOverlay.querySelector('#_help-close');
+    if (closeBtn) closeBtn.addEventListener('click', () => this.hideHelpOverlay());
+  }
+
+  hideHelpOverlay() {
+    if (this._el.helpOverlay) this._el.helpOverlay.classList.add('hidden');
   }
 
   dispose() {}

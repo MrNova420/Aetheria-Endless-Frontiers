@@ -1,10 +1,10 @@
 # 🗺️ Roadmap – Aetheria: Endless Frontiers
 
-**Current version:** `1.0.0-beta.1`
+**Current version:** `1.0.0-beta.2`
 
 ---
 
-## ✅ Beta 1 – Complete (current)
+## ✅ Beta 1 – Complete
 
 **Goal:** Fully playable from browser and Termux on any device.
 
@@ -24,60 +24,74 @@
 - [x] NMS-style HUD (vitals, compass, minimap, notifications)
 - [x] Touch controls for mobile browsers
 - [x] Capacitor 5 Android/iOS wrapper
-- [x] CC0 asset pipeline (GLTFLoader + procedural fallback)
 - [x] Termux setup script
 - [x] Auto-setup scripts for Windows / Linux / macOS
 
 ---
 
-## 🔄 Beta 2 – In Progress
+## ✅ Beta 2 – Complete (current)
 
-**Goal:** Bug fixes, persistence, and visual quality uplift.
+**Goal:** Combat, persistence, visual quality, and gameplay depth.
 
-- [ ] **Save/load** – `localStorage` persistence for player, inventory, current system
-- [ ] **Real CC0 models** – wire `AssetManager.cloneModel()` into ship.js, flora.js, creatures.js
-- [ ] **PBR terrain textures** – wire AmbientCG textures into TerrainShader splatmap
-- [ ] **Ship exit height fix** – use `terrain.getHeightAt()` for exit position Y
-- [ ] **Creature attack player** – hostile creatures deal damage on contact
-- [ ] **Touch ship controls** – joystick/throttle in SHIP_ATM mode
-- [ ] **Audio SFX** – add `playOneShot('mine')`, `playOneShot('jump')`, `playOneShot('land')`
-- [ ] **Galaxy fog-of-war** – only show visited systems in galaxy map
-- [ ] **Warp animation** – tunnel shader on hyperspace jump
-- [ ] **Performance mode** – URL param `?quality=low` reduces render load on mobile
-- [ ] Fix README port references (3000 → 8080) ✅ done
-
-**Target:** 2026-05
-
----
-
-## 🚀 v1.0 Stable
-
-**Goal:** First public stable release on GitHub, itch.io, and Google Play.
-
-- [ ] 3 starter quests with objective markers
-- [ ] Space station trading NPC
-- [ ] Combat system (weapon slots, enemy ships)
-- [ ] Base building (deployable modules)
-- [ ] Day/night cycle with star visibility at night
-- [ ] Weather effects per biome (rain, snow, sandstorm particles)
-- [ ] Minimap labels (POIs, resource rich areas)
-- [ ] Settings menu (graphics quality, audio volume, controls remap)
-- [ ] Google Play signed APK release
-- [ ] GitHub Releases page with APK download
-- [ ] itch.io web embed
-
-**Target:** 2026-07
+- [x] **Save/load v2** – persists player, inventory, level/XP, tech tree, day-time
+- [x] **XP / Leveling** – mine XP, kill XP, level-up fanfare + heal
+- [x] **Player right-click attack** – blaster shot, range-based, cooldown, SFX
+- [x] **Creature loot drops** – resources spawn at creature death site
+- [x] **Creature corpse fade** – frame-based die timer (no `setTimeout`)
+- [x] **Weather gameplay effects** – blizzard/sandstorm slows player; toxic fog + blizzard drain life support
+- [x] **Planet sun/ambient color** – per-biome coloring propagated to scene lighting
+- [x] **Galaxy map warp** – click star → warp button → costs 1 Warp Cell → +50 XP
+- [x] **Danger vignette** – red border pulses when HP < 30 %
+- [x] **Damage flash** – screen flash on player hit
+- [x] **Level-up glow flash** – cyan bloom burst on level-up
+- [x] **Mining arc ring** – shows actual mining progress in real time
+- [x] **Minimap water cells** – water-tinted terrain; creature dots; ship marker
+- [x] **Biome label** – live biome type shown in HUD location block
+- [x] **Quickslot 1–0 hotkeys** – keyboard number keys select quickslot
+- [x] **Seeded node RNG** – copper/gold resource nodes use deterministic RNG
+- [x] **Flora wind shader** – wind direction/strength uniforms driven per-frame
+- [x] **Sun direction → terrain shader** – lighting synced to day/night cycle
+- [x] **Notification CSS fix** – `.notif.notif-*` classes correctly applied
+- [x] **Tech tree UI** – upgrade SFX and notifications wired
+- [x] **Respawn improvements** – drops half inventory at death site, spawns at ship
+- [x] **Creature biome tinting** – body colors lerped toward planet palette
+- [x] **Boss creature variant** – 3–4.5× alpha beast, 500–1000 HP, dynamic boss bar (color shifts with HP)
+- [x] **Creature damage flash** – red flash on hit, reset after 180ms
+- [x] **Status effects system** – burning, frozen, poisoned, energised, shielded; DoT ticks, speed mults, HUD chip icons
+- [x] **Auto-Extractor** – Satisfactory-inspired factory element; craft, press B to deploy; animated piston+tether beam; save/load
+- [x] **Quest system v1** – 3-quest chain (First Steps → Survival Basics → Explorer's Path); HUD tracker with progress bar; item+XP rewards
+- [x] **New crafting recipes** – Auto-Extractor, Medkit ×2, Shield Battery ×2
+- [x] **Save format v3** – persists quests, status effects, extractor positions
+- [x] **`Inventory.getAllItems()`** – missing method added; respawn loot-drop works correctly
+- [x] **`_dropCreatureLoot` fix** – use `.clone().add()` to avoid position mutation
 
 ---
 
-## 🌌 v1.1 – Multiplayer Alpha
+## 🔄 Beta 3 – Planned
 
-**Goal:** Optional co-op (2-4 players) via WebSocket server.
+**Goal:** Space station NPC, enemy ships, base building, warp animation, polish.
 
-- [ ] WebSocket server (`server-multiplayer.js`)
-- [ ] Player position sync (interpolated, 10Hz)
-- [ ] Shared resource nodes (server-authoritative)
-- [ ] Friends list / invite code
+- [ ] **Space station NPC** – trading, lore dialogue, blueprint shop
+- [ ] **Enemy ship combat** – ships patrol space, shoot player
+- [ ] **Base building** – shelter, landing pad, power conduit modules
+- [ ] **Warp tunnel shader** – procedural hyperspace effect
+- [ ] **PBR terrain textures** – AmbientCG textures in TerrainShader splatmap
+- [ ] **Real CC0 models** – wire `AssetManager.cloneModel()` for ship/creatures
+- [ ] **Settings menu** – graphics quality, audio volume, controls remap
+- [ ] **Galaxy fog-of-war** – only show visited systems
+- [ ] **Achievement system** – unlock-based notification + HUD badge
+- [ ] **Google Play / itch.io release**
+
+**Target:** 2026-Q3
+
+---
+
+## 🌌 v1.0 Stable – Future
+
+- Day/night full sky cycle with star visibility
+- Multiplayer alpha (WebSocket co-op)
+- Achievement system
+- Steam Deck / desktop release
 - [ ] Voice proximity chat (WebRTC)
 - [ ] Dedicated server Docker image
 
