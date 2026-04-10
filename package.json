@@ -1,30 +1,25 @@
 {
   "name": "aetheria-endless-frontiers",
-  "version": "1.0.0-beta.1",
-  "description": "AAA-quality browser 3D RPG – procedural open world, No Man's Sky scale, Fantasy MMORPG systems, Tech-Wasteland aesthetic.",
+  "version": "1.0.0",
+  "description": "No Man's Sky inspired browser game with multiplayer server",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js 8080",
+    "dev": "node server.js",
+    "android": "node server.js",
     "assets": "node scripts/download-assets.js",
-    "assets:quick": "node scripts/download-assets.js --quick",
-    "mobile:build": "bash scripts/build-mobile.sh",
-    "cap:sync": "npx cap sync",
-    "termux": "bash setup-termux.sh"
-  },
-  "keywords": ["game", "3d", "threejs", "rpg", "procedural", "fantasy"],
-  "author": "MrNova420",
-  "license": "MIT",
-  "engines": {
-    "node": ">=14.0.0"
+    "mobile:build": "bash scripts/build-mobile.sh"
   },
   "dependencies": {
-    "adm-zip": "^0.5.10",
-    "@capacitor/core": "^5.7.0",
-    "@capacitor/android": "^5.7.0",
-    "@capacitor/ios": "^5.7.0"
+    "ws": "^8.16.0",
+    "express": "^4.18.2",
+    "uuid": "^9.0.0",
+    "adm-zip": "^0.5.10"
   },
-  "devDependencies": {
-    "@capacitor/cli": "^5.7.0"
-  }
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": ["game","multiplayer","websocket","space","procedural"],
+  "author": "MrNova420",
+  "license": "MIT"
 }
