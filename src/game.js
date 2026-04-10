@@ -589,12 +589,89 @@ class Game {
   selectClass(classId) {
     const colors = { runekeeper: 0x4488ff, technomancer: 0xff8800, voidhunter: 0xaa00ff };
     if (this._player) this._player.setClass(classId, colors[classId] || 0x4488ff);
+
+    // ── Give starter kit (only on fresh new game, not on load) ──────────────
+    if (this._inventory && this._inventory.getAllItems().length === 0) {
+      this._giveStarterKit(classId);
+    }
+
     this._hud.hideMainMenu();
     if (!this._audio.initialized) this._audio.init();
     this._audio.playAmbient(this._currentPlanet?.type || 'LUSH');
     this._setState(GS.PLANET_SURFACE);
     const canvas = document.getElementById('game-canvas');
     if (canvas) canvas.requestPointerLock();
+  }
+
+  /** Hand the player their starting inventory based on chosen class. */
+  _giveStarterKit(classId) {
+    const inv = this._inventory;
+    if (!inv) return;
+
+    // ── Universal starter resources ─────────────────────────────────────────
+    inv.addItem('Carbon',         250);
+    inv.addItem('Ferrite Dust',   150);
+    inv.addItem('Di-Hydrogen',     60);
+    inv.addItem('Sodium',          40);
+    inv.addItem('Warp Cell',        2);   // enough for 2 jumps
+    inv.addItem('Health Pack',      3);
+
+    // ── Class-specific bonuses ──────────────────────────────────────────────
+    switch (classId) {
+      case 'runekeeper':
+        // Combat-focused: extra ammo resources + a shield mod
+        inv.addItem('Chromatic Metal',  80);
+        inv.addItem('Magnetised Ferrite', 50);
+        inv.addItem('Runic Shard',       5);   // class ability fuel
+        inv.addItem('Shield Battery',    2);
+        break;
+
+      case 'technomancer':
+        // Tech-focused: crafting materials + early blueprint components
+        inv.addItem('Chromatic Metal',  120);
+        inv.addItem('Copper Wire',       40);
+        inv.addItem('Circuit Board',     10);
+        inv.addItem('Nanite Cluster',    50);
+        inv.addItem('Tech Fragment',      3);  // used for early tech-tree unlocks
+        break;
+
+      case 'voidhunter':
+        // Stealth/speed focused: mobility + rare void materials
+        inv.addItem('Void Crystal',      8);
+        inv.addItem('Stellar Ash',       30);
+        inv.addItem('Quantum Essence',   1);
+        inv.addItem('Phase Shard',       5);  // ability fuel
+        inv.addItem('Nanite Cluster',    25);
+        break;
+
+      default:
+        // Fallback — same as technomancer
+        inv.addItem('Chromatic Metal', 80);
+        inv.addItem('Nanite Cluster',  25);
+        break;
+    }
+
+    // ── Starting currency ───────────────────────────────────────────────────
+    this._units   = (this._units   || 0) + 3000;
+    this._nanites = (this._nanites || 0) + 100;
+
+    // ── Notify player ───────────────────────────────────────────────────────
+    const classNames = {
+      runekeeper  : 'Runekeeper',
+      technomancer: 'Technomancer',
+      voidhunter  : 'Voidhunter',
+    };
+    const name = classNames[classId] || classId;
+    this._hud?.showNotification?.(
+      `🚀 Welcome, ${name}! Starter kit added to inventory. Press TAB to inspect.`,
+      'info', 6000
+    );
+    this._hud?.showNotification?.(
+      `💰 Starting credits: 3,000 Units  |  100 Nanites`,
+      'info', 5000
+    );
+    this._hud?.showDiscovery?.('🚀', `${name} — Journey Begins`,
+      'Starter kit equipped. Find your ship and explore the universe.', 7000);
   }
 
   _onEsc() {
