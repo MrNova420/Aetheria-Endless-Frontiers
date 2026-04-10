@@ -180,6 +180,10 @@ export class FactionManager {
     return this._territories.get(systemId) ?? null;
   }
 
+  getTerritoryCount() {
+    return this._territories.size;
+  }
+
   // ── War / Alliance ──────────────────────────────────────────────────────────
   isAtWar(fA, fB)    { return this._wars.has(pairKey(fA, fB)); }
   isAllied(fA, fB)   { return this._allies.has(pairKey(fA, fB)); }

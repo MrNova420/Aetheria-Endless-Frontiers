@@ -8,6 +8,9 @@
  * Usage:  node scripts/test-startup.mjs
  */
 import { readFileSync } from 'fs';
+
+/** Expected number of systems in a freshly loaded region. */
+const EXPECTED_SYSTEM_COUNT = 1000;
 import { execSync }     from 'child_process';
 
 // ─── Browser global stubs ────────────────────────────────────────────────────
@@ -69,7 +72,7 @@ try {
   const sys = universe.getCurrentSystem();
   if (!sys?.id) throw new Error('no current system');
   const loaded = universe.getLoadedSystems();
-  if (!Array.isArray(loaded) || loaded.length !== 1000) throw new Error('bad loaded count: '+loaded.length);
+  if (!Array.isArray(loaded) || loaded.length !== EXPECTED_SYSTEM_COUNT) throw new Error('bad loaded count: '+loaded.length);
   const adj = universe.getAdjacentSystems(8);
   if (!Array.isArray(adj) || adj.length !== 8) throw new Error('bad adjacent count');
   const ok = universe.warpTo('0_0_42');
@@ -94,8 +97,8 @@ try {
   // Fixed code: must not throw and must assign all 1000 systems
   const fm = new FactionManager();
   fm.assignTerritories(universe);
-  if (fm._territories.size !== 1000) throw new Error('territory count wrong: '+fm._territories.size);
-  pass('FactionManager.assignTerritories(universe): 1000 systems, no throw');
+  if (fm.getTerritoryCount() !== EXPECTED_SYSTEM_COUNT) throw new Error('territory count wrong: '+fm.getTerritoryCount());
+  pass('FactionManager.assignTerritories(universe): '+EXPECTED_SYSTEM_COUNT+' systems, no throw');
 
   // Faction distribution
   const dist = {};
@@ -106,7 +109,7 @@ try {
   // Null / undefined safety
   const fm2 = new FactionManager();
   fm2.assignTerritories(null);
-  if (fm2._territories.size !== 0) throw new Error('null should give 0 territories');
+  if (fm2.getTerritoryCount() !== 0) throw new Error('null should give 0 territories');
   new FactionManager().assignTerritories(undefined);
   pass('FactionManager.assignTerritories(null/undefined): safe, no throw');
 
