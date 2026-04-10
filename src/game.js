@@ -47,14 +47,19 @@ const AUTO_SAVE_INTERVAL = 60;      // seconds between automatic saves
 const SCANNER_RANGE = 30;           // world-units radius for scanner detection
 
 // ─── XP constants ─────────────────────────────────────────────────────────────
-const XP_PER_MINE_ITEM = 3;    // XP per resource unit mined
-const XP_PER_KILL      = 35;   // XP for killing a creature
-const XP_BASE          = 100;  // XP needed for level 1→2
-const XP_GROWTH        = 1.35; // multiplicative level-up cost scaling
-const ATTACK_RANGE     = 12;   // world-units – player weapon reach
-const ATTACK_DAMAGE    = 25;   // base damage per right-click shot
-const ATTACK_COOLDOWN  = 0.5;  // seconds between shots
-const WARP_FUEL_COST   = 1;    // Warp Cells per inter-system jump
+const XP_PER_MINE_ITEM       = 3;    // XP per resource unit mined
+const XP_MINE_CYCLE_MULT     = 10;   // multiplier per full mine cycle
+const XP_PER_KILL            = 35;   // XP for killing a creature
+const XP_BASE                = 100;  // XP needed for level 1→2
+const XP_GROWTH              = 1.35; // multiplicative level-up cost scaling
+const ATTACK_RANGE           = 12;   // world-units – player weapon reach
+const ATTACK_DAMAGE          = 25;   // base damage per right-click shot
+const ATTACK_COOLDOWN        = 0.5;  // seconds between shots
+const WARP_FUEL_COST         = 1;    // Warp Cells per inter-system jump
+const WEATHER_SPEED_BLIZZARD = 0.45; // blizzard/sandstorm speed fraction
+const WEATHER_SPEED_STORM    = 0.70; // storm speed fraction
+const DEATH_PENALTY_DROP_RATE = 0.5; // fraction of inventory dropped on death
+const CREATURE_LOOT_DROP_CHANCE = 0.55; // probability of loot drop on creature kill
 
 class Game {
   constructor() {
@@ -530,7 +535,7 @@ class Game {
       if (this._inventory && this._mining) {
         const deathPos = this._player.getPosition().clone();
         const items = this._inventory.getAllItems();
-        const toDrop = items.filter(() => Math.random() < 0.5);
+        const toDrop = items.filter(() => Math.random() < DEATH_PENALTY_DROP_RATE);
         for (const it of toDrop) {
           if (it.amount > 0) {
             const scatter = new THREE.Vector3(
@@ -695,7 +700,7 @@ class Game {
     const curMiningProgress  = this._mining?.getMiningProgress() || 0;
     if (inp.mine && curMiningProgress < prevMiningProgress && prevMiningProgress > 0) {
       // A mining cycle just completed (progress reset)
-      this._awardXP(XP_PER_MINE_ITEM * 10);
+      this._awardXP(XP_PER_MINE_ITEM * XP_MINE_CYCLE_MULT);
     }
 
     // Weather gameplay effects
@@ -704,8 +709,8 @@ class Game {
       this._hud.setWeather(this._weather.getWeatherName(), this._weather.getWindStrength());
       const wn = this._weather.getWeatherName();
       // Blizzard/Sandstorm/Storm slow down player
-      inp._weatherSpeedMult = (wn === 'Blizzard' || wn === 'Sandstorm') ? 0.45
-                             : wn === 'Storm'                            ? 0.70 : 1.0;
+      inp._weatherSpeedMult = (wn === 'Blizzard' || wn === 'Sandstorm') ? WEATHER_SPEED_BLIZZARD
+                             : wn === 'Storm'                            ? WEATHER_SPEED_STORM : 1.0;
       // Toxic Fog drains life support
       if (wn === 'Toxic Fog') this._player.drainLifeSupport(4 * dt);
       // Blizzard drains life support
@@ -826,7 +831,7 @@ class Game {
   _dropCreatureLoot(worldPos) {
     if (!this._mining) return;
     const r = Math.random();
-    if (r < 0.55) {
+    if (r < CREATURE_LOOT_DROP_CHANCE) {
       const types = ['Carbon', 'Ferrite Dust', 'Di-Hydrogen', 'Sodium'];
       const type   = types[Math.floor(Math.random() * types.length)];
       const amount = 5 + Math.floor(Math.random() * 25);
