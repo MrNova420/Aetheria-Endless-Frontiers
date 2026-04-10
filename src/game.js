@@ -22,7 +22,7 @@ import { Player }             from './player.js';
 import { Ship, FlightMode }   from './ship.js';
 import { SpaceScene }         from './space.js';
 import { Inventory }          from './inventory.js';
-import { CraftingSystem }     from './crafting.js';
+import { CraftingSystem, TechTree }     from './crafting.js';
 import { AudioManager }       from './audio.js';
 import { GameHUD }             from './ui.js';
 import { getAssets }           from './assets.js';
@@ -46,6 +46,16 @@ const SCAN_COOLDOWN_DURATION = 2.5; // seconds scanner recharge time
 const AUTO_SAVE_INTERVAL = 60;      // seconds between automatic saves
 const SCANNER_RANGE = 30;           // world-units radius for scanner detection
 
+// ─── XP constants ─────────────────────────────────────────────────────────────
+const XP_PER_MINE_ITEM = 3;    // XP per resource unit mined
+const XP_PER_KILL      = 35;   // XP for killing a creature
+const XP_BASE          = 100;  // XP needed for level 1→2
+const XP_GROWTH        = 1.35; // multiplicative level-up cost scaling
+const ATTACK_RANGE     = 12;   // world-units – player weapon reach
+const ATTACK_DAMAGE    = 25;   // base damage per right-click shot
+const ATTACK_COOLDOWN  = 0.5;  // seconds between shots
+const WARP_FUEL_COST   = 1;    // Warp Cells per inter-system jump
+
 class Game {
   constructor() {
     this.state        = GS.LOADING;
@@ -60,7 +70,12 @@ class Game {
     this._autoSaveTimer = 0;
     this._combatTimer   = 0;
     this._scanCooldown  = 0;
+    this._attackCooldown = 0;
     this._weather       = null;
+    // XP / leveling
+    this._level    = 1;
+    this._xp       = 0;
+    this._xpToNext = XP_BASE;
   }
 
   // ─── Async init ─────────────────────────────────────────────────────────────
@@ -84,6 +99,7 @@ class Game {
     this._setLoad(70, 'Creating systems…');
     this._inventory    = new Inventory(48);
     this._crafting     = new CraftingSystem(this._inventory);
+    this._techTree     = new TechTree();
     this._audio        = new AudioManager();
     this._setLoad(75, 'Loading star systems…');
     this._currentSystem = this._galaxy.getSystems()[0];
@@ -179,6 +195,7 @@ class Game {
     // Apply planet atmosphere / fog
     if (planet.fogColor) this._scene.fog = new THREE.FogExp2(new THREE.Color(planet.fogColor).getHex(), planet.fogDensity || 0.008);
     if (planet.atmosphereColor) this._ambient.color.set(planet.atmosphereColor);
+    if (planet.ambientColor)    this._ambient.color.set(planet.ambientColor);
 
     // Day/night sun position based on planet type
     this._sun.color.set(planet.sunColor || 0xfff4e0);
@@ -251,12 +268,14 @@ class Game {
     return {
       forward: false, back: false, left: false, right: false,
       sprint: false, jump: false, mine: false, scan: false,
-      interact: false,
+      attack: false, interact: false,
       mouseDX: 0, mouseDY: 0,
       // Ship
       shipThrust: 0, shipYaw: 0, shipPitch: 0, shipRoll: 0,
       // Joystick (touch)
       joyX: 0, joyY: 0,
+      // Quickslot
+      quickSlot: -1,
     };
   }
 
@@ -271,16 +290,22 @@ class Game {
       if (e.code === 'KeyN')          this._toggleCrafting();
       if (e.code === 'KeyT')          this._toggleTech();
       if (e.code === 'KeyM')          this._toggleGalaxyMap();
-      if (e.code === 'KeyG' && this._state === GS.PLANET_SURFACE) this._tryEnterShip();
-      if (e.code === 'KeyG' && this._state === GS.SHIP_ATM)       this._tryExitShip();
+      if (e.code === 'KeyG' && this.state === GS.PLANET_SURFACE) this._tryEnterShip();
+      if (e.code === 'KeyG' && this.state === GS.SHIP_ATM)       this._tryExitShip();
       if (e.code === 'KeyP')          this._saveGame();
       if (e.code === 'KeyO')          this._loadGame();
+      // Quickslot 1–0
+      const digit = e.code.match(/^Digit(\d)$/);
+      if (digit) { inp.quickSlot = parseInt(digit[1], 10) - 1; }
     });
 
     document.addEventListener('keyup', e => { keys[e.code] = false; });
 
-    // Pointer lock
+    // Prevent right-click context menu in game
     const canvas = document.getElementById('game-canvas');
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+    // Pointer lock
     canvas.addEventListener('click', () => {
       if (this.state !== GS.MAIN_MENU) canvas.requestPointerLock();
     });
@@ -293,10 +318,14 @@ class Game {
     });
 
     document.addEventListener('mousedown', e => {
-      if (e.button === 0 && document.pointerLockElement === canvas) inp.mine = true;
+      if (document.pointerLockElement === canvas) {
+        if (e.button === 0) inp.mine   = true;
+        if (e.button === 2) inp.attack = true;
+      }
     });
     document.addEventListener('mouseup', e => {
-      if (e.button === 0) inp.mine = false;
+      if (e.button === 0) inp.mine   = false;
+      if (e.button === 2) inp.attack = false;
     });
 
     // Gamepad
@@ -550,8 +579,34 @@ class Game {
     } else {
       this._prevState = this.state;
       this._setState(GS.GALAXY_MAP);
-      this._hud.showGalaxyMap(this._galaxy, this._currentSystem?.id);
+      this._hud.showGalaxyMap(this._galaxy, this._currentSystem?.id, (sys) => this._warpToSystem(sys));
     }
+  }
+
+  _warpToSystem(sys) {
+    if (!sys) return;
+    if (sys.id === this._currentSystem?.id) {
+      this._hud.showNotification('Already in this system', 'warn', 2000);
+      return;
+    }
+    // Cost: 1 Warp Cell
+    if (this._inventory && this._inventory.getAmount('Warp Cell') < WARP_FUEL_COST) {
+      this._hud.showNotification('⚡ Need 1 Warp Cell to jump!', 'warn', 2500);
+      return;
+    }
+    if (this._inventory) this._inventory.removeItem('Warp Cell', WARP_FUEL_COST);
+    this._currentSystem = sys;
+    sys.visited = true;
+    const planet = PlanetGenerator.getSystemPlanets(sys.seed, sys)[0];
+    this._currentPlanet = planet;
+    this._hud.hideGalaxyMap();
+    this._setState(this._prevState || GS.PLANET_SURFACE);
+    this._teardownSurface();
+    this._setupSurface(planet);
+    this._setupPlayer();
+    this._setupShip();
+    this._hud.showNotification(`🚀 Warped to ${sys.name}`, 'info', 3500);
+    this._awardXP(50);
   }
 
   // ─── Resize ──────────────────────────────────────────────────────────────────
@@ -583,7 +638,7 @@ class Game {
 
     // HUD update
     const gs = this.state === GS.SHIP_ATM ? 'ship' : this.state === GS.SPACE_LOCAL ? 'space' : 'surface';
-    this._hud.update(dt, this._player, this._currentPlanet, this._ship, this._terrain, gs);
+    this._hud.update(dt, this._player, this._currentPlanet, this._ship, this._terrain, gs, this._creatures);
 
     this._composer.render();
   }
@@ -606,12 +661,28 @@ class Game {
     if (this._terrain)   this._terrain.update(pos, dt);
     if (this._flora)     this._flora.update(dt, Date.now() * 0.001);
     if (this._creatures) this._creatures.update(dt, pos, this._terrain ? (x,z) => this._terrain.getHeightAt(x,z) : null);
-    if (this._mining)    this._mining.update(dt, pos, inp.mine, null, this._terrain ? (x,z) => this._terrain.getHeightAt(x,z) : null);
 
-    // Weather
+    // Mining – track resources gained for XP
+    const prevMiningProgress = this._mining?.getMiningProgress() || 0;
+    if (this._mining)    this._mining.update(dt, pos, inp.mine, null, this._terrain ? (x,z) => this._terrain.getHeightAt(x,z) : null);
+    const curMiningProgress  = this._mining?.getMiningProgress() || 0;
+    if (inp.mine && curMiningProgress < prevMiningProgress && prevMiningProgress > 0) {
+      // A mining cycle just completed (progress reset)
+      this._awardXP(XP_PER_MINE_ITEM * 10);
+    }
+
+    // Weather gameplay effects
     if (this._weather) {
       this._weather.update(dt, pos);
       this._hud.setWeather(this._weather.getWeatherName(), this._weather.getWindStrength());
+      const wn = this._weather.getWeatherName();
+      // Blizzard/Sandstorm/Storm slow down player
+      inp._weatherSpeedMult = (wn === 'Blizzard' || wn === 'Sandstorm') ? 0.45
+                             : wn === 'Storm'                            ? 0.70 : 1.0;
+      // Toxic Fog drains life support
+      if (wn === 'Toxic Fog') this._player.drainLifeSupport(4 * dt);
+      // Blizzard drains life support
+      if (wn === 'Blizzard')  this._player.drainLifeSupport(2 * dt);
     }
 
     // Player
@@ -620,7 +691,7 @@ class Game {
     // Ship idle
     this._ship?.update(dt, { shipThrust:0,shipYaw:0,shipPitch:0 }, this._terrain);
 
-    // Creature combat – hostile creatures deal damage to player
+    // ─── Creature combat – hostile creatures deal damage to player ────────────
     this._combatTimer += dt;
     if (this._combatTimer >= COMBAT_TICK_INTERVAL && this._creatures) {
       this._combatTimer = 0;
@@ -632,6 +703,24 @@ class Game {
           if (actual > 0) {
             this._hud.showNotification(`⚔ Attacked! −${Math.floor(actual)} HP`, 'warn', 1500);
           }
+        }
+      }
+    }
+
+    // ─── Player attack (right-click / R2) ─────────────────────────────────────
+    this._attackCooldown -= dt;
+    if (inp.attack && this._attackCooldown <= 0 && this._creatures) {
+      this._attackCooldown = ATTACK_COOLDOWN;
+      const targets = this._creatures.getNearbyCreatures(pos, ATTACK_RANGE)
+        .filter(c => c.isAlive())
+        .sort((a, b) => a.getPosition().distanceTo(pos) - b.getPosition().distanceTo(pos));
+      if (targets.length > 0) {
+        const t = targets[0];
+        const died = t.takeDamage(ATTACK_DAMAGE);
+        this._hud.showNotification(`🔫 Hit! −${ATTACK_DAMAGE} dmg`, 'success', 800);
+        if (died) {
+          this._awardXP(XP_PER_KILL);
+          this._hud.showNotification(`💀 Creature defeated  +${XP_PER_KILL} XP`, 'success', 2000);
         }
       }
     }
@@ -655,6 +744,13 @@ class Game {
       this._hud.updateHazardOverlay(this._currentPlanet.hazardType, this._currentPlanet);
     }
 
+    // HUD: update level/XP and quickslot selection
+    this._hud.setLevel(this._level, this._xp, this._xpToNext);
+    if (inp.quickSlot >= 0) {
+      this._hud.selectQuickSlot(inp.quickSlot);
+      inp.quickSlot = -1;
+    }
+
     // Player death
     if (!this._player.isAlive()) {
       this._setState(GS.DEAD);
@@ -669,6 +765,19 @@ class Game {
     if (this._autoSaveTimer >= AUTO_SAVE_INTERVAL) {
       this._autoSaveTimer = 0;
       this._saveGame(true);
+    }
+  }
+
+  // ─── XP / Leveling ─────────────────────────────────────────────────────────
+  _awardXP(amount) {
+    this._xp += amount;
+    while (this._xp >= this._xpToNext) {
+      this._xp -= this._xpToNext;
+      this._level++;
+      this._xpToNext = Math.floor(XP_BASE * Math.pow(XP_GROWTH, this._level - 1));
+      this._hud.showNotification(`⬆ LEVEL UP!  Now Level ${this._level}`, 'success', 3500);
+      // Heal on level-up
+      if (this._player) this._player.heal(30);
     }
   }
 
@@ -731,11 +840,16 @@ class Game {
     const cycle = 600; // seconds per full day
     const t  = (this._dayTime % cycle) / cycle;
     const sunAngle = t * Math.PI * 2;
-    this._sun.position.set(Math.cos(sunAngle) * 500, Math.sin(sunAngle) * 500, 200);
-    const dayFactor = Math.max(0, Math.sin(sunAngle));
+    const sunDir = new THREE.Vector3(Math.cos(sunAngle), Math.sin(sunAngle), 0.4).normalize();
+    this._sun.position.set(sunDir.x * 500, sunDir.y * 500, sunDir.z * 200);
+    const dayFactor = Math.max(0, sunDir.y);
     this._ambient.intensity = 0.15 + dayFactor * 0.4;
     this._sun.intensity     = 0.4  + dayFactor * 1.1;
-    if (this._atmosphere) this._atmosphere.update(dt, this._sun.position.clone().normalize(), new THREE.Vector3());
+    // Sync terrain shader sun direction for accurate per-pixel lighting
+    if (this._terrain) this._terrain.setSunDirection(sunDir);
+    if (this._atmosphere) this._atmosphere.update(dt, sunDir, new THREE.Vector3());
+    // Bloom reduces at night
+    if (this._bloomPass) this._bloomPass.strength = 0.5 + dayFactor * 0.55;
   }
 
   // ─── Scanner ─────────────────────────────────────────────────────────────────
@@ -790,13 +904,17 @@ class Game {
   _saveGame(silent = false) {
     try {
       const data = {
-        version: 1,
+        version: 2,
         systemId: this._currentSystem?.id,
         planetSeed: this._currentPlanet?.seed,
         planetType: this._currentPlanet?.type,
         dayTime: this._dayTime || 0,
         player: this._player?.serializeState(),
         inventory: this._inventory?.serialize(),
+        level: this._level,
+        xp: this._xp,
+        xpToNext: this._xpToNext,
+        techTree: this._techTree?.serialize(),
       };
       localStorage.setItem('aetheria_save', JSON.stringify(data));
       if (!silent) this._hud.showNotification('💾 Game saved', 'info', 2000);
@@ -810,9 +928,13 @@ class Game {
       const raw = localStorage.getItem('aetheria_save');
       if (!raw) { this._hud.showNotification('No save found', 'warn', 2000); return; }
       const data = JSON.parse(raw);
-      if (data.player && this._player) this._player.loadState(data.player);
+      if (data.player    && this._player)    this._player.loadState(data.player);
       if (data.inventory && this._inventory) this._inventory.load(data.inventory);
-      if (data.dayTime != null) this._dayTime = data.dayTime;
+      if (data.dayTime   != null)            this._dayTime = data.dayTime;
+      if (data.level     != null)            this._level   = data.level;
+      if (data.xp        != null)            this._xp      = data.xp;
+      if (data.xpToNext  != null)            this._xpToNext = data.xpToNext;
+      if (data.techTree  && this._techTree)  this._techTree.load(data.techTree);
       this._hud.showNotification('💾 Game loaded', 'info', 2000);
     } catch (e) {
       console.warn('Load failed:', e);

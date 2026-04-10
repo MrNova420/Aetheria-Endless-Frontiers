@@ -197,13 +197,15 @@ export class GameHUD {
     hud.appendChild(loc);
 
     // ── Level / XP (top-right) ────────────────────────────────────────────────
-    const lvl = el('div', 'hud-level');
-    this._el.lvlNum = el('span', 'level-num', 'Lv 1');
-    const xpWrap = el('div', 'xp-bar-wrap');
-    this._el.xpBar = el('div', 'xp-bar');
-    xpWrap.appendChild(this._el.xpBar);
-    this._el.xpTxt = el('span', 'xp-txt', '0 / 100 XP');
-    lvl.append(this._el.lvlNum, xpWrap, this._el.xpTxt);
+    const lvl = el('div', 'hud-level-box');
+    this._el.lvlNum  = el('span', 'lvl-num',   'Lv 1');
+    this._el.lvlLbl  = el('span', 'lvl-label', 'EXPLORER');
+    const xpBg  = el('div', 'xp-bar-bg');
+    this._el.xpFill = el('div', 'xp-bar-fill');
+    this._el.xpFill.style.width = '0%';
+    xpBg.appendChild(this._el.xpFill);
+    this._el.xpTxt = el('span', 'lvl-label', '0 / 100 XP');
+    lvl.append(this._el.lvlNum, this._el.lvlLbl, xpBg, this._el.xpTxt);
     hud.appendChild(lvl);
 
     // ── Compass (top-centre) ──────────────────────────────────────────────────
@@ -280,9 +282,9 @@ export class GameHUD {
     const qbar = el('div', 'quick-bar');
     this._el.qslots = [];
     for (let i = 0; i < 10; i++) {
-      const slot = el('div', 'q-slot');
+      const slot = el('div', 'quick-slot');
       const icon = el('div', 'q-icon', '');
-      const key  = el('div', 'q-key', String(i + 1));
+      const key  = el('div', 'q-key', i === 9 ? '0' : String(i + 1));
       const qty  = el('div', 'q-qty', '');
       slot.append(icon, key, qty);
       qbar.appendChild(slot);
@@ -486,21 +488,71 @@ export class GameHUD {
     this._el.galaxyCanvas = el('canvas', 'galaxy-canvas');
     this._el.galaxyCanvas.width  = 700;
     this._el.galaxyCanvas.height = 500;
+    // System info + warp row
+    const infoRow = el('div', 'galaxy-info-row');
+    this._el.galaxyWarpInfo = el('span', 'galaxy-sys-info', 'Click a star to select');
+    this._el.galaxyWarpBtn  = el('button', 'mm-btn primary hidden', '🚀 WARP (1 Warp Cell)');
+    this._el.galaxyWarpBtn.addEventListener('click', () => {
+      if (this._galaxySelected && this._galaxyOnWarp) {
+        this._galaxyOnWarp(this._galaxySelected);
+      }
+    });
+    infoRow.append(this._el.galaxyWarpInfo, this._el.galaxyWarpBtn);
     const closeBtn = el('button', 'mm-btn', 'CLOSE (M)');
     closeBtn.addEventListener('click', () => this.hideGalaxyMap());
-    panel.append(title, this._el.galaxyCanvas, closeBtn);
+    panel.append(title, this._el.galaxyCanvas, infoRow, closeBtn);
     this._el.galaxyScreen.appendChild(panel);
     document.body.appendChild(this._el.galaxyScreen);
   }
 
-  showGalaxyMap(galaxy, currentSystemId) {
+  showGalaxyMap(galaxy, currentSystemId, onWarp) {
     this._el.galaxyScreen.classList.remove('hidden');
+    this._galaxyOnWarp = onWarp || null;
     this._renderGalaxyCanvas(galaxy, currentSystemId);
+    // Store for click handling
+    this._galaxyData = { galaxy, currentSystemId };
+    // Wire click on canvas for system selection
+    if (this._el.galaxyCanvas && !this._el.galaxyCanvas._wired) {
+      this._el.galaxyCanvas._wired = true;
+      this._el.galaxyCanvas.addEventListener('click', (e) => {
+        if (!this._galaxyData) return;
+        const { galaxy: g, currentSystemId: curId } = this._galaxyData;
+        const rect = this._el.galaxyCanvas.getBoundingClientRect();
+        const mx = (e.clientX - rect.left) * (this._el.galaxyCanvas.width / rect.width);
+        const my = (e.clientY - rect.top)  * (this._el.galaxyCanvas.height / rect.height);
+        const systems = g.getSystems();
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (const s of systems) { minX=Math.min(minX,s.position.x); maxX=Math.max(maxX,s.position.x); minY=Math.min(minY,s.position.y); maxY=Math.max(maxY,s.position.y); }
+        const w = this._el.galaxyCanvas.width, h = this._el.galaxyCanvas.height;
+        const toScreen = (gx, gy) => ({
+          sx: ((gx - minX) / (maxX - minX + 0.001)) * (w - 40) + 20,
+          sy: ((gy - minY) / (maxY - minY + 0.001)) * (h - 40) + 20,
+        });
+        let best = null, bestDist = 18;
+        for (const sys of systems) {
+          const { sx, sy } = toScreen(sys.position.x, sys.position.y);
+          const d = Math.hypot(sx - mx, sy - my);
+          if (d < bestDist) { bestDist = d; best = sys; }
+        }
+        if (best) {
+          this._galaxySelected = best;
+          this._renderGalaxyCanvas(g, curId, best.id);
+          // Show warp info
+          if (this._el.galaxyWarpInfo) {
+            this._el.galaxyWarpInfo.textContent = `${best.name}  ·  ${best.starType}-class  ·  ${best.economy}  ·  ${best.planets?.length || '?'} planets`;
+            this._el.galaxyWarpBtn.classList.toggle('hidden', best.id === curId);
+          }
+        }
+      });
+    }
   }
 
-  hideGalaxyMap() { this._el.galaxyScreen.classList.add('hidden'); }
+  hideGalaxyMap() {
+    this._el.galaxyScreen.classList.add('hidden');
+    this._galaxySelected = null;
+  }
 
-  _renderGalaxyCanvas(galaxy, currentId) {
+  _renderGalaxyCanvas(galaxy, currentId, selectedId) {
     const canvas = this._el.galaxyCanvas;
     if (!canvas || !galaxy) return;
     const ctx = canvas.getContext('2d');
@@ -508,8 +560,15 @@ export class GameHUD {
     ctx.fillStyle = '#030818';
     ctx.fillRect(0, 0, w, h);
 
+    // Background star dust
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    const rng = this._galaxyBgRng || (this._galaxyBgRng = (() => {
+      let s = 0x1234abcd;
+      return () => { s=(Math.imul(s,1664525)+1013904223)>>>0; return s/0x100000000; };
+    })());
+    for (let i = 0; i < 400; i++) ctx.fillRect(rng()*w, rng()*h, rng() > 0.97 ? 2 : 1, 1);
+
     const systems = galaxy.getSystems();
-    // Find bounds
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     for (const s of systems) { minX=Math.min(minX,s.position.x); maxX=Math.max(maxX,s.position.x); minY=Math.min(minY,s.position.y); maxY=Math.max(maxY,s.position.y); }
     const toScreen = (gx, gy) => ({
@@ -517,25 +576,6 @@ export class GameHUD {
       sy: ((gy - minY) / (maxY - minY + 0.001)) * (h - 40) + 20,
     });
 
-    // Draw systems
-    for (const sys of systems) {
-      const { sx, sy } = toScreen(sys.position.x, sys.position.y);
-      const isCurrent = sys.id === currentId;
-      ctx.beginPath();
-      ctx.arc(sx, sy, isCurrent ? 6 : 3, 0, Math.PI * 2);
-      ctx.fillStyle = isCurrent ? '#0af' : (sys.starColor || '#fff');
-      ctx.fill();
-      if (isCurrent) {
-        ctx.strokeStyle = '#0af';
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.arc(sx, sy, 12, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.fillStyle = '#0af';
-        ctx.font = '10px Share Tech Mono, monospace';
-        ctx.fillText(sys.name, sx + 8, sy - 8);
-      }
-    }
     // Warp range circle
     const cur = systems.find(s => s.id === currentId);
     if (cur) {
@@ -544,9 +584,41 @@ export class GameHUD {
       ctx.strokeStyle = 'rgba(0,170,255,0.3)';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(sx, sy, 80, 0, Math.PI * 2);
+      ctx.arc(sx, sy, 120, 0, Math.PI * 2);
       ctx.stroke();
       ctx.setLineDash([]);
+    }
+
+    // Draw systems
+    for (const sys of systems) {
+      const { sx, sy } = toScreen(sys.position.x, sys.position.y);
+      const isCurrent  = sys.id === currentId;
+      const isSelected = sys.id === selectedId;
+      const r = isCurrent ? 6 : 3;
+      // Glow
+      const grd = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 3);
+      grd.addColorStop(0, sys.starColor || '#fff');
+      grd.addColorStop(1, 'transparent');
+      ctx.beginPath(); ctx.arc(sx, sy, r * 3, 0, Math.PI * 2);
+      ctx.fillStyle = grd; ctx.fill();
+      // Core
+      ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2);
+      ctx.fillStyle = isCurrent ? '#0af' : (sys.starColor || '#fff');
+      ctx.fill();
+      if (isCurrent) {
+        ctx.strokeStyle = '#0af'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(sx, sy, r + 5, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = '#0af';
+        ctx.font = '10px "Share Tech Mono", monospace';
+        ctx.fillText(sys.name, sx + r + 4, sy - r);
+      }
+      if (isSelected && !isCurrent) {
+        ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(sx, sy, r + 8, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = '#ffd700';
+        ctx.font = '10px "Share Tech Mono", monospace';
+        ctx.fillText(sys.name, sx + r + 4, sy - r);
+      }
     }
   }
 
@@ -583,7 +655,7 @@ export class GameHUD {
   _bindMenuButtons() {}
 
   // ─── Main update ──────────────────────────────────────────────────────────────
-  update(dt, player, planet, ship, terrain, gameState) {
+  update(dt, player, planet, ship, terrain, gameState, creatures) {
     if (!player) return;
     this._elapsed += dt;
     const stats = player.getStats();
@@ -614,6 +686,10 @@ export class GameHUD {
     // Location
     if (planet && this._el.locPlanet) {
       this._el.locPlanet.textContent = planet.name || 'Unknown Planet';
+    }
+    if (planet && this._el.locBiome) {
+      const biome = terrain ? terrain.getBiomeAt?.(pos.x, pos.z) : null;
+      this._el.locBiome.textContent = biome ? biome.type : (planet.type || '');
     }
     const pos = player.getPosition();
     if (this._el.locCoords) {
@@ -653,14 +729,14 @@ export class GameHUD {
     }
 
     // Minimap
-    this._updateMinimap(pos, terrain);
+    this._updateMinimap(pos, terrain, creatures, ship, planet);
 
     // Notification drain
     this._notifT -= dt;
   }
 
   // ─── Minimap ──────────────────────────────────────────────────────────────────
-  _updateMinimap(playerPos, terrain) {
+  _updateMinimap(playerPos, terrain, creatures, ship, planet) {
     const ctx = this._el.mmCtx;
     if (!ctx) return;
     const w = 160, h = 160, range = 300;
@@ -669,6 +745,8 @@ export class GameHUD {
     // Background
     ctx.fillStyle = 'rgba(0,8,20,0.85)';
     ctx.beginPath(); ctx.arc(w/2, h/2, w/2, 0, Math.PI*2); ctx.fill();
+
+    const waterLevel = planet?.waterLevel ?? 10;
 
     // Terrain height sample grid
     if (terrain) {
@@ -680,10 +758,38 @@ export class GameHUD {
           const sy = terrain.getHeightAt(wx, wz);
           const nx = (dx + 10) / 20 * w;
           const ny = (dz + 10) / 20 * h;
-          const bright = Math.min(1, sy / 50);
-          ctx.fillStyle = `rgba(0,${Math.floor(bright*120+40)},${Math.floor(bright*80+30)},0.7)`;
+          if (sy < waterLevel) {
+            ctx.fillStyle = `rgba(20,60,180,0.7)`;
+          } else {
+            const bright = Math.min(1, sy / 50);
+            ctx.fillStyle = `rgba(0,${Math.floor(bright*120+40)},${Math.floor(bright*80+30)},0.7)`;
+          }
           ctx.fillRect(nx - 4, ny - 4, 8, 8);
         }
+      }
+    }
+
+    // Creature dots
+    if (creatures) {
+      const nearby = creatures.getNearbyCreatures?.(playerPos, range) || [];
+      for (const cr of nearby) {
+        const cp = cr.getPosition();
+        const cx = w/2 + (cp.x - playerPos.x) / range * w * 0.5;
+        const cy = h/2 + (cp.z - playerPos.z) / range * h * 0.5;
+        const hostile = cr.genome?.aggression === 'hostile';
+        ctx.fillStyle = hostile ? '#ff4422' : '#44dd88';
+        ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI*2); ctx.fill();
+      }
+    }
+
+    // Ship dot
+    if (ship) {
+      const sp = ship.getPosition?.();
+      if (sp) {
+        const sx = w/2 + (sp.x - playerPos.x) / range * w * 0.5;
+        const sy2 = h/2 + (sp.z - playerPos.z) / range * h * 0.5;
+        ctx.fillStyle = '#ffcc00';
+        ctx.beginPath(); ctx.arc(sx, sy2, 3.5, 0, Math.PI*2); ctx.fill();
       }
     }
 
@@ -795,6 +901,18 @@ export class GameHUD {
     this._scanDismissTimer = setTimeout(() => panel.classList.add('hidden'), 8000);
   }
 
+  // ─── Level / XP ───────────────────────────────────────────────────────────────
+  setLevel(level, xp, xpToNext) {
+    if (this._el.lvlNum)  this._el.lvlNum.textContent  = `Lv ${level}`;
+    if (this._el.xpFill)  this._el.xpFill.style.width  = `${Math.min(100, (xp / xpToNext) * 100).toFixed(1)}%`;
+    if (this._el.xpTxt)   this._el.xpTxt.textContent   = `${xp} / ${xpToNext} XP`;
+  }
+
+  // ─── Quickslot selection ──────────────────────────────────────────────────────
+  selectQuickSlot(index) {
+    if (!this._el.qslots) return;
+    this._el.qslots.forEach((s, i) => s.slot.classList.toggle('active', i === index));
+  }
   // ─── HUD visibility ───────────────────────────────────────────────────────────
   showHUD() {
     const hud = document.getElementById('hud');

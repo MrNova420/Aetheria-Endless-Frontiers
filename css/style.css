@@ -671,7 +671,8 @@ canvas { display: block; }
   max-width: 280px;
   pointer-events: none;
 }
-.notif-item {
+/* Base notification – works for both .notif-item and .notif (programmatic) */
+.notif-item, .notif {
   background: var(--col-panel);
   border: 1px solid var(--col-panel-border);
   border-left: 3px solid var(--col-cyan);
@@ -681,9 +682,11 @@ canvas { display: block; }
   backdrop-filter: blur(12px);
   animation: notifSlideIn 0.3s ease, notifFadeOut 0.4s 3s ease forwards;
 }
-.notif-item.warn { border-left-color: var(--col-yellow); }
-.notif-item.danger { border-left-color: var(--col-red); }
-.notif-item.success { border-left-color: var(--col-green); }
+.notif-item.warn,    .notif.notif-warn    { border-left-color: var(--col-yellow); }
+.notif-item.danger,  .notif.notif-error   { border-left-color: var(--col-red); }
+.notif-item.success, .notif.notif-success { border-left-color: var(--col-green); }
+.notif.notif-info  { border-left-color: var(--col-cyan); }
+.notif.notif-scan  { border-left-color: #a060ff; }
 
 /* ── Damage numbers ──────────────────────────────────────────────────────── */
 .dmg-layer {
@@ -1025,7 +1028,17 @@ canvas { display: block; }
 }
 .scan-close:hover { color: var(--col-cyan); }
 
-/* ── Responsive – tablet ─────────────────────────────────────────────────── */
+/* ── Galaxy map extras ───────────────────────────────────────────────────── */
+.galaxy-canvas { display: block; border: 1px solid var(--col-panel-border); border-radius: var(--radius); }
+.galaxy-info-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 0 4px;
+  min-height: 36px;
+}
+.galaxy-sys-info {
+  font-family: var(--font-mono); font-size: 0.72rem;
+  color: var(--col-text-dim); flex: 1;
+}
 @media (max-width: 900px) {
   .mm-class-row { gap: 10px; }
   .class-card { width: 155px; padding: 14px 12px; }

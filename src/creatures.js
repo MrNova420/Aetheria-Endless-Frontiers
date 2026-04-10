@@ -181,7 +181,16 @@ class Creature {
   }
 
   update(dt, playerPos, getHeightAt) {
-    if (this.state === STATE.DEAD) return;
+    if (this.state === STATE.DEAD) {
+      // Frame-based corpse fade – remove after 3 seconds
+      this._dieTimer = (this._dieTimer || 0) + dt;
+      if (this._dieTimer >= 3.0 && !this._removed) {
+        this._removed = true;
+        this.scene.remove(this.mesh);
+        this.mesh.traverse(c => { if (c.geometry) c.geometry.dispose(); });
+      }
+      return;
+    }
 
     this._stateTimer -= dt;
     const pos = this.mesh.position;
@@ -257,12 +266,10 @@ class Creature {
 
   die() {
     this.state = STATE.DEAD;
+    this._dieTimer = 0;
+    this._removed  = false;
     // Fall over
     this.mesh.rotation.z = Math.PI / 2;
-    setTimeout(() => {
-      this.scene.remove(this.mesh);
-      this.mesh.traverse(c => { if (c.geometry) c.geometry.dispose(); });
-    }, 3000);
   }
 
   getPosition() { return this.mesh.position; }
@@ -317,10 +324,10 @@ export class CreatureManager {
 
   update(dt, playerPos, getHeightAt) {
     for (const cr of this._all) {
-      if (cr.isAlive()) cr.update(dt, playerPos, getHeightAt);
+      cr.update(dt, playerPos, getHeightAt);
     }
-    // Clean dead
-    this._all = this._all.filter(c => c.isAlive());
+    // Clean fully-removed corpses
+    this._all = this._all.filter(c => !c._removed);
   }
 
   getNearbyCreatures(pos, radius) {
