@@ -167,7 +167,7 @@ export class FactionManager {
   // ── Territories ─────────────────────────────────────────────────────────────
   assignTerritories(universe) {
     const ids = Object.keys(FACTIONS);
-    const systems = universe?.getLoadedSystems ? universe.getLoadedSystems() : [];
+    const systems = universe?.getLoadedSystems() ?? [];
 
     for (const system of systems) {
       const seed     = typeof system.seed === 'number' ? system.seed : (system.id ?? 0);
