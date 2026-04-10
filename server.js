@@ -33,10 +33,95 @@ const ADMIN_TOKEN  = process.env.ADMIN_TOKEN  || 'aetheria_admin';
 const MAX_PLAYERS  = parseInt(process.env.MAX_PLAYERS || '50', 10);
 const MESH_PEERS   = (process.env.MESH_PEERS || '').split(',').filter(Boolean);
 const ROOT         = __dirname;
-const DATA_DIR     = path.join(ROOT, 'data');
+
+// ── External storage detection (USB/SSD on Android/Termux/Linux) ─────────────
+//
+// Priority order:
+//   1. DATA_DIR env var   — explicit override (e.g. DATA_DIR=/mnt/usb/aetheria)
+//   2. Auto-detected USB  — first writable path from ANDROID_USB_PATHS
+//   3. Internal fallback  — <game dir>/data
+//
+// When an external drive is unplugged the server transparently continues with
+// the internal fallback.  On re-plug it detects and migrates back within 30s.
+//
+const ANDROID_USB_PATHS = [
+  // Termux — common Android USB OTG / SD-card mount points
+  '/storage/emulated/0/AetheriaData',          // Android internal shared (always available)
+  '/storage/self/primary/AetheriaData',
+  '/mnt/media_rw/usbotg/AetheriaData',         // USB OTG (most ROMs)
+  '/mnt/media_rw/usb/AetheriaData',
+  '/mnt/usb_storage/AetheriaData',
+  '/mnt/usbdisk/AetheriaData',
+  '/mnt/usb/AetheriaData',
+  '/storage/usbotg/AetheriaData',
+  '/storage/usb/AetheriaData',
+  // Linux desktop — common USB mount points
+  '/media/' + (os.userInfo?.()?.username || 'user') + '/AetheriaData',
+  '/run/media/' + (os.userInfo?.()?.username || 'user') + '/AetheriaData',
+];
+
+function detectExternalStorage() {
+  if (process.env.DATA_DIR) return process.env.DATA_DIR;
+  for (const p of ANDROID_USB_PATHS) {
+    try {
+      // Ensure the directory exists (create it) and is writable
+      fs.mkdirSync(p, { recursive: true });
+      fs.accessSync(p, fs.constants.W_OK);
+      return p;
+    } catch (_) {}
+  }
+  return null;
+}
+
+let DATA_DIR        = detectExternalStorage() || path.join(ROOT, 'data');
+let _usingExternal  = DATA_DIR !== path.join(ROOT, 'data');
+let _lastStorageCheck = 0;
+
+function ensureDataDir(dir) {
+  try { fs.mkdirSync(dir, { recursive: true }); return true; }
+  catch (_) { return false; }
+}
+ensureDataDir(DATA_DIR);
+
+// ── Hot-plug watcher — re-scan storage every 30s ──────────────────────────────
+function checkStorageHotPlug() {
+  const now = Date.now();
+  if (now - _lastStorageCheck < 30000) return;
+  _lastStorageCheck = now;
+
+  const preferred = detectExternalStorage();
+  const internal  = path.join(ROOT, 'data');
+
+  if (preferred && preferred !== DATA_DIR) {
+    // External storage appeared — migrate to it
+    log(`⚡ External storage detected: ${preferred} — migrating data…`);
+    try {
+      // Copy any existing data files across
+      if (fs.existsSync(DATA_DIR)) {
+        for (const f of fs.readdirSync(DATA_DIR)) {
+          const src = path.join(DATA_DIR, f);
+          const dst = path.join(preferred, f);
+          if (!fs.existsSync(dst)) fs.copyFileSync(src, dst);
+        }
+      }
+      DATA_DIR = preferred;
+      ensureDataDir(DATA_DIR);
+      _usingExternal = true;
+      log(`✅ Now using external storage: ${DATA_DIR}`);
+    } catch (err) {
+      log(`⚠ Migration failed (${err.message}) — staying on ${DATA_DIR}`);
+    }
+  } else if (!preferred && _usingExternal) {
+    // External storage unplugged — fall back to internal
+    log('⚠ External storage unavailable — falling back to internal storage.');
+    DATA_DIR = internal;
+    ensureDataDir(DATA_DIR);
+    _usingExternal = false;
+  }
+}
 
 // ── Ensure data dir ───────────────────────────────────────────────────────────
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+ensureDataDir(path.join(ROOT, 'data')); // always keep internal dir as fallback
 
 // ── State ─────────────────────────────────────────────────────────────────────
 /** @type {Map<string, {ws,id,name,pos,hp,state,ip,joinedAt,lastSeen,godMode}>} */
@@ -62,11 +147,13 @@ function log(msg) {
 
 // ── Persistence ───────────────────────────────────────────────────────────────
 function loadJSON(name, def) {
+  checkStorageHotPlug(); // opportunistically check hot-plug on every read
   const fp = path.join(DATA_DIR, name);
   try { return JSON.parse(fs.readFileSync(fp, 'utf8')); } catch (_) { return def; }
 }
 
 function saveJSON(name, data) {
+  checkStorageHotPlug();
   const fp = path.join(DATA_DIR, name);
   try { fs.writeFileSync(fp, JSON.stringify(data, null, 2)); } catch (e) { log('Save error: ' + e.message); }
 }
@@ -74,7 +161,46 @@ function saveJSON(name, data) {
 function saveState() {
   saveJSON('buildings.json', buildings);
   saveJSON('universe.json', universe);
-  log('State saved.');
+  log(`State saved → ${DATA_DIR}${_usingExternal ? ' (external)' : ' (internal)'}`);
+}
+
+// ── Per-player profile persistence ───────────────────────────────────────────
+function savePlayerProfile(session) {
+  if (!session?.id) return;
+  const safe = session.id.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const data = {
+    id:       session.id,
+    name:     session.name,
+    lastSeen: session.lastSeen,
+    joinedAt: session.joinedAt,
+    pos:      session.pos,
+    hp:       session.hp,
+    state:    session.state,
+    // game data stored in browser localStorage, but server keeps position/stats
+  };
+  const dir = path.join(DATA_DIR, 'players');
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${safe}.json`), JSON.stringify(data, null, 2));
+  } catch (e) {
+    log(`Profile save error (${session.id}): ${e.message}`);
+  }
+}
+
+function loadPlayerProfile(id) {
+  const safe = id.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const fp = path.join(DATA_DIR, 'players', `${safe}.json`);
+  try { return JSON.parse(fs.readFileSync(fp, 'utf8')); } catch (_) { return null; }
+}
+
+function listPlayerProfiles() {
+  const dir = path.join(DATA_DIR, 'players');
+  try {
+    return fs.readdirSync(dir)
+      .filter(f => f.endsWith('.json'))
+      .map(f => { try { return JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); } catch(_){return null;} })
+      .filter(Boolean);
+  } catch (_) { return []; }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

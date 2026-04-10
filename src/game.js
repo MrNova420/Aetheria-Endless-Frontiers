@@ -39,6 +39,7 @@ import { TradingSystem }   from './trading.js';
 import { BuildingSystem }  from './building.js';
 import { NetworkManager }  from './network.js';
 import { HelpSystem }      from './help.js';
+import { HardwareMeshContribution, formatMeshStats } from './hardware-mesh.js';
 
 // ─── Game states ──────────────────────────────────────────────────────────────
 const GS = {
@@ -100,6 +101,7 @@ class Game {
     this._npcs        = null;
     this._trading     = null;
     this._help        = null;
+    this._meshContrib = null;   // idle hardware mesh contribution
     this._units       = 0;      // in-game currency: Units
     this._nanites     = 0;      // Nanites currency
     this._buildMode   = false;
@@ -145,6 +147,9 @@ class Game {
     this._help       = new HelpSystem();
     this._network    = new NetworkManager();
     this._setupNetworkCallbacks();
+    // ── Idle hardware mesh contribution ─────────────────────────────────────
+    this._meshContrib = new HardwareMeshContribution();
+    this._setupMeshContribution();
     this._setLoad(75, 'Loading star systems…');
     this._currentSystem = this._universe.getCurrentSystem();
     this._setLoad(80, 'Generating planet…');
@@ -422,6 +427,7 @@ class Game {
       if (e.code === 'KeyO')          this._loadGame();
       if (e.code === 'KeyH') this._hud?.showHelpOverlay?.('controls');
       if (e.code === 'KeyB' && this.state === GS.PLANET_SURFACE) this._toggleBuildMode();
+      if (e.code === 'KeyJ') this.toggleMeshContribution();
       // Quickslot 1–0
       const digit = e.code.match(/^Digit(\d)$/);
       if (digit) { inp.quickSlot = parseInt(digit[1], 10) - 1; }
@@ -1615,6 +1621,63 @@ class Game {
     }
   }
 
+  // ─── Idle hardware mesh contribution ─────────────────────────────────────
+  _setupMeshContribution() {
+    const mc = this._meshContrib;
+    if (!mc) return;
+
+    // Load saved opt-in preference (defaults to enabled at 2%)
+    const wasEnabled = mc.loadPreference();
+
+    mc.onReady(() => {
+      this._hud?.showNotification(
+        `🌐 Mesh relay active — contributing ${mc.getContributionPct()}% idle CPU to help all players`,
+        'info', 5000
+      );
+    });
+
+    mc.onStatsUpdate(stats => {
+      // Update HUD mesh indicator if available (idle callback, no frame impact)
+      const txt = formatMeshStats(stats);
+      const el = document.getElementById('mesh-stats');
+      if (el) el.textContent = txt;
+    });
+
+    mc.onRelay((fromPeerId, payload) => {
+      // Forward relayed universe/building events to the relevant system
+      if (payload?.type === 'build' && this._buildings) {
+        if (payload.action === 'place')  this._buildings.placeFromNetwork?.(payload.building);
+        if (payload.action === 'remove') this._buildings.removeFromNetwork?.(payload.building?.id);
+      }
+      if (payload?.type === 'universe_sync' && this._universe) {
+        this._universe.mergeSync?.(payload);
+      }
+    });
+
+    // Start automatically if pref was on (or first run — on by default at 2%)
+    if (wasEnabled !== false) {
+      const playerId = this._getOrCreatePlayerId?.() ?? '';
+      mc.start(mc.getContributionPct() || 2, playerId);
+    }
+  }
+
+  /**
+   * Toggle mesh contribution on/off.  Called from settings UI or console.
+   * @param {number} [pct]  optional new percentage (1–5)
+   */
+  toggleMeshContribution(pct) {
+    const mc = this._meshContrib;
+    if (!mc) return;
+    if (mc.isEnabled()) {
+      mc.stop();
+      this._hud?.showNotification('🔴 Mesh contribution OFF', 'info', 3000);
+    } else {
+      const p = pct ?? mc.getContributionPct() ?? 2;
+      mc.start(p, this._getOrCreatePlayerId?.() ?? '');
+      this._hud?.showNotification(`🟢 Mesh contribution ON (${p}% idle CPU)`, 'info', 3000);
+    }
+  }
+
   // ─── Network callback wiring ──────────────────────────────────────────────
   _setupNetworkCallbacks() {
     const net = this._network;
@@ -1622,6 +1685,10 @@ class Game {
 
     net.onConnect(({ playerId, playerCount }) => {
       this._hud?.showNotification(`🌐 Connected — ${playerCount} player(s) online`, 'info', 3000);
+      // Pass server as a mesh peer so the worker can relay to it
+      if (this._meshContrib?.isEnabled() && net._serverUrl) {
+        this._meshContrib.setPeers([{ id: 'server', url: net._serverUrl }]);
+      }
     });
 
     net.onDisconnect(() => {
@@ -1682,6 +1749,12 @@ class Game {
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 const game = new Game();
 window.game = game;
+// Expose mesh toggle for console / settings UI: game.toggleMeshContribution(3)
+window.aetheriaMesh = {
+  toggle: (pct) => game.toggleMeshContribution(pct),
+  stats:  ()    => game._meshContrib?.getStats(),
+  setPct: (pct) => game._meshContrib?.setContributionPct(pct),
+};
 game.init().catch(err => {
   console.error('Game init failed:', err);
   const msg = document.getElementById('loading-msg');
