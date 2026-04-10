@@ -33,6 +33,9 @@ export class WeatherSystem {
     this.scene  = scene;
     this.planet = planet;
 
+    // RNG must be initialized first as it is used in subsequent property initialization
+    this._rng = this._makeRng(planet.seed || 1);
+
     this._current         = 'clear';
     this._transitionTimer = 0;
     this._changeInterval  = 60 + this._rng() * 120; // 60–180 s between changes
@@ -40,10 +43,10 @@ export class WeatherSystem {
     this._lightningTimer  = 0;
     this._windTime        = 0;    // accumulated time for wind direction – deterministic
     this._windVec         = new THREE.Vector3();
+    this._flashIntensity  = 0;    // current flash light intensity (driven by update, not setTimeout)
+    this._flashTimer      = 0;    // countdown for flash duration
 
-    this._rng = this._makeRng(planet.seed || 1);
-
-    // Build ambient light for lightning
+    // Build point light for lightning flashes
     this._flashLight = new THREE.PointLight(0xffffff, 0, 500);
     this.scene.add(this._flashLight);
   }
@@ -128,17 +131,33 @@ export class WeatherSystem {
     }
   }
 
-  _doLightningFlash() {
-    // Quick double-flash
-    this._flashLight.intensity = 8;
-    setTimeout(() => { this._flashLight.intensity = 0; }, 50);
-    setTimeout(() => { this._flashLight.intensity = 5; }, 100);
-    setTimeout(() => { this._flashLight.intensity = 0; }, 160);
+  _triggerLightningFlash() {
+    // Begin a double-flash sequence driven by _flashTimer in update()
+    this._flashTimer = 0.16; // 160 ms flash sequence total
+  }
+
+  _updateFlash(dt) {
+    if (this._flashTimer <= 0) {
+      this._flashLight.intensity = 0;
+      return;
+    }
+    this._flashTimer -= dt;
+    const t = this._flashTimer;
+    // Phase 1 (0.16–0.11 s): full brightness
+    if (t > 0.11) this._flashLight.intensity = 8;
+    // Phase 2 (0.11–0.06 s): off
+    else if (t > 0.06) this._flashLight.intensity = 0;
+    // Phase 3 (0.06–0.0 s): second flash
+    else this._flashLight.intensity = 5;
+    if (t <= 0) this._flashLight.intensity = 0;
   }
 
   // ─── Public update (call every frame) ────────────────────────────────────────
 
   update(dt, playerPos) {
+    // Flash animation (frame-rate independent)
+    this._updateFlash(dt);
+
     // Weather change schedule
     this._transitionTimer += dt;
     if (this._transitionTimer >= this._changeInterval) {
@@ -198,7 +217,7 @@ export class WeatherSystem {
       this._lightningTimer -= dt;
       if (this._lightningTimer <= 0) {
         this._lightningTimer = 4 + this._rng() * 16;
-        this._doLightningFlash();
+        this._triggerLightningFlash();
       }
     }
   }

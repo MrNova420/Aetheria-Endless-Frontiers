@@ -40,6 +40,12 @@ const GS = {
   DEAD         : 'DEAD',
 };
 
+// ─── Game constants ───────────────────────────────────────────────────────────
+const COMBAT_TICK_INTERVAL = 0.5;   // seconds between creature damage ticks
+const SCAN_COOLDOWN_DURATION = 2.5; // seconds scanner recharge time
+const AUTO_SAVE_INTERVAL = 60;      // seconds between automatic saves
+const SCANNER_RANGE = 30;           // world-units radius for scanner detection
+
 class Game {
   constructor() {
     this.state        = GS.LOADING;
@@ -616,7 +622,7 @@ class Game {
 
     // Creature combat – hostile creatures deal damage to player
     this._combatTimer += dt;
-    if (this._combatTimer >= 0.5 && this._creatures) {
+    if (this._combatTimer >= COMBAT_TICK_INTERVAL && this._creatures) {
       this._combatTimer = 0;
       const nearby = this._creatures.getNearbyCreatures(pos, 4);
       for (const cr of nearby) {
@@ -633,7 +639,7 @@ class Game {
     // Scanner – F key
     this._scanCooldown -= dt;
     if (inp.scan && this._scanCooldown <= 0) {
-      this._scanCooldown = 2.5;
+      this._scanCooldown = SCAN_COOLDOWN_DURATION;
       this._doScan(pos);
     }
 
@@ -658,9 +664,9 @@ class Game {
     // Day/night cycle
     this._updateDayNight(dt);
 
-    // Auto-save every 60 s
+    // Auto-save every AUTO_SAVE_INTERVAL seconds
     this._autoSaveTimer += dt;
-    if (this._autoSaveTimer >= 60) {
+    if (this._autoSaveTimer >= AUTO_SAVE_INTERVAL) {
       this._autoSaveTimer = 0;
       this._saveGame(true);
     }
@@ -734,7 +740,6 @@ class Game {
 
   // ─── Scanner ─────────────────────────────────────────────────────────────────
   _doScan(playerPos) {
-    const SCAN_RANGE = 30;
     const lines = [];
 
     // Planet summary
@@ -747,7 +752,7 @@ class Game {
 
     // Nearby creatures
     if (this._creatures) {
-      const crs = this._creatures.getNearbyCreatures(playerPos, SCAN_RANGE);
+      const crs = this._creatures.getNearbyCreatures(playerPos, SCANNER_RANGE);
       if (crs.length > 0) {
         lines.push(`──── Fauna (${crs.length} detected) ────`);
         const shown = crs.slice(0, 3);
@@ -766,7 +771,7 @@ class Game {
 
     // Nearby resources
     if (this._mining) {
-      const nodes = this._mining.getNodesNear(playerPos, SCAN_RANGE);
+      const nodes = this._mining.getNodesNear(playerPos, SCANNER_RANGE);
       if (nodes.length > 0) {
         lines.push(`──── Resources (${nodes.length} detected) ────`);
         // Group by type

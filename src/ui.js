@@ -9,6 +9,11 @@ const RARITY_COLORS = {
   epic: '#9c27b0', legendary: '#ffd700', mythic: '#ff6600',
 };
 
+const WIND_DISPLAY_THRESHOLD = 1.5;  // m/s – show wind speed label above this strength
+const PULSE_BASE              = 0.03; // minimum vignette opacity base
+const PULSE_SPEED             = 2.0;  // radians/sec for vignette pulse sine wave
+const PULSE_AMPLITUDE         = 0.07; // max additional opacity from pulse
+
 // ─── Tiny DOM helpers ─────────────────────────────────────────────────────────
 function el(tag, cls, txt) {
   const e = document.createElement(tag);
@@ -747,7 +752,7 @@ export class GameHUD {
       Sandstorm: '🌪', 'Toxic Fog': '☁', Aurora: '✨',
     };
     const icon = icons[name] || '🌤';
-    this._el.weatherLbl.textContent = `${icon} ${name}` + (windStrength > 1.5 ? ` · Wind ${windStrength.toFixed(1)}` : '');
+    this._el.weatherLbl.textContent = `${icon} ${name}` + (windStrength > WIND_DISPLAY_THRESHOLD ? ` · Wind ${windStrength.toFixed(1)}` : '');
   }
 
   // ─── Hazard vignette overlay ──────────────────────────────────────────────────
@@ -763,7 +768,7 @@ export class GameHUD {
     const col = HAZARD_COLORS[hazardType];
     const intensity = Math.min(1, ((planet?.toxicity || 0) + (planet?.radiation || 0)) * 1.5);
     if (col && intensity > 0.05) {
-      const pulse = 0.03 + Math.abs(Math.sin(this._elapsed * 2)) * 0.07;
+      const pulse = PULSE_BASE + Math.abs(Math.sin(this._elapsed * PULSE_SPEED)) * PULSE_AMPLITUDE;
       this._el.vignette.style.boxShadow = `inset 0 0 120px 40px ${col}${(intensity * 0.4 + pulse).toFixed(3)})`;
     } else {
       this._el.vignette.style.boxShadow = '';
