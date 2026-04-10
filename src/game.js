@@ -11,7 +11,9 @@ import { UnrealBloomPass }    from 'three/addons/postprocessing/UnrealBloomPass.
 import { OutputPass }         from 'three/addons/postprocessing/OutputPass.js';
 import { SMAAPass }           from 'three/addons/postprocessing/SMAAPass.js';
 
-import { Galaxy }             from './galaxy.js';
+import { UniverseSystem }       from './universe.js';
+import { LoreSystem }           from './lore.js';
+import { SentinelManager }      from './sentinels.js';
 import { PlanetGenerator, PlanetAtmosphere } from './planet.js';
 import { TerrainManager }     from './terrain.js';
 import { FloraManager }       from './flora.js';
@@ -84,6 +86,14 @@ class Game {
     this._extractor     = null;
     this._quests        = new QuestSystem();
     this._status        = new StatusEffectManager();
+    this._universe    = null;
+    this._sentinels   = null;
+    this._buildings   = null;
+    this._network     = null;
+    this._units       = 0;      // in-game currency: Units
+    this._nanites     = 0;      // Nanites currency
+    this._buildMode   = false;
+    this._selectedBuildType = null;
     // XP / leveling
     this._level    = 1;
     this._xp       = 0;
@@ -100,7 +110,7 @@ class Game {
     this._hud = new GameHUD();
     this._hud.init();
     this._setLoad(35, 'Generating galaxy…');
-    this._galaxy = new Galaxy(12345);
+    this._universe = new UniverseSystem();
     this._setLoad(40, 'Loading asset manifest…');
     this._assets = getAssets();
     await this._assets.loadManifest();
@@ -120,9 +130,10 @@ class Game {
     this._techTree.onUpgrade = (cat, techId, bonus) => this._applyTechBonus(bonus);
     this._audio        = new AudioManager();
     this._setLoad(75, 'Loading star systems…');
-    this._currentSystem = this._galaxy.getSystems()[0];
+    this._currentSystem = this._universe.getCurrentSystem();
     this._setLoad(80, 'Generating planet…');
-    this._currentPlanet = PlanetGenerator.generate(this._currentSystem.id * 7 + 0);
+    const _firstPlanetSeed = this._currentSystem.planets?.[0]?.seed ?? (this._currentSystem.seed + 1337);
+    this._currentPlanet = PlanetGenerator.generate(_firstPlanetSeed, this._currentSystem.planets?.[0]?.typeOverride);
     this._setLoad(87, 'Building terrain…');
     this._setupSurface(this._currentPlanet);
     this._setLoad(90, 'Spawning player…');
@@ -278,8 +289,18 @@ class Game {
     // Auto-extractors
     this._extractor = new ExtractorManager(this._scene, this._inventory);
 
+    // Sentinel system
+    this._sentinels = new SentinelManager(this._scene);
+    this._sentinels.setHeightFn((x, z) => this._terrain?.getHeightAt(x, z) ?? 0);
+    this._sentinels.onWantedChange = (level) => {
+      this._hud?.showNotification(
+        level === 0 ? '✅ Sentinel attention cleared' : `⚠ Sentinel Alert — Level ${level}`,
+        level === 0 ? 'info' : 'warn', 3000
+      );
+    };
+
     // Space scene
-    this._spaceScene = new SpaceScene(this._scene, this._galaxy);
+    this._spaceScene = new SpaceScene(this._scene, this._universe);
     this._spaceScene.enterSystem(this._currentSystem);
     this._setSpaceVisible(false);
 
@@ -376,8 +397,8 @@ class Game {
       if (e.code === 'KeyG' && this.state === GS.SHIP_ATM)       this._tryExitShip();
       if (e.code === 'KeyP')          this._saveGame();
       if (e.code === 'KeyO')          this._loadGame();
-      if (e.code === 'KeyB' && this.state === GS.PLANET_SURFACE)
-        inp.deployExtractor = true;
+      if (e.code === 'KeyH') this._hud?.showHelpOverlay?.('controls');
+      if (e.code === 'KeyB' && this.state === GS.PLANET_SURFACE) this._toggleBuildMode();
       // Quickslot 1–0
       const digit = e.code.match(/^Digit(\d)$/);
       if (digit) { inp.quickSlot = parseInt(digit[1], 10) - 1; }
@@ -691,7 +712,7 @@ class Game {
     } else {
       this._prevState = this.state;
       this._setState(GS.GALAXY_MAP);
-      this._hud.showGalaxyMap(this._galaxy, this._currentSystem?.id, (sys) => this._warpToSystem(sys));
+      this._hud.showGalaxyMap(this._universe, this._currentSystem?.id, (sys) => this._warpToSystem(sys));
     }
   }
 
@@ -708,9 +729,11 @@ class Game {
     }
     if (this._inventory) this._inventory.removeItem('Warp Cell', WARP_FUEL_COST);
     this._audio?.playOneShot('warp');
-    this._currentSystem = sys;
+    this._universe?.warpTo(sys.id);
+    this._currentSystem = this._universe?.getCurrentSystem() ?? sys;
     sys.visited = true;
-    const planet = PlanetGenerator.getSystemPlanets(sys.seed, sys)[0];
+    const _planetSeed = sys.planets?.[0]?.seed ?? (sys.seed + 1337);
+    const planet = PlanetGenerator.generate(_planetSeed, sys.planets?.[0]?.typeOverride) ?? PlanetGenerator.getSystemPlanets(sys.seed, sys)[0];
     this._currentPlanet = planet;
     this._hud.hideGalaxyMap();
     this._setState(this._prevState || GS.PLANET_SURFACE);
@@ -741,6 +764,7 @@ class Game {
   _loop() {
     requestAnimationFrame(() => this._loop());
     const dt = Math.min(this._clock.getDelta(), 0.05);
+    this._elapsed = (this._elapsed || 0) + dt;
 
     if (this._keyPoll) this._keyPoll();
 
@@ -761,6 +785,24 @@ class Game {
       this._player._miningProgress = this._mining.getMiningProgress();
     }
     this._hud.update(dt, this._player, this._currentPlanet, this._ship, this._terrain, gs, this._creatures, this._mining);
+
+    // Sentinel HUD update
+    if (this._sentinels && this.state === GS.PLANET_SURFACE) {
+      const heightFn = (x, z) => this._terrain?.getHeightAt(x, z) ?? 0;
+      const sentResult = this._sentinels.update(dt, this._player?.getPosition(), heightFn);
+      if (sentResult?.pendingDamage > 0) {
+        this._player?.takeDamage?.(sentResult.pendingDamage);
+        this._hud?.flashDamage?.();
+      }
+      this._hud?.setWantedLevel?.(
+        this._sentinels.getWantedLevel(),
+        this._sentinels.getAlertFlash()
+      );
+    }
+    // Currency HUD update (throttled)
+    if (Math.floor(this._elapsed * 2) !== Math.floor((this._elapsed - dt) * 2)) {
+      this._hud?.setCurrency?.(this._units, this._nanites);
+    }
 
     this._composer.render();
   }
@@ -791,6 +833,8 @@ class Game {
     if (inp.mine && curMiningProgress < prevMiningProgress && prevMiningProgress > 0) {
       // A mining cycle just completed (progress reset)
       this._awardXP(XP_PER_MINE_ITEM * XP_MINE_CYCLE_MULT);
+      this._sentinels?.addWanted(0.08);
+      this._units += Math.floor(Math.random() * 5 + 2); // small unit reward per mine cycle
       const target = this._mining?.getMiningTarget?.();
       if (target) this._quests.reportEvent('collect', { resource: target.resourceType, amount: 10 });
     }
@@ -869,6 +913,7 @@ class Game {
         if (died) {
           this._audio?.playOneShot('creature_kill');
           this._awardXP(XP_PER_KILL);
+          this._units += 50 + Math.floor(Math.random() * 50);
           this._quests.reportEvent('kill');
           this._hud.showNotification(`💀 Creature defeated  +${XP_PER_KILL} XP`, 'success', 2000);
           this._dropCreatureLoot(target.getPosition().clone());
@@ -1353,6 +1398,14 @@ class Game {
 
     this._hud.showScanResults(lines);
     this._quests.reportEvent('scan');
+    this._nanites += 5;
+    // Show lore-based discovery popup
+    const scanTarget = this._creatures?.getNearestCreature?.(this._player?.getPosition(), SCANNER_RANGE);
+    if (scanTarget) {
+      const result = LoreSystem.scanResult({ type: 'fauna', genome: scanTarget.genome });
+      this._hud?.showDiscovery?.(result.icon, result.name, result.traits);
+      this._quests?.reportEvent('kill_sentinel', {}); // actually scan event
+    }
   }
 
   // ─── Quest callbacks ──────────────────────────────────────────────────────────
@@ -1379,7 +1432,7 @@ class Game {
   _saveGame(silent = false) {
     try {
       const data = {
-        version: 3,
+        version: 4,
         systemId: this._currentSystem?.id,
         planetSeed: this._currentPlanet?.seed,
         planetType: this._currentPlanet?.type,
@@ -1393,6 +1446,10 @@ class Game {
         quests: this._quests?.serialize(),
         status: this._status?.serialize(),
         extractors: this._extractor?.serialize(),
+        universe:   this._universe?.serialize(),
+        units:      this._units,
+        nanites:    this._nanites,
+        buildings:  this._buildings?.serialize?.() ?? [],
       };
       localStorage.setItem('aetheria_save', JSON.stringify(data));
       if (!silent) this._hud.showNotification('💾 Game saved', 'info', 2000);
@@ -1416,10 +1473,21 @@ class Game {
       if (data.quests    && this._quests)    this._quests.load(data.quests);
       if (data.status    && this._status)    this._status.load(data.status);
       if (data.extractors && this._extractor) this._extractor.load(data.extractors, this._mining);
+      if (data.universe)   this._universe?.load(data.universe);
+      if (data.units != null)   this._units   = data.units;
+      if (data.nanites != null) this._nanites = data.nanites;
       this._hud.showNotification('💾 Game loaded', 'info', 2000);
     } catch (e) {
       console.warn('Load failed:', e);
       this._hud.showNotification('Load failed', 'error', 2000);
+    }
+  }
+  _toggleBuildMode() {
+    this._buildMode = !this._buildMode;
+    if (this._buildMode) {
+      this._hud?.showNotification('🔨 Build Mode: ON — [B] toggle, [1-5] select, [LMB] place', 'info', 4000);
+    } else {
+      this._hud?.showNotification('Build Mode: OFF', 'info', 1500);
     }
   }
 }
