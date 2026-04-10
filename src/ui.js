@@ -257,6 +257,14 @@ export class GameHUD {
     this._el.dmgLayer = el('div', 'dmg-layer');
     hud.appendChild(this._el.dmgLayer);
 
+    // ── Danger vignette (low HP) ──────────────────────────────────────────────
+    this._el.dangerVignette = el('div', 'danger-vignette');
+    document.body.appendChild(this._el.dangerVignette);
+
+    // ── Damage flash overlay ──────────────────────────────────────────────────
+    this._el.damageFlash = el('div', 'damage-flash');
+    document.body.appendChild(this._el.damageFlash);
+
     // ── Minimap ───────────────────────────────────────────────────────────────
     const mmWrap  = el('div', 'minimap-wrap');
     this._el.minimap = document.createElement('canvas');
@@ -684,6 +692,7 @@ export class GameHUD {
     }
 
     // Location
+    const pos = player.getPosition();
     if (planet && this._el.locPlanet) {
       this._el.locPlanet.textContent = planet.name || 'Unknown Planet';
     }
@@ -691,7 +700,6 @@ export class GameHUD {
       const biome = terrain ? terrain.getBiomeAt?.(pos.x, pos.z) : null;
       this._el.locBiome.textContent = biome ? biome.type : (planet.type || '');
     }
-    const pos = player.getPosition();
     if (this._el.locCoords) {
       this._el.locCoords.textContent = `${pos.x.toFixed(0)}, ${pos.y.toFixed(0)}, ${pos.z.toFixed(0)}`;
     }
@@ -714,11 +722,20 @@ export class GameHUD {
       if (this._el.flightHud) this._el.flightHud.classList.add('hidden');
     }
 
-    // Mining ring
+    // Mining ring – update arc with actual progress
     if (player.isMining) {
       if (this._el.miningRing) this._el.miningRing.classList.remove('hidden');
+      if (this._el.miningArc && player._miningProgress != null) {
+        this._setArcFill(this._el.miningArc, player._miningProgress);
+      }
     } else {
       if (this._el.miningRing) this._el.miningRing.classList.add('hidden');
+    }
+
+    // Danger vignette – show when HP < 30 %
+    if (this._el.dangerVignette) {
+      const hpPct = stats.hp / stats.maxHp;
+      this._el.dangerVignette.classList.toggle('active', hpPct < 0.30);
     }
 
     // Scan ring
@@ -733,6 +750,28 @@ export class GameHUD {
 
     // Notification drain
     this._notifT -= dt;
+  }
+
+  // ─── Damage flash (call on player hit) ────────────────────────────────────────
+  flashDamage() {
+    if (!this._el.damageFlash) return;
+    const el2 = this._el.damageFlash;
+    el2.classList.remove('flash');
+    void el2.offsetWidth; // reflow to restart animation
+    el2.classList.add('flash');
+    setTimeout(() => el2.classList.remove('flash'), 400);
+  }
+
+  // ─── Level-up flash ───────────────────────────────────────────────────────────
+  flashLevelUp() {
+    const f = document.createElement('div');
+    f.className = 'levelup-flash';
+    f.style.position = 'fixed';
+    f.style.inset = '0';
+    f.style.pointerEvents = 'none';
+    f.style.zIndex = '8';
+    document.body.appendChild(f);
+    setTimeout(() => f.remove(), 1300);
   }
 
   // ─── Minimap ──────────────────────────────────────────────────────────────────

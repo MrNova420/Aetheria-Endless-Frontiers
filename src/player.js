@@ -240,7 +240,7 @@ export class Player {
     if (input.right)   moveDir.addScaledVector(right, 1);
     if (moveDir.lengthSq() > 0) moveDir.normalize();
 
-    const spd = input.sprint ? cfg.SPRINT_SPEED : cfg.WALK_SPEED;
+    const spd = (input.sprint ? cfg.SPRINT_SPEED : cfg.WALK_SPEED) * (input._weatherSpeedMult ?? 1.0);
 
     // ── Horizontal velocity ──────────────────────────────────────────────────
     const moving = moveDir.lengthSq() > 0;

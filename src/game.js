@@ -522,13 +522,36 @@ class Game {
   respawn() {
     this._hud.hideDeath();
     if (this._player) {
-      this._player.hp     = this._player.maxHp;
-      this._player.shield = this._player.maxShield;
+      // Full restore
+      this._player.hp      = this._player.maxHp;
+      this._player.shield  = this._player.maxShield;
       this._player.lifeSup = 100;
-      const sy = this._terrain ? this._terrain.getHeightAt(0, 0) : 5;
-      this._player.setPosition(new THREE.Vector3(0, sy + 1, 0));
+      // Drop half inventory at death site (simulate penalty)
+      if (this._inventory && this._mining) {
+        const deathPos = this._player.getPosition().clone();
+        const items = this._inventory.getAllItems();
+        const toDrop = items.filter(() => Math.random() < 0.5);
+        for (const it of toDrop) {
+          if (it.amount > 0) {
+            const scatter = new THREE.Vector3(
+              deathPos.x + (Math.random()-0.5) * 4,
+              deathPos.y,
+              deathPos.z + (Math.random()-0.5) * 4
+            );
+            this._mining.spawnResourceNode(scatter, it.type, Math.ceil(it.amount * 0.5), this._currentPlanet?.seed || 0);
+            this._inventory.removeItem(it.type, Math.ceil(it.amount * 0.5));
+          }
+        }
+      }
+      // Respawn at ship
+      const shipPos = this._ship?.getPosition();
+      const spawnX  = shipPos?.x ?? 0;
+      const spawnZ  = shipPos?.z ?? 0;
+      const sy      = this._terrain ? this._terrain.getHeightAt(spawnX, spawnZ) : 5;
+      this._player.setPosition(new THREE.Vector3(spawnX, sy + 1, spawnZ));
     }
     this._setState(GS.PLANET_SURFACE);
+    this._hud.showNotification('💫 Respawned. Some inventory was lost at death site.', 'warn', 5000);
   }
 
   _tryEnterShip() {
@@ -595,6 +618,7 @@ class Game {
       return;
     }
     if (this._inventory) this._inventory.removeItem('Warp Cell', WARP_FUEL_COST);
+    this._audio?.playOneShot('warp');
     this._currentSystem = sys;
     sys.visited = true;
     const planet = PlanetGenerator.getSystemPlanets(sys.seed, sys)[0];
@@ -638,6 +662,9 @@ class Game {
 
     // HUD update
     const gs = this.state === GS.SHIP_ATM ? 'ship' : this.state === GS.SPACE_LOCAL ? 'space' : 'surface';
+    if (this._player && this._mining) {
+      this._player._miningProgress = this._mining.getMiningProgress();
+    }
     this._hud.update(dt, this._player, this._currentPlanet, this._ship, this._terrain, gs, this._creatures);
 
     this._composer.render();
@@ -701,7 +728,15 @@ class Game {
           const dmg = cr.genome.bodySize * 8;
           const actual = this._player.applyDamage(dmg, 'creature');
           if (actual > 0) {
+            this._audio?.playOneShot('hit');
+            this._hud.flashDamage?.();
             this._hud.showNotification(`⚔ Attacked! −${Math.floor(actual)} HP`, 'warn', 1500);
+            // Show damage number at roughly screen-centre
+            this._hud.showDamageNumber(
+              window.innerWidth  * 0.5 + (Math.random()-0.5)*80,
+              window.innerHeight * 0.5 + (Math.random()-0.5)*40,
+              actual, 'enemy'
+            );
           }
         }
       }
@@ -717,11 +752,16 @@ class Game {
       if (targets.length > 0) {
         const t = targets[0];
         const died = t.takeDamage(ATTACK_DAMAGE);
+        this._audio?.playOneShot('attack_shoot');
         this._hud.showNotification(`🔫 Hit! −${ATTACK_DAMAGE} dmg`, 'success', 800);
         if (died) {
+          this._audio?.playOneShot('creature_kill');
           this._awardXP(XP_PER_KILL);
           this._hud.showNotification(`💀 Creature defeated  +${XP_PER_KILL} XP`, 'success', 2000);
+          this._dropCreatureLoot(t.getPosition().clone());
         }
+      } else {
+        this._audio?.playOneShot('attack_shoot');
       }
     }
 
@@ -775,9 +815,25 @@ class Game {
       this._xp -= this._xpToNext;
       this._level++;
       this._xpToNext = Math.floor(XP_BASE * Math.pow(XP_GROWTH, this._level - 1));
+      this._audio?.playOneShot('level_up');
+      this._hud.flashLevelUp?.();
       this._hud.showNotification(`⬆ LEVEL UP!  Now Level ${this._level}`, 'success', 3500);
-      // Heal on level-up
       if (this._player) this._player.heal(30);
+    }
+  }
+
+  // ─── Creature loot drop ─────────────────────────────────────────────────────
+  _dropCreatureLoot(worldPos) {
+    if (!this._mining) return;
+    const r = Math.random();
+    if (r < 0.55) {
+      const types = ['Carbon', 'Ferrite Dust', 'Di-Hydrogen', 'Sodium'];
+      const type   = types[Math.floor(Math.random() * types.length)];
+      const amount = 5 + Math.floor(Math.random() * 25);
+      this._mining.spawnResourceNode(
+        worldPos.add(new THREE.Vector3((Math.random()-0.5)*2, 0, (Math.random()-0.5)*2)),
+        type, amount, this._currentPlanet?.seed || 0
+      );
     }
   }
 

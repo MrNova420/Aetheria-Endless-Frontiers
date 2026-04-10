@@ -410,9 +410,68 @@ Open browser DevTools (F12) and check the Console for:
 
 Useful dev commands in browser console:
 ```js
-window.game.state          // current game state string
-window.game._player.hp     // player HP
-window.game._inventory     // inventory object
-window.game._currentPlanet // current planet config
-window.game._assets.stats  // { total, loaded, failed, real }
+window.game.state              // current game state string
+window.game._player.hp         // player HP
+window.game._level             // current player level
+window.game._xp                // current XP
+window.game._inventory         // inventory object
+window.game._currentPlanet     // current planet config
+window.game._assets.stats      // { total, loaded, failed, real }
+window.game._weather?.getWeatherName()  // active weather
+// Give yourself items:
+window.game._inventory.addItem('Gold', 50);
+// Award XP:
+window.game._awardXP(500);
+// Warp to a specific system:
+window.game._galaxy.getSystems()[3]  // pick a system
 ```
+
+---
+
+## 13. Combat System
+
+The player fires a blaster shot on **right-click** (or gamepad R2). The weapon:
+- Deals `ATTACK_DAMAGE = 25` points per hit
+- Has `ATTACK_COOLDOWN = 0.5s` between shots
+- Targets the nearest alive creature within `ATTACK_RANGE = 12` units
+- Plays `attack_shoot` SFX, then `creature_kill` SFX on death
+- Awards `XP_PER_KILL = 35` XP per kill
+- Has a 55 % chance to drop a loot resource node at the kill site
+
+Hostile creatures counter-attack automatically every `COMBAT_TICK_INTERVAL` seconds if within melee range.
+
+---
+
+## 14. XP & Leveling
+
+```
+XP awarded by:
+  Mine cycle completion  → +30 XP per cycle
+  Creature kill          → +35 XP
+  System warp            → +50 XP
+  Scanner discovery      → (future)
+
+Level formula:
+  xpToNext(n) = floor(100 × 1.35^(n-1))
+
+Level-up effects:
+  • +30 HP heal
+  • Fanfare SFX + level-up flash
+  • Notification toast
+```
+
+To add new XP sources, call `game._awardXP(amount)` from any tick method.
+
+---
+
+## 15. Weather Gameplay Effects
+
+| Weather | Speed Mult | Life Support Drain |
+|---------|-----------|-------------------|
+| Normal  | 1.0 ×     | —                 |
+| Storm   | 0.7 ×     | —                 |
+| Sandstorm | 0.45 ×  | —                 |
+| Blizzard  | 0.45 ×  | −2/s              |
+| Toxic Fog | 1.0 ×   | −4/s              |
+
+Effects are applied each tick in `_tickSurface()` and propagated via `inp._weatherSpeedMult` to the player controller.

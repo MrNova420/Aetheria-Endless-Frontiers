@@ -230,6 +230,42 @@ export class AudioManager {
         o.connect(g); g.connect(this.sfxGain); o.start(t); o.stop(t+0.15);
         break;
       }
+      case 'attack_shoot': {
+        // Sci-fi blaster pew
+        const o = this.ctx.createOscillator(); o.type='sawtooth';
+        o.frequency.setValueAtTime(800, t);
+        o.frequency.exponentialRampToValueAtTime(120, t+0.18);
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.22, t); g.gain.linearRampToValueAtTime(0.0, t+0.2);
+        const filter = this.ctx.createBiquadFilter(); filter.type='lowpass'; filter.frequency.value=3000;
+        o.connect(filter); filter.connect(g); g.connect(this.sfxGain);
+        o.start(t); o.stop(t+0.22);
+        break;
+      }
+      case 'level_up': {
+        // Rising arpeggio fanfare
+        const notes2 = [523.25, 659.25, 783.99, 1046.5, 1318.5];
+        notes2.forEach((freq, i) => {
+          const o = this.ctx.createOscillator(); o.type='triangle';
+          o.frequency.value = freq;
+          const g = this.ctx.createGain();
+          g.gain.setValueAtTime(0.0, t + i * 0.09);
+          g.gain.linearRampToValueAtTime(0.22, t + i * 0.09 + 0.04);
+          g.gain.linearRampToValueAtTime(0.0, t + i * 0.09 + 0.28);
+          const rev = this._makeReverb(1.5);
+          o.connect(g); g.connect(rev); rev.connect(this.sfxGain);
+          o.start(t + i * 0.09); o.stop(t + i * 0.09 + 0.35);
+        });
+        break;
+      }
+      case 'creature_kill': {
+        const n = this._makeNoise(0.12);
+        const f = this.ctx.createBiquadFilter(); f.type='lowpass'; f.frequency.value=700;
+        const g2 = this.ctx.createGain();
+        g2.gain.setValueAtTime(0.25, t); g2.gain.exponentialRampToValueAtTime(0.001, t+0.25);
+        n.connect(f); f.connect(g2); g2.connect(this.sfxGain); n.start(t);
+        break;
+      }
     }
   }
 
