@@ -656,7 +656,11 @@ class Game {
     this._hud.showNotification(`🚀 Warped to ${sys.name}`, 'info', 3500);
     this._awardXP(50);
     this._quests.reportEvent('warp');
-    this._quests.start('survival_basics'); // ensure quest chain continues on warp
+    // Auto-start chain quest if not already active or completed
+    if (!this._quests.isCompleted('survival_basics') &&
+        !this._quests.getActive().some(q => q.id === 'survival_basics')) {
+      this._quests.start('survival_basics');
+    }
   }
 
   // ─── Resize ──────────────────────────────────────────────────────────────────
@@ -829,7 +833,9 @@ class Game {
     // ─── Status effects ──────────────────────────────────────────────────────
     const expired = this._status.update(dt, this._player);
     for (const id of expired) {
-      this._hud.showNotification(`${id} cleared`, 'info', 1500);
+      const def = StatusEffectManager.DEFS[id];
+      const label = def ? def.label : id;
+      this._hud.showNotification(`${label} cleared`, 'info', 1500);
     }
     // Apply status speed multiplier on top of weather multiplier
     inp._statusSpeedMult = this._status.getSpeedMult();
@@ -868,10 +874,9 @@ class Game {
     }
 
     // ─── Quest events ─────────────────────────────────────────────────────────
-    if (inp.mine && this._mining?.getMiningProgress() > 0) {
-      // Report mine progress continuously – quest will cap
-      this._quests.reportEvent('collect', { resource: this._mining.getMiningTarget?.()?.resourceType, amount: 0 });
-    }
+    // Quest collect events are fired in the mining cycle completion block above
+    // (where amount > 0 is guaranteed). Remove the zero-amount polling here.
+
     // Update quest HUD summary
     const questSummary = this._quests.getHudSummary();
     this._hud.setQuestSummary?.(questSummary);

@@ -111,8 +111,8 @@ export class QuestSystem {
           this._completed.add(qs.id);
           this._active.delete(qs.id);
           this._emit('completed', qs);
-          // Auto-start chain quest
-          if (qs.def.chain) setTimeout(() => this.start(qs.def.chain), 0);
+          // Auto-start chain quest synchronously
+          if (qs.def.chain) this.start(qs.def.chain);
         }
       }
     }

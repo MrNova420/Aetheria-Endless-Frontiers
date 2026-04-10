@@ -239,7 +239,10 @@ class Creature {
       if (this._dieTimer >= 3.0 && !this._removed) {
         this._removed = true;
         this.scene.remove(this.mesh);
-        this.mesh.traverse(c => { if (c.geometry) c.geometry.dispose(); });
+        this.mesh.traverse(c => {
+          if (c.geometry) c.geometry.dispose();
+          if (c.material) c.material.dispose();
+        });
       }
       return;
     }
