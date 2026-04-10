@@ -30,8 +30,11 @@ index.html
         ├── src/planet.js  ← generates planet data (seed → config object)
         ├── src/terrain.js ← chunks terrain mesh from planet config
         ├── src/flora.js   ← instanced plants spawned on terrain
-        ├── src/creatures.js ← AI fauna spawned per chunk
+        ├── src/creatures.js ← AI fauna spawned per chunk (+ boss variant)
         ├── src/mining.js  ← resource nodes + extraction
+        ├── src/extractor.js ← Auto-Extractor factory elements (Satisfactory-style)
+        ├── src/quests.js  ← quest/objective system with chain support
+        ├── src/status.js  ← player status effects (burning, frozen, poisoned, …)
         ├── src/player.js  ← input → physics → camera
         ├── src/ship.js    ← 3-mode flight (LANDED/ATM/SPACE)
         ├── src/space.js   ← space scene (stars, planets, station)
@@ -39,7 +42,7 @@ index.html
         ├── src/inventory.js ← 48-slot item grid
         ├── src/crafting.js  ← recipes + tech tree
         ├── src/audio.js   ← Web Audio API sounds
-        ├── src/ui.js      ← HUD, menus, notifications
+        ├── src/ui.js      ← HUD, menus, notifications, quest tracker, boss bar
         ├── src/shaders.js ← custom GLSL (terrain, atm, water, flora, space)
         ├── src/noise.js   ← simplex/perlin noise utils
         └── src/config.js  ← all numeric constants
@@ -475,3 +478,95 @@ To add new XP sources, call `game._awardXP(amount)` from any tick method.
 | Toxic Fog | 1.0 ×   | −4/s              |
 
 Effects are applied each tick in `_tickSurface()` and propagated via `inp._weatherSpeedMult` to the player controller.
+
+---
+
+## 16. Status Effects System (`src/status.js`)
+
+`StatusEffectManager` handles short-term buffs/debuffs applied by environment or combat.
+
+```
+apply(effectId)          – apply or refresh effect
+remove(effectId)         – manually clear
+has(effectId)            – check active
+update(dt, player)       – tick DoT, decrement duration, return expired list
+getSpeedMult()           – combined movement speed multiplier from all effects
+getHudIcons()            – array of { icon, label, remaining } for HUD chips
+serialize() / load()     – persist/restore
+```
+
+| Effect    | Duration | HP DoT | LS Drain | Speed | Applied by               |
+|-----------|----------|--------|----------|-------|--------------------------|
+| burning   | 6 s      | 8/s    | —        | 1.0 × | BURNING planet type       |
+| frozen    | 8 s      | —      | 1.5/s    | 0.5 × | Blizzard weather          |
+| poisoned  | 10 s     | 4/s    | 3/s      | 0.9 × | Toxic Fog weather         |
+| energised | 15 s     | —      | —        | 1.4 × | EXOTIC planet Aurora      |
+| shielded  | 12 s     | —      | —        | 1.0 × | craft Shield Battery (TBD)|
+
+---
+
+## 17. Quest System (`src/quests.js`)
+
+`QuestSystem` tracks multi-objective quests and fires events for the HUD.
+
+```
+start(questId)                    – activate quest; auto-chains on complete
+reportEvent(type, payload)        – feed game events (kill/collect/scan/warp/craft)
+getHudSummary()                   – first incomplete objective for quest tracker HUD
+on('started'|'progress'|'completed', handler)
+serialize() / load()
+```
+
+**Starter quest chain:**
+1. `first_steps` – Collect 100 Carbon + 50 Ferrite Dust → reward 200 XP + Di-Hydrogen
+2. `survival_basics` – Kill 3 creatures + craft Warp Cell → reward 500 XP + Chromatic Metal
+3. `explorer_path` – Scan 5 times + warp to new system → reward 1000 XP + Emeril/Indium
+
+---
+
+## 18. Auto-Extractor (`src/extractor.js`)
+
+Satisfactory-inspired factory module. Deploy near resource nodes to auto-harvest.
+
+**Crafting cost:** 80 Pure Ferrite + 2 Carbon Nanotubes + 40 Copper  
+**Deploy:** Press `B` on planet surface  
+**Harvest:** 5 units every 10 seconds from nearest node within 14 world-units  
+**Visual:** Animated piston + spinning drill head + tether beam to target node  
+**Persistence:** Extractor positions saved as `extractors[]` in save slot v3
+
+```
+ExtractorManager.place(position, playerInventory, miningSystem)
+ExtractorManager.update(dt, miningSystem)
+ExtractorManager.serialize() / load(data, miningSystem)
+ExtractorManager.getCraftCost()
+```
+
+---
+
+## 19. Boss Creatures
+
+Boss creatures spawn with 5% probability per chunk on planets with `faunaDensity > 0`.
+
+| Property     | Value                               |
+|--------------|-------------------------------------|
+| Scale        | 3.0 – 4.5 ×                         |
+| HP           | 500 – 1000                          |
+| Aggression   | Always hostile                      |
+| Biome tint   | Vivid planet-palette color          |
+| Bioluminescent | Always                           |
+| Boss bar     | Shown when within 60 world-units   |
+| HP bar color | Green → Orange → Red as HP drops  |
+
+Boss XP = 35 (same as normal, bosses are rare; designed to feel rewarding via loot drop).
+
+---
+
+## 20. Creature Enhancements
+
+| Feature              | Detail                                                       |
+|----------------------|--------------------------------------------------------------|
+| Biome tinting        | `tintGenomeForBiome()` lerps hue+saturation toward BIOME_TINTS |
+| Damage flash         | 180ms red overlay via `_updateFlash(dt)` in `Creature.update()` |
+| Death greyscale      | All materials set to #444 on `die()`                         |
+| `getHpPct()`         | Returns 0–1 for boss bar                                     |
+| `getNearestBoss()`   | Filters `_all` for alive isBoss creatures within radius      |

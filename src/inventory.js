@@ -54,6 +54,11 @@ export class Inventory {
 
   getSlots() { return this.slots; }
 
+  /** Returns a copy of all filled slots as { type, amount }[] */
+  getAllItems() {
+    return this.slots.filter(s => s !== null).map(s => ({ type: s.type, amount: s.amount }));
+  }
+
   hasIngredients(recipe) {
     for (const [type, amount] of Object.entries(recipe.inputs)) {
       if (this.getAmount(type) < amount) return false;

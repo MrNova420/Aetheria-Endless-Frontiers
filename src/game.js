@@ -27,6 +27,9 @@ import { AudioManager }       from './audio.js';
 import { GameHUD }             from './ui.js';
 import { getAssets }           from './assets.js';
 import { WeatherSystem }       from './weather.js';
+import { ExtractorManager }   from './extractor.js';
+import { QuestSystem, QUEST_DEFS } from './quests.js';
+import { StatusEffectManager } from './status.js';
 
 // ─── Game states ──────────────────────────────────────────────────────────────
 const GS = {
@@ -77,6 +80,9 @@ class Game {
     this._scanCooldown  = 0;
     this._attackCooldown = 0;
     this._weather       = null;
+    this._extractor     = null;
+    this._quests        = new QuestSystem();
+    this._status        = new StatusEffectManager();
     // XP / leveling
     this._level    = 1;
     this._xp       = 0;
@@ -115,6 +121,9 @@ class Game {
     this._setLoad(90, 'Spawning player…');
     this._setupPlayer();
     this._setupShip();
+    this._setLoad(95, 'Starting quests…');
+    this._quests.start('first_steps');
+    this._setupQuestCallbacks();
     this._setLoad(100, 'Ready!');
     this._setupInput();
     this._setupTouchControls();
@@ -218,6 +227,9 @@ class Game {
     // Weather system
     this._weather = new WeatherSystem(this._scene, planet);
 
+    // Auto-extractors (Satisfactory-style factory elements)
+    this._extractor = new ExtractorManager(this._scene, this._inventory);
+
     // Space scene (hidden until leaving atmosphere)
     this._spaceScene = new SpaceScene(this._scene, this._galaxy);
     this._spaceScene.enterSystem(this._currentSystem);
@@ -231,6 +243,7 @@ class Game {
     if (this._mining)    { this._mining.dispose();     this._mining    = null; }
     if (this._atmosphere){ this._atmosphere.dispose(); this._atmosphere= null; }
     if (this._weather)   { this._weather.dispose();    this._weather   = null; }
+    if (this._extractor) { this._extractor.dispose();  this._extractor = null; }
   }
 
   _setSpaceVisible(visible) {
@@ -274,6 +287,7 @@ class Game {
       forward: false, back: false, left: false, right: false,
       sprint: false, jump: false, mine: false, scan: false,
       attack: false, interact: false,
+      deployExtractor: false,
       mouseDX: 0, mouseDY: 0,
       // Ship
       shipThrust: 0, shipYaw: 0, shipPitch: 0, shipRoll: 0,
@@ -281,6 +295,9 @@ class Game {
       joyX: 0, joyY: 0,
       // Quickslot
       quickSlot: -1,
+      // Multipliers applied by weather/status
+      _weatherSpeedMult: 1.0,
+      _statusSpeedMult : 1.0,
     };
   }
 
@@ -299,6 +316,8 @@ class Game {
       if (e.code === 'KeyG' && this.state === GS.SHIP_ATM)       this._tryExitShip();
       if (e.code === 'KeyP')          this._saveGame();
       if (e.code === 'KeyO')          this._loadGame();
+      if (e.code === 'KeyB' && this.state === GS.PLANET_SURFACE)
+        inp.deployExtractor = true;
       // Quickslot 1–0
       const digit = e.code.match(/^Digit(\d)$/);
       if (digit) { inp.quickSlot = parseInt(digit[1], 10) - 1; }
@@ -636,6 +655,8 @@ class Game {
     this._setupShip();
     this._hud.showNotification(`🚀 Warped to ${sys.name}`, 'info', 3500);
     this._awardXP(50);
+    this._quests.reportEvent('warp');
+    this._quests.start('survival_basics'); // ensure quest chain continues on warp
   }
 
   // ─── Resize ──────────────────────────────────────────────────────────────────
@@ -701,6 +722,8 @@ class Game {
     if (inp.mine && curMiningProgress < prevMiningProgress && prevMiningProgress > 0) {
       // A mining cycle just completed (progress reset)
       this._awardXP(XP_PER_MINE_ITEM * XP_MINE_CYCLE_MULT);
+      const target = this._mining?.getMiningTarget?.();
+      if (target) this._quests.reportEvent('collect', { resource: target.resourceType, amount: 10 });
     }
 
     // Weather gameplay effects
@@ -762,6 +785,7 @@ class Game {
         if (died) {
           this._audio?.playOneShot('creature_kill');
           this._awardXP(XP_PER_KILL);
+          this._quests.reportEvent('kill');
           this._hud.showNotification(`💀 Creature defeated  +${XP_PER_KILL} XP`, 'success', 2000);
           this._dropCreatureLoot(t.getPosition().clone());
         }
@@ -802,6 +826,64 @@ class Game {
       this._hud.showDeath();
     }
 
+    // ─── Status effects ──────────────────────────────────────────────────────
+    const expired = this._status.update(dt, this._player);
+    for (const id of expired) {
+      this._hud.showNotification(`${id} cleared`, 'info', 1500);
+    }
+    // Apply status speed multiplier on top of weather multiplier
+    inp._statusSpeedMult = this._status.getSpeedMult();
+
+    // Apply biome-based status effects automatically
+    if (this._currentPlanet) {
+      const wn = this._weather?.getWeatherName();
+      if (this._currentPlanet.type === 'BURNING' && !this._status.has('burning'))
+        this._status.apply('burning');
+      if (wn === 'Blizzard' && !this._status.has('frozen'))
+        this._status.apply('frozen');
+      if (wn === 'Toxic Fog' && !this._status.has('poisoned'))
+        this._status.apply('poisoned');
+      if (this._currentPlanet.type === 'EXOTIC' && wn === 'Aurora' && !this._status.has('energised'))
+        this._status.apply('energised');
+    }
+    // Update HUD status icons
+    this._hud.setStatusEffects?.(this._status.getHudIcons());
+
+    // ─── Auto-Extractor update ────────────────────────────────────────────────
+    if (this._extractor) this._extractor.update(dt, this._mining);
+
+    // ─── Deploy extractor with B key ──────────────────────────────────────────
+    if (inp.deployExtractor && this._extractor) {
+      inp.deployExtractor = false;
+      const placed = this._extractor.place(pos, this._inventory, this._mining);
+      if (placed) {
+        this._hud.showNotification('⚙ Auto-Extractor placed!', 'success', 2500);
+        this._awardXP(25);
+      } else {
+        const cost = this._extractor.getCraftCost();
+        const missing = Object.entries(cost).filter(([t,a]) => this._inventory.getAmount(t) < a)
+          .map(([t,a]) => `${t} ×${a}`).join(', ');
+        this._hud.showNotification(`Cannot place extractor – need: ${missing}`, 'warn', 3000);
+      }
+    }
+
+    // ─── Quest events ─────────────────────────────────────────────────────────
+    if (inp.mine && this._mining?.getMiningProgress() > 0) {
+      // Report mine progress continuously – quest will cap
+      this._quests.reportEvent('collect', { resource: this._mining.getMiningTarget?.()?.resourceType, amount: 0 });
+    }
+    // Update quest HUD summary
+    const questSummary = this._quests.getHudSummary();
+    this._hud.setQuestSummary?.(questSummary);
+
+    // ─── Boss bar ─────────────────────────────────────────────────────────────
+    const boss = this._creatures?.getNearestBoss(pos, 60);
+    if (boss) {
+      this._hud.showBossBar?.(boss.genome.isBoss ? 'ALPHA CREATURE' : 'BOSS', boss.getHpPct());
+    } else {
+      this._hud.hideBossBar?.();
+    }
+
     // Day/night cycle
     this._updateDayNight(dt);
 
@@ -830,15 +912,14 @@ class Game {
   // ─── Creature loot drop ─────────────────────────────────────────────────────
   _dropCreatureLoot(worldPos) {
     if (!this._mining) return;
-    const r = Math.random();
-    if (r < CREATURE_LOOT_DROP_CHANCE) {
-      const types = ['Carbon', 'Ferrite Dust', 'Di-Hydrogen', 'Sodium'];
+    if (Math.random() < CREATURE_LOOT_DROP_CHANCE) {
+      const types  = ['Carbon', 'Ferrite Dust', 'Di-Hydrogen', 'Sodium'];
       const type   = types[Math.floor(Math.random() * types.length)];
       const amount = 5 + Math.floor(Math.random() * 25);
-      this._mining.spawnResourceNode(
-        worldPos.add(new THREE.Vector3((Math.random()-0.5)*2, 0, (Math.random()-0.5)*2)),
-        type, amount, this._currentPlanet?.seed || 0
+      const scatter = worldPos.clone().add(
+        new THREE.Vector3((Math.random()-0.5)*2, 0, (Math.random()-0.5)*2)
       );
+      this._mining.spawnResourceNode(scatter, type, amount, this._currentPlanet?.seed || 0);
     }
   }
 
@@ -959,13 +1040,34 @@ class Game {
     }
 
     this._hud.showScanResults(lines);
+    this._quests.reportEvent('scan');
+  }
+
+  // ─── Quest callbacks ──────────────────────────────────────────────────────────
+  _setupQuestCallbacks() {
+    this._quests.on('started', qs => {
+      this._hud.showNotification(`📜 New Quest: ${qs.def.title}`, 'info', 4000);
+    });
+    this._quests.on('progress', qs => {
+      // silent – quest HUD tracker updates in update loop
+    });
+    this._quests.on('completed', qs => {
+      this._hud.showNotification(`✅ Quest Complete: ${qs.def.title}`, 'success', 5000);
+      if (qs.def.reward) {
+        this._awardXP(qs.def.reward.xp || 0);
+        for (const [type, amt] of Object.entries(qs.def.reward.items || {})) {
+          this._inventory.addItem(type, amt);
+        }
+        this._hud.showNotification(`🎁 Reward: +${qs.def.reward.xp} XP`, 'success', 3000);
+      }
+    });
   }
 
   // ─── Save / Load ─────────────────────────────────────────────────────────────
   _saveGame(silent = false) {
     try {
       const data = {
-        version: 2,
+        version: 3,
         systemId: this._currentSystem?.id,
         planetSeed: this._currentPlanet?.seed,
         planetType: this._currentPlanet?.type,
@@ -976,6 +1078,9 @@ class Game {
         xp: this._xp,
         xpToNext: this._xpToNext,
         techTree: this._techTree?.serialize(),
+        quests: this._quests?.serialize(),
+        status: this._status?.serialize(),
+        extractors: this._extractor?.serialize(),
       };
       localStorage.setItem('aetheria_save', JSON.stringify(data));
       if (!silent) this._hud.showNotification('💾 Game saved', 'info', 2000);
@@ -996,6 +1101,9 @@ class Game {
       if (data.xp        != null)            this._xp      = data.xp;
       if (data.xpToNext  != null)            this._xpToNext = data.xpToNext;
       if (data.techTree  && this._techTree)  this._techTree.load(data.techTree);
+      if (data.quests    && this._quests)    this._quests.load(data.quests);
+      if (data.status    && this._status)    this._status.load(data.status);
+      if (data.extractors && this._extractor) this._extractor.load(data.extractors, this._mining);
       this._hud.showNotification('💾 Game loaded', 'info', 2000);
     } catch (e) {
       console.warn('Load failed:', e);

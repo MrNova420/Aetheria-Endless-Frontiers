@@ -311,6 +311,20 @@ export class GameHUD {
     // ── Scanning ring ─────────────────────────────────────────────────────────
     this._el.scanRing = el('div', 'scan-ring hidden');
     hud.appendChild(this._el.scanRing);
+
+    // ── Status effects row ────────────────────────────────────────────────────
+    this._el.statusRow = el('div', 'status-row');
+    hud.appendChild(this._el.statusRow);
+
+    // ── Quest tracker (top-right overlay) ─────────────────────────────────────
+    this._el.questTracker = el('div', 'quest-tracker hidden');
+    this._el.questTitle   = el('div', 'quest-title', '');
+    this._el.questObj     = el('div', 'quest-obj',   '');
+    this._el.questBar     = el('div', 'quest-bar-outer');
+    this._el.questFill    = el('div', 'quest-bar-fill');
+    this._el.questBar.appendChild(this._el.questFill);
+    this._el.questTracker.append(this._el.questTitle, this._el.questObj, this._el.questBar);
+    hud.appendChild(this._el.questTracker);
   }
 
   _buildArcSVG(id, strokeColor, trackColor) {
@@ -871,9 +885,42 @@ export class GameHUD {
     if (this._el.bossBar)  this._el.bossBar.classList.remove('hidden');
     if (this._el.bossName) this._el.bossName.textContent = name;
     if (this._el.bossFill) this._el.bossFill.style.width = (pct * 100) + '%';
+    // Red glow when below 25%
+    if (this._el.bossFill) {
+      this._el.bossFill.style.background = pct < 0.25 ? '#ff2200' : pct < 0.5 ? '#ff6600' : '#cc0000';
+    }
   }
   hideBossBar() {
     if (this._el.bossBar) this._el.bossBar.classList.add('hidden');
+  }
+
+  // ─── Status effects row ───────────────────────────────────────────────────────
+  setStatusEffects(icons) {
+    const row = this._el.statusRow;
+    if (!row) return;
+    row.innerHTML = '';
+    for (const s of (icons || [])) {
+      const chip = el('div', 'status-chip');
+      chip.title  = `${s.label} (${s.remaining}s)`;
+      chip.textContent = `${s.icon} ${s.remaining}s`;
+      row.appendChild(chip);
+    }
+  }
+
+  // ─── Quest tracker ────────────────────────────────────────────────────────────
+  setQuestSummary(summary) {
+    if (!this._el.questTracker) return;
+    if (!summary) {
+      this._el.questTracker.classList.add('hidden');
+      return;
+    }
+    this._el.questTracker.classList.remove('hidden');
+    if (this._el.questTitle) this._el.questTitle.textContent = summary.title;
+    if (this._el.questObj)   this._el.questObj.textContent   = summary.label;
+    if (this._el.questFill) {
+      const pct = summary.target > 0 ? Math.min(1, summary.progress / summary.target) : 0;
+      this._el.questFill.style.width = (pct * 100) + '%';
+    }
   }
 
   // ─── Interaction prompt ───────────────────────────────────────────────────────

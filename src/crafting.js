@@ -132,6 +132,21 @@ export const RECIPES = {
     id: 'indium_drive', name: 'Indium Drive', category: 'tech',
     inputs: { 'Indium': 50, 'Warp Cell': 1 },
     outputs: { 'Indium Drive': 1 }
+  },
+  auto_extractor: {
+    id: 'auto_extractor', name: 'Auto-Extractor', category: 'base',
+    inputs: { 'Pure Ferrite': 80, 'Carbon Nanotubes': 2, 'Copper': 40 },
+    outputs: { 'Auto-Extractor': 1 }
+  },
+  medkit: {
+    id: 'medkit', name: 'Medkit', category: 'consumable',
+    inputs: { 'Sodium': 40, 'Oxygen': 30 },
+    outputs: { 'Medkit': 2 }
+  },
+  shield_battery: {
+    id: 'shield_battery', name: 'Shield Battery', category: 'consumable',
+    inputs: { 'Copper': 50, 'Cobalt': 25 },
+    outputs: { 'Shield Battery': 2 }
   }
 };
 

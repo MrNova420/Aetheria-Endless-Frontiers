@@ -37,6 +37,7 @@ Open `index.html` directly in Chrome/Firefox (some features require a server).
 | `Left click` (held) | Mine resource node |
 | `Right click` | Attack nearest creature |
 | `1` – `0` | Select quickslot |
+| `B` | Deploy Auto-Extractor at current position |
 | `G` | Enter / Exit ship |
 | `Tab` | Inventory |
 | `N` | Crafting menu |

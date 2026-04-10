@@ -1127,3 +1127,126 @@ canvas { display: block; }
 
 /* ── Print (safety) ──────────────────────────────────────────────────────── */
 @media print { body { display: none; } }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   STATUS EFFECTS ROW
+   ═══════════════════════════════════════════════════════════════════════════ */
+.status-row {
+  position: absolute;
+  bottom: calc(var(--hud-pad) + 90px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 30;
+}
+.status-chip {
+  background: rgba(0,0,0,0.72);
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 20px;
+  padding: 3px 10px;
+  font-size: 0.7rem;
+  color: #fff;
+  font-family: var(--font-ui);
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+  text-shadow: 0 1px 4px #000;
+  animation: status-appear 0.25s ease-out;
+}
+@keyframes status-appear {
+  from { transform: scale(0.7) translateY(8px); opacity: 0; }
+  to   { transform: scale(1)   translateY(0);   opacity: 1; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   QUEST TRACKER
+   ═══════════════════════════════════════════════════════════════════════════ */
+.quest-tracker {
+  position: absolute;
+  top: calc(var(--hud-pad) + 12px);
+  right: calc(var(--hud-pad) + 12px);
+  background: rgba(0,0,0,0.70);
+  border: 1px solid rgba(255,200,0,0.35);
+  border-radius: 8px;
+  padding: 10px 14px;
+  min-width: 200px;
+  max-width: 240px;
+  backdrop-filter: blur(6px);
+  z-index: 30;
+  animation: fade-in 0.4s ease-out;
+}
+.quest-tracker.hidden { display: none; }
+.quest-title {
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  color: #ffd700;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+.quest-obj {
+  font-size: 0.75rem;
+  color: #cccccc;
+  margin-bottom: 7px;
+  font-family: var(--font-ui);
+}
+.quest-bar-outer {
+  background: rgba(255,255,255,0.12);
+  border-radius: 4px;
+  height: 5px;
+  overflow: hidden;
+}
+.quest-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ffd700, #ffaa00);
+  border-radius: 4px;
+  transition: width 0.4s ease;
+  box-shadow: 0 0 6px rgba(255,180,0,0.7);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BOSS BAR – enhanced glow
+   ═══════════════════════════════════════════════════════════════════════════ */
+.boss-bar {
+  position: absolute;
+  bottom: calc(var(--hud-pad) + 108px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 320px;
+  background: rgba(0,0,0,0.8);
+  border: 1px solid rgba(204,0,0,0.7);
+  border-radius: 8px;
+  padding: 8px 14px;
+  z-index: 35;
+  text-align: center;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 0 18px rgba(200,0,0,0.45), inset 0 1px 0 rgba(255,100,100,0.2);
+}
+.boss-bar.hidden { display: none; }
+.boss-name {
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  color: #ff4444;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-shadow: 0 0 10px rgba(255,60,0,0.9);
+  margin-bottom: 5px;
+}
+.boss-bar-outer {
+  background: rgba(255,255,255,0.1);
+  border-radius: 4px;
+  height: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(200,0,0,0.5);
+}
+.boss-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #cc0000, #ff4400);
+  border-radius: 4px;
+  transition: width 0.3s ease, background 0.5s ease;
+  box-shadow: 0 0 8px rgba(255,60,0,0.8);
+}
+

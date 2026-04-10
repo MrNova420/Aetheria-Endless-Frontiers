@@ -54,22 +54,32 @@
 - [x] **Notification CSS fix** – `.notif.notif-*` classes correctly applied
 - [x] **Tech tree UI** – upgrade SFX and notifications wired
 - [x] **Respawn improvements** – drops half inventory at death site, spawns at ship
+- [x] **Creature biome tinting** – body colors lerped toward planet palette
+- [x] **Boss creature variant** – 3–4.5× alpha beast, 500–1000 HP, dynamic boss bar (color shifts with HP)
+- [x] **Creature damage flash** – red flash on hit, reset after 180ms
+- [x] **Status effects system** – burning, frozen, poisoned, energised, shielded; DoT ticks, speed mults, HUD chip icons
+- [x] **Auto-Extractor** – Satisfactory-inspired factory element; craft, press B to deploy; animated piston+tether beam; save/load
+- [x] **Quest system v1** – 3-quest chain (First Steps → Survival Basics → Explorer's Path); HUD tracker with progress bar; item+XP rewards
+- [x] **New crafting recipes** – Auto-Extractor, Medkit ×2, Shield Battery ×2
+- [x] **Save format v3** – persists quests, status effects, extractor positions
+- [x] **`Inventory.getAllItems()`** – missing method added; respawn loot-drop works correctly
+- [x] **`_dropCreatureLoot` fix** – use `.clone().add()` to avoid position mutation
 
 ---
 
 ## 🔄 Beta 3 – Planned
 
-**Goal:** Quest system, NPCs, and visual/audio polish.
+**Goal:** Space station NPC, enemy ships, base building, warp animation, polish.
 
-- [ ] **3 starter quests** – objective markers, quest log HUD widget
-- [ ] **Space station NPC** – trading, lore dialogue
-- [ ] **Enemy ship combat** – ships patrol space, shoot at player
-- [ ] **Base building** – deployable modules (shelter, power source, landing pad)
-- [ ] **Warp tunnel animation** – shader effect on hyperspace jump
-- [ ] **PBR terrain textures** – wire AmbientCG textures into TerrainShader splatmap
+- [ ] **Space station NPC** – trading, lore dialogue, blueprint shop
+- [ ] **Enemy ship combat** – ships patrol space, shoot player
+- [ ] **Base building** – shelter, landing pad, power conduit modules
+- [ ] **Warp tunnel shader** – procedural hyperspace effect
+- [ ] **PBR terrain textures** – AmbientCG textures in TerrainShader splatmap
 - [ ] **Real CC0 models** – wire `AssetManager.cloneModel()` for ship/creatures
 - [ ] **Settings menu** – graphics quality, audio volume, controls remap
 - [ ] **Galaxy fog-of-war** – only show visited systems
+- [ ] **Achievement system** – unlock-based notification + HUD badge
 - [ ] **Google Play / itch.io release**
 
 **Target:** 2026-Q3

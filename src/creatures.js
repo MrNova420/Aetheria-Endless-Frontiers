@@ -159,6 +159,58 @@ function buildCreatureMesh(genome) {
   return root;
 }
 
+// ─── Boss genome ─────────────────────────────────────────────────────────────
+function generateBossGenome(seed, planetType) {
+  const r      = seededRng(seed);
+  const base   = generateGenome(seed);
+  const TINTS  = {
+    LUSH:'#22aa44', BARREN:'#cc8833', TOXIC:'#88ff00', FROZEN:'#88ccff',
+    BURNING:'#ff4400', EXOTIC:'#dd44ff', DEAD:'#888888', OCEAN:'#2244ff'
+  };
+  const tint = new THREE.Color(TINTS[planetType] || '#ff4400');
+  return {
+    ...base,
+    isBoss       : true,
+    scale        : 3.0 + r() * 1.5,
+    bodySize     : 1.4,
+    aggression   : 'hostile',
+    maxHp        : 500 + Math.floor(r() * 500),
+    speed        : 3 + r() * 4,
+    bodyColor    : tint.clone().multiplyScalar(0.6),
+    patternColor : tint,
+    hornCount    : 3 + Math.floor(r() * 3),
+    isBiolum     : true,
+    wingCount    : r() < 0.4 ? 2 : 0,
+  };
+}
+
+// ─── Biome palette tinting ────────────────────────────────────────────────────
+const BIOME_TINTS = {
+  LUSH   : { h: 0.35, s: 0.5 },
+  BARREN : { h: 0.08, s: 0.4 },
+  TOXIC  : { h: 0.25, s: 0.7 },
+  FROZEN : { h: 0.60, s: 0.4 },
+  BURNING: { h: 0.04, s: 0.7 },
+  EXOTIC : { h: 0.78, s: 0.6 },
+  DEAD   : { h: 0.00, s: 0.0 },
+  OCEAN  : { h: 0.62, s: 0.5 },
+};
+
+function tintGenomeForBiome(genome, planetType) {
+  const bt = BIOME_TINTS[planetType];
+  if (!bt) return genome;
+  const blended = genome.bodyColor.clone();
+  const orig = { h: 0, s: 0, l: 0 };
+  blended.getHSL(orig);
+  // Lerp hue and saturation toward biome tint
+  blended.setHSL(
+    orig.h * 0.5 + bt.h * 0.5,
+    Math.min(1, orig.s * 0.5 + bt.s * 0.5),
+    orig.l
+  );
+  return { ...genome, bodyColor: blended };
+}
+
 // ─── Creature class ───────────────────────────────────────────────────────────
 export const CREATURE_STATE = { IDLE: 0, WANDERING: 1, FLEEING: 2, ATTACKING: 3, DEAD: 4 };
 const STATE = CREATURE_STATE;
@@ -252,6 +304,9 @@ class Creature {
       this.mesh._body.position.y = this.genome.bodySize * this.genome.scale +
         Math.abs(Math.sin(this._walkTime * 2)) * 0.1;
     }
+
+    // Damage flash
+    this._updateFlash(dt);
   }
 
   takeDamage(amount) {
@@ -260,8 +315,30 @@ class Creature {
     else {
       this.state = STATE.FLEEING;
       this._stateTimer = 5;
+      // Red damage flash
+      this._flashTimer = 0.18;
     }
     return this.hp <= 0;
+  }
+
+  /** Frame-based flash animation – call every frame */
+  _updateFlash(dt) {
+    if (this._flashTimer <= 0) return;
+    this._flashTimer -= dt;
+    const flash = this._flashTimer > 0;
+    this.mesh.traverse(c => {
+      if (c.isMesh && c.material) {
+        if (flash) {
+          c.material._origColor = c.material._origColor || c.material.color.clone();
+          c.material.color.set(0xff2222);
+          c.material.emissive?.set(0xff0000);
+        } else {
+          if (c.material._origColor) c.material.color.copy(c.material._origColor);
+          c.material.emissive?.set(0x000000);
+          c.material._origColor = null;
+        }
+      }
+    });
   }
 
   die() {
@@ -270,11 +347,20 @@ class Creature {
     this._removed  = false;
     // Fall over
     this.mesh.rotation.z = Math.PI / 2;
+    // Turn grey on death
+    this.mesh.traverse(c => {
+      if (c.isMesh && c.material) {
+        c.material.color?.set(0x444444);
+        if (c.material.emissive) c.material.emissive.set(0x000000);
+      }
+    });
   }
 
   getPosition() { return this.mesh.position; }
   isAlive()     { return this.state !== STATE.DEAD; }
   isDead()      { return this.state === STATE.DEAD; }
+  isBoss()      { return !!this.genome.isBoss; }
+  getHpPct()    { return this.hp / this.genome.maxHp; }
 }
 
 // ─── Manager ──────────────────────────────────────────────────────────────────
@@ -301,12 +387,28 @@ export class CreatureManager {
       const wy = getHeightAt(wx, wz);
       if (wy < (this.planet.waterLevel || 0) + 1) continue;
       const seed    = Math.floor(rng() * 0xFFFFFF) ^ (cx * 397 + cz * 113 + i * 7);
-      const genome  = generateGenome(seed);
+      let genome    = generateGenome(seed);
+      genome        = tintGenomeForBiome(genome, this.planet.type);
       const pos     = new THREE.Vector3(wx, wy, wz);
       const cr      = new Creature(this.scene, pos, genome);
       creatures.push(cr);
       this._all.push(cr);
     }
+
+    // Rare boss spawn (5% chance per chunk, once per chunk)
+    if (rng() < 0.05 && density > 0) {
+      const bx  = originX + (rng() - 0.5) * 150;
+      const bz  = originZ + (rng() - 0.5) * 150;
+      const by  = getHeightAt(bx, bz);
+      if (by >= (this.planet.waterLevel || 0) + 1) {
+        const bseed  = Math.floor(rng() * 0xFFFFFF) ^ (cx * 1999 + cz * 3571);
+        const bgenome = generateBossGenome(bseed, this.planet.type);
+        const boss   = new Creature(this.scene, new THREE.Vector3(bx, by, bz), bgenome);
+        creatures.push(boss);
+        this._all.push(boss);
+      }
+    }
+
     this._chunks.set(key, creatures);
   }
 
@@ -332,6 +434,12 @@ export class CreatureManager {
 
   getNearbyCreatures(pos, radius) {
     return this._all.filter(c => c.isAlive() && c.getPosition().distanceTo(pos) <= radius);
+  }
+
+  getNearestBoss(pos, radius = 60) {
+    const bosses = this._all.filter(c => c.isAlive() && c.isBoss() && c.getPosition().distanceTo(pos) <= radius);
+    if (!bosses.length) return null;
+    return bosses.reduce((a, b) => a.getPosition().distanceTo(pos) < b.getPosition().distanceTo(pos) ? a : b);
   }
 
   dispose() {
