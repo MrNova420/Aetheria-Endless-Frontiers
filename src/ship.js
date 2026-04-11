@@ -13,24 +13,52 @@ function seededRng(seed) {
 // ─── Flight states ────────────────────────────────────────────────────────────
 export const FlightMode = { LANDED: 0, ATMOSPHERIC: 1, SPACE: 2 };
 
+// ─── Per-class palette tendencies ────────────────────────────────────────────
+//   Each entry: [hullHue, hullSatMid, hullLightMid, accentHueDelta, thrustHue]
+const CLASS_PALETTES = {
+  explorer: [0.58, 0.35, 0.42, 0.50, 0.58],  // cool steel-blues
+  fighter:  [0.02, 0.55, 0.28, 0.08, 0.06],  // dark red/orange aggression
+  freighter:[0.10, 0.20, 0.38, 0.55, 0.14],  // earthy ochre/teal contrast
+  scout:    [0.45, 0.40, 0.50, 0.15, 0.30],  // bright green/lime
+  alien:    [0.75, 0.65, 0.40, 0.30, 0.82],  // vivid violet/magenta
+};
+
 // ─── Build procedural ship mesh ───────────────────────────────────────────────
-function buildShipMesh(seed = 1) {
+function buildShipMesh(seed = 1, shipClass = 'explorer') {
   const r    = seededRng(seed);
   const root = new THREE.Group();
 
-  // Colour palette from seed
-  const hullH  = r();
-  const accH   = (hullH + 0.45) % 1;
-  const hullCol  = new THREE.Color().setHSL(hullH, 0.4 + r() * 0.3, 0.35 + r() * 0.25);
-  const accCol   = new THREE.Color().setHSL(accH,  0.7 + r() * 0.2, 0.5  + r() * 0.2);
-  const glassCol = new THREE.Color().setHSL(accH, 0.6, 0.55);
-  const thrustCol = new THREE.Color().setHSL(0.62, 0.9, 0.65);
+  // ── 5-layer PBR colour palette ────────────────────────────────────────────
+  const cp       = CLASS_PALETTES[shipClass] || CLASS_PALETTES.explorer;
+  const hullH    = (cp[0] + (r() - 0.5) * 0.18 + 1) % 1;
+  const accH     = (hullH + cp[3] + (r() - 0.5) * 0.08 + 1) % 1;
+  const trimH    = (accH  + 0.33 + (r() - 0.5) * 0.08 + 1) % 1;
+  const thrustH  = (cp[4] + (r() - 0.5) * 0.06 + 1) % 1;
 
-  const hullMat  = new THREE.MeshPhongMaterial({ color: hullCol, shininess: 90 });
-  const accMat   = new THREE.MeshPhongMaterial({ color: accCol,  shininess: 60 });
-  const glassMat = new THREE.MeshPhongMaterial({ color: glassCol, emissive: glassCol, emissiveIntensity: 0.35, transparent: true, opacity: 0.65, shininess: 200 });
-  const darkMat  = new THREE.MeshPhongMaterial({ color: 0x111122, shininess: 30 });
-  const thrMat   = new THREE.MeshPhongMaterial({ color: thrustCol, emissive: thrustCol, emissiveIntensity: 1.0 });
+  const hullSat  = cp[1] + (r() - 0.5) * 0.15;
+  const hullLit  = cp[2] + (r() - 0.5) * 0.12;
+
+  const hullCol  = new THREE.Color().setHSL(hullH,  Math.max(0.05, hullSat),  Math.max(0.15, hullLit));
+  const accCol   = new THREE.Color().setHSL(accH,   0.70 + r() * 0.20,        0.48 + r() * 0.18);
+  const trimCol  = new THREE.Color().setHSL(trimH,  0.55 + r() * 0.25,        0.60 + r() * 0.15);
+  const glassH   = (accH + 0.03) % 1;
+  const glassCol = new THREE.Color().setHSL(glassH, 0.65,                     0.58 + r() * 0.12);
+  const thrustCol= new THREE.Color().setHSL(thrustH,0.90 + r() * 0.08,        0.60 + r() * 0.10);
+  const darkCol  = new THREE.Color().setHSL(hullH,  0.15,                     0.08 + r() * 0.06);
+
+  // PBR materials — roughness/metalness tuned per surface
+  const hullRough = 0.38 + r() * 0.30;  // worn vs polished hull
+  const hullMetal = 0.55 + r() * 0.30;
+  const hullMat  = new THREE.MeshStandardMaterial({ color: hullCol,  roughness: hullRough,       metalness: hullMetal });
+  const accMat   = new THREE.MeshStandardMaterial({ color: accCol,   roughness: 0.25 + r()*0.20, metalness: 0.75 + r()*0.20 });
+  const trimMat  = new THREE.MeshStandardMaterial({ color: trimCol,  roughness: 0.20,            metalness: 0.85,
+                                                     emissive: trimCol, emissiveIntensity: 0.15 + r() * 0.20 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: glassCol, emissive: glassCol, emissiveIntensity: 0.30 + r()*0.20,
+                                                     transparent: true, opacity: 0.60 + r()*0.15,
+                                                     roughness: 0.05, metalness: 0.10 });
+  const darkMat  = new THREE.MeshStandardMaterial({ color: darkCol,  roughness: 0.80,            metalness: 0.20 });
+  const thrMat   = new THREE.MeshStandardMaterial({ color: thrustCol, emissive: thrustCol, emissiveIntensity: 1.2 + r()*0.4,
+                                                     roughness: 0.10, metalness: 0.0 });
 
   // ── Hull (LatheGeometry) ──────────────────────────────────────────────────
   const hullPts = [];
