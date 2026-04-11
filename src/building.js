@@ -699,12 +699,11 @@ export class BuildingSystem {
   dispose() {
     for (const b of this._buildings.values()) {
       this._group.remove(b._mesh);
-      b._mesh.geometry?.dispose();
-      if (Array.isArray(b._mesh.material)) {
-        b._mesh.material.forEach(m => m.dispose());
-      } else {
-        b._mesh.material?.dispose();
-      }
+      b._mesh.traverse(c => {
+        c.geometry?.dispose();
+        if (Array.isArray(c.material)) c.material.forEach(m => m.dispose());
+        else c.material?.dispose();
+      });
     }
     this._buildings.clear();
     this._extractorTimers.clear();

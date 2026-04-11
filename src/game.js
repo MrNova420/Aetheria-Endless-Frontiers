@@ -1314,7 +1314,7 @@ class Game {
 
     // Follow camera to ship — reuse scratch vector (no allocation)
     const sp = this._ship.getPosition();
-    this._camera.position.lerp(this._sv3.copy(sp).add({ x: 0, y: 8, z: 20 }), 0.1);
+    this._camera.position.lerp(this._sv3.copy(sp).add(new THREE.Vector3(0, 8, 20)), 0.1);
     this._camera.lookAt(sp);
 
     // Transition to surface if landed
@@ -1337,7 +1337,7 @@ class Game {
     if (!this._ship) return;
     this._ship.update(dt, this._input, null);
     const sp = this._ship.getPosition();
-    this._camera.position.lerp(this._sv3.copy(sp).add({ x: 0, y: 4, z: 16 }), 0.1);
+    this._camera.position.lerp(this._sv3.copy(sp).add(new THREE.Vector3(0, 4, 16)), 0.1);
     this._camera.lookAt(sp);
 
     // Move skybox/starfield with ship

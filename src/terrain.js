@@ -257,12 +257,12 @@ export class TerrainManager {
       if (sunColor)     u.uSunColor.value.copy(sunColor);
       if (ambientColor) u.uAmbientColor.value.copy(ambientColor);
     }
-    // Water meshes — update sun too
-    for (const wm of this._waterMeshes || []) {
+    // Water chunks — update sun direction and colour each frame
+    for (const [, wm] of this.waterChunks) {
       const u = wm.material?.uniforms;
       if (!u) continue;
       if (u.uSunDir)   u.uSunDir.value.copy(sunDir);
-      if (u.uSunColor) u.uSunColor.value.copy(sunColor ?? new THREE.Color(1,0.95,0.85));
+      if (u.uSunColor) u.uSunColor.value.copy(sunColor ?? new THREE.Color(1, 0.95, 0.85));
     }
   }
 

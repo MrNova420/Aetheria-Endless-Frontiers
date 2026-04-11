@@ -18,6 +18,7 @@ function generateGenome(seed) {
   const legCounts = [2, 4, 4, 6, 6, 0]; // 0 = slitherer
   return {
     seed,
+    isBoss       : false,
     bodySize     : 0.4 + r() * 1.2,
     legCount     : legCounts[Math.floor(r() * legCounts.length)],
     bodyColor    : new THREE.Color().setHSL(r(), 0.5 + r() * 0.4, 0.3 + r() * 0.35),
@@ -206,14 +207,20 @@ function generateBossGenome(seed, planetType) {
 
 // ─── Biome palette tinting ────────────────────────────────────────────────────
 const BIOME_TINTS = {
-  LUSH   : { h: 0.35, s: 0.5 },
-  BARREN : { h: 0.08, s: 0.4 },
-  TOXIC  : { h: 0.25, s: 0.7 },
-  FROZEN : { h: 0.60, s: 0.4 },
-  BURNING: { h: 0.04, s: 0.7 },
-  EXOTIC : { h: 0.78, s: 0.6 },
-  DEAD   : { h: 0.00, s: 0.0 },
-  OCEAN  : { h: 0.62, s: 0.5 },
+  LUSH    : { h: 0.35, s: 0.50 },
+  BARREN  : { h: 0.08, s: 0.40 },
+  TOXIC   : { h: 0.25, s: 0.70 },
+  FROZEN  : { h: 0.60, s: 0.40 },
+  BURNING : { h: 0.04, s: 0.70 },
+  EXOTIC  : { h: 0.78, s: 0.60 },
+  DEAD    : { h: 0.00, s: 0.00 },
+  OCEAN   : { h: 0.62, s: 0.50 },
+  TROPICAL: { h: 0.35, s: 0.60 },
+  ARCTIC  : { h: 0.58, s: 0.30 },
+  VOLCANIC: { h: 0.04, s: 0.90 },
+  SWAMP   : { h: 0.30, s: 0.50 },
+  DESERT  : { h: 0.08, s: 0.45 },
+  CRYSTAL : { h: 0.55, s: 0.55 },
 };
 
 function tintGenomeForBiome(genome, planetType) {
