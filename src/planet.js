@@ -61,11 +61,17 @@ const MOON_TYPES = [
   { name:'Barren Moon',  color:'#b0a090',size:0.025,emissive:0.0 },
 ];
 
-/** Seed of the starting planet (New Meridian) — used for special-case overrides. */
+/** Legacy seed retained for backward compatibility only. */
 const STARTING_PLANET_SEED = 10001;
 
 export class PlanetGenerator {
-  static generate(seed, typeOverride) {
+  /**
+   * @param {number}  seed
+   * @param {string}  [typeOverride]
+   * @param {{isHomeworld?: boolean}} [options]
+   */
+  static generate(seed, typeOverride, options = {}) {
+    const isHomeworld = options.isHomeworld === true;
     const rng  = seededRng(seed);
     const types = Object.keys(PLANET_TYPES);
     const type  = typeOverride || types[Math.floor(rng() * types.length)];
@@ -84,8 +90,8 @@ export class PlanetGenerator {
     let bc;
     if (type === 'LUSH') {
       const palette = LUSH_PALETTES[Math.floor(rng() * LUSH_PALETTES.length)];
-      // First planet seed (New Meridian) always gets rich palette index 0
-      bc = seed === STARTING_PLANET_SEED ? LUSH_PALETTES[0] : palette;
+      // The homeworld (New Meridian) always uses the first rich palette
+      bc = isHomeworld ? LUSH_PALETTES[0] : palette;
     } else {
       bc = BIOME_COLORS[type] || BIOME_COLORS.LUSH;
     }
@@ -111,8 +117,8 @@ export class PlanetGenerator {
     const nameIdx = Math.floor(rng() * PLANET_NAMES.length);
     const suffix  = String.fromCharCode(65 + Math.floor(rng()*26));
 
-    // Special name override for the starting planet
-    const planetName = seed === STARTING_PLANET_SEED ? 'New Meridian' : `${PLANET_NAMES[nameIdx]}-${suffix}`;
+    // Special name override for the homeworld
+    const planetName = isHomeworld ? 'New Meridian' : `${PLANET_NAMES[nameIdx]}-${suffix}`;
 
     // Moon descriptors (rendered in atmosphere shader as small discs)
     const moonCount = Math.floor(rng() * 3);
@@ -149,8 +155,8 @@ export class PlanetGenerator {
       rockColor: new THREE.Color(bc.high),
       sandColor: new THREE.Color(bc.low).multiplyScalar(1.3),
       snowColor: new THREE.Color(0.9, 0.93, 0.98),
-      sunColor: new THREE.Color(seed === STARTING_PLANET_SEED ? '#ffe8a0' : def.sunColor),
-      ambientColor: new THREE.Color(seed === STARTING_PLANET_SEED ? '#3a6a2a' : def.ambientColor),
+      sunColor: new THREE.Color(isHomeworld ? '#ffe8a0' : def.sunColor),
+      ambientColor: new THREE.Color(isHomeworld ? '#3a6a2a' : def.ambientColor),
       temperature: def.temperature + (rng()-0.5)*20,
       toxicity: def.toxicity + rng()*0.1,
       radiation: def.radiation + rng()*0.1,

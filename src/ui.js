@@ -162,11 +162,10 @@ export class GameHUD {
       if (localStorage.getItem('aetheria_save')) btnLoad.style.display = '';
       btnLoad.addEventListener('click', () => {
         if (window.game) {
+          // _loadGame() restores state and triggers _autoConnect with the saved
+          // player name — do NOT call selectClass() here as well, since that
+          // would fire a second _autoConnect before the first socket opens.
           window.game._loadGame();
-          const saveRaw = localStorage.getItem('aetheria_save');
-          let cls = 'technomancer';
-          try { cls = JSON.parse(saveRaw)?.player?.class || cls; } catch (_) {}
-          window.game.selectClass(cls);
         }
       });
     }

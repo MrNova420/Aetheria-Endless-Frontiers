@@ -156,7 +156,9 @@ class Game {
     this._currentSystem = this._universe.getCurrentSystem();
     this._setLoad(80, 'Generating planet…');
     const _firstPlanetSeed = this._currentSystem.planets?.[0]?.seed ?? (this._currentSystem.seed + 1337);
-    this._currentPlanet = PlanetGenerator.generate(_firstPlanetSeed, this._currentSystem.planets?.[0]?.typeOverride);
+    // isHomeworld = true for the galaxy/region/system 0/0/0 starting location
+    const _isHomeworld = this._universe._galaxyIdx === 0 && this._universe._regionIdx === 0 && this._universe._systemIdx === 0;
+    this._currentPlanet = PlanetGenerator.generate(_firstPlanetSeed, this._currentSystem.planets?.[0]?.typeOverride, { isHomeworld: _isHomeworld });
     this._setLoad(87, 'Building terrain…');
     this._setupSurface(this._currentPlanet);
     // Assign faction territories now that universe + scene are ready
@@ -943,6 +945,8 @@ class Game {
     if (Math.floor(this._elapsed) !== Math.floor(this._elapsed - dt)) {
       if (this._network?.isConnected()) {
         this._hud?.updateNetStatus?.(true, this._network._playerCount ?? 1, this._network.getPing());
+      } else {
+        this._hud?.updateNetStatus?.(false, 0, 0);
       }
     }
 
@@ -1635,7 +1639,20 @@ class Game {
       if (data.factions  && this._factions)  this._factions.load?.(data.factions);
       if (data.trading   && this._trading)   this._trading.load?.(data.trading);
       this._hud.showNotification('💾 Game loaded', 'info', 2000);
-      // Auto-connect with saved player name when loading
+
+      // If called from the main menu, transition into gameplay now.
+      // This avoids the need for a separate selectClass() call (which would
+      // trigger a second _autoConnect before the first socket opens).
+      if (this.state === GS.MAIN_MENU) {
+        this._hud.hideMainMenu();
+        if (!this._audio.initialized) this._audio.init();
+        this._audio.playAmbient(this._currentPlanet?.type || 'LUSH');
+        this._setState(GS.PLANET_SURFACE);
+        const canvas = document.getElementById('game-canvas');
+        if (canvas) canvas.requestPointerLock();
+      }
+
+      // Single auto-connect with saved player name
       this._autoConnect(this._getOrCreatePlayerName());
     } catch (e) {
       console.warn('Load failed:', e);
@@ -1750,11 +1767,9 @@ class Game {
     });
   }
 
-  // ─── Connect to game server (called from UI / main menu) ──────────────────
-  /** Auto-connect to the game server using the page's current hostname */
-  /** Auto-connect to the game server using the page's current hostname.
-   *  Called once per session when the game is ready.  Re-uses any existing
-   *  WebSocket — if already connected we simply update the display name.
+  // ─── Connect to game server (called from selectClass / loadGame / UI) ────
+  /** Auto-connect using the page's current hostname (works for localhost and
+   *  LAN IPs alike).  If already connected, sends a rename instead.
    */
   _autoConnect(playerName) {
     const host  = window.location.hostname || 'localhost';

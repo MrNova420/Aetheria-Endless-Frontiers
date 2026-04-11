@@ -185,7 +185,6 @@ export class AssetManager {
     }
   }
 
-  /** Generate a tiny canvas-based fallback texture */
   /** Generate a high-quality canvas-based fallback texture with noise patterns */
   _generateProceduralTexture(key, def) {
     const SCHEMES = {
