@@ -441,7 +441,9 @@ class Game {
           const by    = this._terrain.getHeightAt(bx, bz);
           const pos   = new THREE.Vector3(bx, by, bz);
           try {
-            this._buildings.place(bt, pos, new THREE.Quaternion());
+            // Supply an unlimited inventory object for procedural settlement generation
+            const unlimitedInv = new Proxy({}, { get: () => 9999, set: () => true });
+            this._buildings.place(bt, pos, unlimitedInv);
           } catch (_) {}
         }
       }
@@ -547,10 +549,20 @@ class Game {
       if (e.code === 'KeyJ') this.toggleMeshContribution();
       // Quickslot 1–0
       const digit = e.code.match(/^Digit(\d)$/);
-      if (digit) { inp.quickSlot = parseInt(digit[1], 10) - 1; }
+      if (digit) {
+        if (this._buildMode) {
+          inp[`digit${digit[1]}`] = true;
+        } else {
+          inp.quickSlot = parseInt(digit[1], 10) - 1;
+        }
+      }
     });
 
-    document.addEventListener('keyup', e => { keys[e.code] = false; });
+    document.addEventListener('keyup', e => {
+      keys[e.code] = false;
+      const digitUp = e.code.match(/^Digit(\d)$/);
+      if (digitUp) inp[`digit${digitUp[1]}`] = false;
+    });
 
     // Prevent right-click context menu in game
     const canvas = document.getElementById('game-canvas');
@@ -570,7 +582,7 @@ class Game {
 
     document.addEventListener('mousedown', e => {
       if (document.pointerLockElement === canvas) {
-        if (e.button === 0) inp.mine   = true;
+        if (e.button === 0) { inp.mine = true; inp.click = true; }
         if (e.button === 2) inp.attack = true;
       }
     });
@@ -671,17 +683,51 @@ class Game {
 
     // Touch buttons
     const btnMap = {
-      'tb-attack': () => { this._input.mine = true;  setTimeout(() => this._input.mine  = false, 300); },
-      'tb-q':      () => { /* ability Q */ },
-      'tb-e':      () => { /* ability E */ },
-      'tb-r':      () => { /* ability R */ },
-      'tb-f':      () => { /* ultimate F */ },
-      'tb-jump':   () => { this._input.jump = true;  setTimeout(() => this._input.jump  = false, 400); },
+      'tb-attack':    () => { this._input.attack = true; setTimeout(() => this._input.attack = false, 200); },
+      'tb-mine':      () => { this._input.mine   = true; setTimeout(() => this._input.mine   = false, 400); },
+      'tb-jump':      () => { this._input.jump   = true; setTimeout(() => this._input.jump   = false, 350); },
+      'tb-scan':      () => { this._input.scan   = true; setTimeout(() => this._input.scan   = false, 200); },
+      'tb-enter-ship':() => { this._tryEnterShip?.(); },
+      'tb-exit-ship': () => { this._tryExitShip?.(); },
+      'tb-jetpack':   () => { this._input.jump   = true; setTimeout(() => this._input.jump   = false, 800); },
+      'tb-inventory': () => { this._toggleInventory?.(); },
+      'tb-map':       () => { this._toggleGalaxyMap?.(); },
+      'tb-build':     () => { this._toggleBuildMode?.(); },
+      'tb-q': () => {
+        // Q = toggle crafting
+        this._toggleCrafting?.();
+      },
+      'tb-e': () => {
+        // E = interact / enter ship
+        this._tryEnterShip?.();
+      },
+      'tb-r': () => {
+        // R = reload / refill life support (use health pack)
+        const slot = this._inventory?.getAllItems?.()?.find?.(i => i.type === 'Health Pack');
+        if (slot) {
+          this._player?.heal?.(40);
+          this._inventory.removeItem('Health Pack', 1);
+          this._hud?.showNotification('💊 Health Pack used +40 HP', 'success', 2000);
+        }
+      },
+      'tb-f': () => {
+        // F = scan
+        this._input.scan = true;
+        setTimeout(() => this._input.scan = false, 200);
+      },
     };
     for (const [id, fn] of Object.entries(btnMap)) {
       const b = document.getElementById(id);
       if (b) b.addEventListener('touchstart', fn, { passive: true });
     }
+
+    // Double-tap joystick area = sprint toggle
+    let _lastJoyTap = 0;
+    base.addEventListener('touchstart', () => {
+      const now = Date.now();
+      if (now - _lastJoyTap < 300) this._input.sprint = !this._input.sprint;
+      _lastJoyTap = now;
+    }, { passive: true });
 
     // Right half of screen → look
     let lookId = -1, lookLast = null;
@@ -1052,7 +1098,10 @@ class Game {
 
     // Building automation tick
     if (this._buildings && this.state === GS.PLANET_SURFACE) {
-      this._buildings.tick?.(dt, this._inventory);
+      const primaryRes = this._currentPlanet?.resourceWeights
+        ? Object.entries(this._currentPlanet.resourceWeights).sort((a,b)=>b[1]-a[1])[0]?.[0] ?? 'Carbon'
+        : 'Carbon';
+      this._buildings.update?.(dt, this._inventory, primaryRes);
     }
 
     // Network state sync (~20 Hz, throttled inside NetworkManager)
@@ -1129,7 +1178,7 @@ class Game {
       const nearby = this._creatures.getNearbyCreatures(pos, 4);
       for (const cr of nearby) {
         if (cr.genome?.aggression === 'hostile' && cr.state === CREATURE_STATE.ATTACKING) {
-          const dmg = cr.genome.bodySize * 8;
+          const dmg = Math.min(cr.genome.bodySize * 8, 35);
           const actual = this._player.applyDamage(dmg, 'creature');
           if (actual > 0) {
             this._audio?.playOneShot('hit');
@@ -1273,6 +1322,75 @@ class Game {
         }
       } else {
         this._hud.setResourceIndicator?.(null);
+      }
+    }
+
+    // ─── Build mode placement ─────────────────────────────────────────────────
+    if (this._buildMode && this._buildings) {
+      // Select building type with digit keys 1-9
+      for (let di = 0; di < 9; di++) {
+        if (inp[`digit${di+1}`]) {
+          const types = this._buildings.getBuildingTypes();
+          if (types[di]) {
+            this._selectedBuildType = types[di].id;
+            this._hud?.showNotification(`🔨 Selected: ${types[di].name}`, 'info', 1500);
+          }
+        }
+      }
+      // Place with left-click
+      if (inp.click && this._selectedBuildType) {
+        inp.click = false; // consume
+        // Raycast to terrain at player forward 6 units
+        const fwd = new THREE.Vector3(-Math.sin(this._player._camYaw), 0, -Math.cos(this._player._camYaw));
+        const placePos = pos.clone().addScaledVector(fwd, 6);
+        if (this._terrain) placePos.y = this._terrain.getHeightAt(placePos.x, placePos.z);
+
+        // Build cost uses real inventory
+        const invProxy = {};
+        for (const item of (this._inventory.getAllItems?.() || [])) {
+          invProxy[item.type] = item.amount;
+        }
+        const result = this._buildings.place(this._selectedBuildType, placePos, invProxy);
+        if (result) {
+          // Deduct real inventory for matching resource names
+          const def = this._buildings.getBuildingTypes().find(t => t.id === this._selectedBuildType);
+          if (def) {
+            const RESOURCE_MAP = {
+              iron: 'Ferrite Dust', carbon: 'Carbon', sodium: 'Sodium',
+              gold: 'Chromatic Metal', titanium: 'Titanium', cobalt: 'Cobalt',
+              copper: 'Copper', platinum: 'Platinum',
+            };
+            for (const [res, amt] of Object.entries(def.cost || {})) {
+              const realName = RESOURCE_MAP[res] || res;
+              this._inventory.removeItem(realName, amt);
+            }
+          }
+          this._hud?.showNotification(`✅ ${def?.name || 'Building'} placed!`, 'success', 2000);
+          this._awardXP(20);
+        } else {
+          // Check what's missing
+          const def = this._buildings.getBuildingTypes().find(t => t.id === this._selectedBuildType);
+          const RESOURCE_MAP = {
+            iron: 'Ferrite Dust', carbon: 'Carbon', sodium: 'Sodium',
+            gold: 'Chromatic Metal', titanium: 'Titanium', cobalt: 'Cobalt',
+            copper: 'Copper', platinum: 'Platinum',
+          };
+          const missing = Object.entries(def?.cost || {}).filter(([res, amt]) => {
+            const realName = RESOURCE_MAP[res] || res;
+            return this._inventory.getAmount(realName) < amt;
+          }).map(([res, amt]) => {
+            const realName = RESOURCE_MAP[res] || res;
+            return `${realName} ×${amt}`;
+          }).join(', ');
+          this._hud?.showNotification(
+            missing ? `❌ Need: ${missing}` : '❌ Cannot place here', 'warn', 3000
+          );
+        }
+      }
+      // Show build preview label
+      if (this._selectedBuildType) {
+        const def = this._buildings.getBuildingTypes().find(t => t.id === this._selectedBuildType);
+        if (def) this._hud?.showNotification(`🔨 [${def.name}] LMB=place B=exit`, 'info', 0.5);
       }
     }
 
@@ -1503,20 +1621,23 @@ class Game {
       }
       const nearestName = nearest?.userData.planetConfig?.name ?? '---';
       const nearestKm   = Math.round(nearestDist / 10);
-      this._hud.setSpaceDistances?.({ distKm, distAU, nearestName, nearestKm });
+      this._hud.setSpaceDistances?.(distKm, nearestName, nearestKm);
     }
 
     // Check if near planet to re-enter
     if (this._spaceScene) {
-      const entry = this._spaceScene.getPlanetAt(sp, 8000);
+      const entry = this._spaceScene.getPlanetAt(sp, 600);
       if (entry) {
-        this._hud.showNotification(`Entering atmosphere of ${entry.name}…`, 'info', 3000);
+        this._hud.showNotification(`🌍 Entering atmosphere of ${entry.name}…`, 'info', 3500);
         this._currentPlanet = entry;
+        this._teardownSurface();
         this._setupSurface(entry);
         this._setupPlayer();
-        this._ship._vel.set(0, -20, 0);
+        const entrySpeed = Math.min(this._ship._vel.length(), 40);
+        this._ship._vel.set(0, -entrySpeed, 0);
         this._ship.mode = FlightMode.ATMOSPHERIC;
         this._setState(GS.SHIP_ATM);
+        this._audio?.playAmbient?.(entry.type || 'LUSH');
       }
     }
   }
@@ -1864,9 +1985,11 @@ class Game {
   _toggleBuildMode() {
     this._buildMode = !this._buildMode;
     if (this._buildMode) {
-      this._hud?.showNotification('🔨 Build Mode: ON — [B] toggle, [1-5] select, [LMB] place', 'info', 4000);
+      this._hud?.showBuildPanel?.(this._buildings?.getBuildingTypes() ?? [], this._inventory);
+      this._hud?.showNotification('🔨 Build Mode: ON — [1-9] select type  LMB place  B exit', 'info', 4000);
     } else {
-      this._hud?.showNotification('Build Mode: OFF', 'info', 1500);
+      this._hud?.hideBuildPanel?.();
+      this._hud?.showNotification('🔨 Build Mode: OFF', 'info', 1500);
     }
   }
 

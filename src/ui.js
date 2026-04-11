@@ -159,7 +159,7 @@ export class GameHUD {
     // Load game button
     const btnLoad = document.getElementById('btn-load-game');
     if (btnLoad) {
-      if (localStorage.getItem('aetheria_save')) btnLoad.style.display = '';
+      if ([0,1,2].some(i => localStorage.getItem(`aetheria_save_${i}`))) btnLoad.style.display = '';
       btnLoad.addEventListener('click', () => {
         if (window.game) {
           // _loadGame() restores state and triggers _autoConnect with the saved
@@ -453,6 +453,14 @@ export class GameHUD {
     this._el.netStatus.className = 'net-status-hud hidden';
     this._el.netStatus.innerHTML = '<span class="net-dot">●</span><span class="net-info">OFFLINE</span>';
     document.getElementById('hud')?.appendChild(this._el.netStatus);
+
+    // Build-mode overlay (shows available buildings + costs)
+    this._el.buildPanel = el('div', 'build-panel hidden');
+    this._el.buildPanelList = el('div', 'build-panel-list');
+    this._el.buildPanel.appendChild(el('div', 'build-panel-title', '🔨 BUILD MODE'));
+    this._el.buildPanel.appendChild(this._el.buildPanelList);
+    this._el.buildPanel.appendChild(el('div', 'build-panel-hint', '[1-9] select  •  LMB place  •  B exit'));
+    hud.appendChild(this._el.buildPanel);
   }
 
   _buildArcSVG(id, strokeColor, trackColor) {
@@ -1365,6 +1373,33 @@ export class GameHUD {
       el.classList.add('offline');
       el.querySelector('.net-info').textContent = 'OFFLINE';
     }
+  }
+
+  showBuildPanel(buildingTypes, inventory) {
+    if (!this._el.buildPanel) return;
+    this._el.buildPanel.classList.remove('hidden');
+    const list = this._el.buildPanelList;
+    list.innerHTML = '';
+    const RESOURCE_MAP = {
+      iron: 'Ferrite Dust', carbon: 'Carbon', sodium: 'Sodium',
+      gold: 'Chromatic Metal', titanium: 'Titanium', cobalt: 'Cobalt',
+      copper: 'Copper', platinum: 'Platinum',
+    };
+    buildingTypes.forEach((bt, idx) => {
+      const row = el('div', 'build-row');
+      const costStr = Object.entries(bt.cost || {}).map(([r, a]) => {
+        const realName = RESOURCE_MAP[r] || r;
+        const have = inventory?.getAmount?.(realName) ?? 0;
+        const ok = have >= a;
+        return `<span style="color:${ok?'#8f8':'#f88'}">${realName} ×${a}</span>`;
+      }).join(' ');
+      row.innerHTML = `<span class="build-num">[${idx+1}]</span> <span class="build-name">${bt.name}</span> <span class="build-cost">${costStr}</span>`;
+      list.appendChild(row);
+    });
+  }
+
+  hideBuildPanel() {
+    this._el.buildPanel?.classList.add('hidden');
   }
 
   dispose() {}

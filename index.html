@@ -421,30 +421,33 @@
 
 <!-- ══════════════════════ MOBILE TOUCH CONTROLS ════════════════════════ -->
 <div id="touch-controls" class="hidden">
-  <!-- Left joystick -->
-  <div id="joystick-zone">
-    <div id="joystick-base">
-      <div id="joystick-thumb"></div>
-    </div>
-  </div>
-  <!-- Right-side action buttons -->
-  <div id="touch-buttons">
-    <button class="touch-btn red"    id="tb-attack">⚔</button>
-    <button class="touch-btn blue"   id="tb-q">Q</button>
-    <button class="touch-btn green"  id="tb-e">E</button>
-    <button class="touch-btn purple" id="tb-r">R</button>
-    <button class="touch-btn gold ultimate" id="tb-f">F</button>
-    <button class="touch-btn grey"   id="tb-jump">↑</button>
-    <button class="touch-btn grey"   id="tb-scan">⊙</button>
-    <button class="touch-btn grey"   id="tb-enter-ship">🚀</button>
-  </div>
-  <!-- Top mobile buttons -->
-  <div id="touch-menu-bar">
-    <button class="touch-menu-btn" onclick="window.game&&window.game._toggleInventory()">⬡ INV</button>
-    <button class="touch-menu-btn" onclick="window.game&&window.game._toggleCrafting()">⚙ CRAFT</button>
-    <button class="touch-menu-btn" onclick="window.game&&window.game._toggleGalaxyMap()">🌌 MAP</button>
-    <button class="touch-menu-btn" onclick="window.game&&window.game._onEsc()">⏸</button>
-  </div>
+      <!-- Left: Virtual joystick -->
+      <div id="joystick-base">
+        <div id="joystick-thumb"></div>
+      </div>
+      <!-- Right: Action buttons -->
+      <div id="touch-action-btns">
+        <div class="touch-btn-row">
+          <button class="touch-btn" id="tb-jump">⬆ JUMP</button>
+          <button class="touch-btn" id="tb-jetpack">🚀 JET</button>
+          <button class="touch-btn" id="tb-scan">🔍 SCAN</button>
+        </div>
+        <div class="touch-btn-row">
+          <button class="touch-btn" id="tb-attack">⚔ ATK</button>
+          <button class="touch-btn" id="tb-mine">⛏ MINE</button>
+          <button class="touch-btn" id="tb-r">💊 HEAL</button>
+        </div>
+        <div class="touch-btn-row">
+          <button class="touch-btn" id="tb-enter-ship">🚀 BOARD</button>
+          <button class="touch-btn" id="tb-exit-ship">🪂 EXIT</button>
+          <button class="touch-btn" id="tb-inventory">🎒 INV</button>
+        </div>
+        <div class="touch-btn-row">
+          <button class="touch-btn" id="tb-build">🔨 BUILD</button>
+          <button class="touch-btn" id="tb-map">🗺 MAP</button>
+          <button class="touch-btn" id="tb-q">⚙ CRAFT</button>
+        </div>
+      </div>
 </div>
 
 <!-- ════════════════════════════ ENTRY POINT ═════════════════════════════ -->
