@@ -128,23 +128,29 @@ export class GameHUD {
     const btnBack = document.getElementById('btn-back-ctrl');
     if (btnBack) btnBack.addEventListener('click', () => this._toggleControls(false));
 
-    // Server connect
+    // Server connect — using the smart _autoConnect which handles rename if already connected
     const btnConnect = document.getElementById('btn-connect-server');
     const serverInput = document.getElementById('mm-server-url');
     const netStatus = document.getElementById('mm-net-status');
     if (btnConnect) {
       btnConnect.addEventListener('click', () => {
-        const url = serverInput?.value?.trim() || null;
+        const customUrl = serverInput?.value?.trim() || null;
         if (netStatus) { netStatus.textContent = 'Connecting…'; netStatus.className = 'mm-net-status connecting'; }
         if (window.game) {
-          const playerName = window.game._playerName || 'Explorer';
-          window.game.connectToServer(url || `ws://${window.location.hostname}:${window.location.port || 8080}`, playerName);
+          if (customUrl) {
+            // User specified a custom URL — use it directly
+            window.game.connectToServer(customUrl, window.game._getOrCreatePlayerName?.());
+          } else {
+            // Auto-detect from page hostname (works for both localhost and LAN)
+            window.game._autoConnect?.();
+          }
         }
         setTimeout(() => {
           if (window.game?._network?.isConnected()) {
-            if (netStatus) { netStatus.textContent = '🟢 Connected to server'; netStatus.className = 'mm-net-status connected'; }
+            const count = window.game._network._playerCount ?? 1;
+            if (netStatus) { netStatus.textContent = `🟢 Connected — ${count} player(s) online`; netStatus.className = 'mm-net-status connected'; }
           } else {
-            if (netStatus) { netStatus.textContent = '🔴 Could not connect (solo play active)'; netStatus.className = 'mm-net-status error'; }
+            if (netStatus) { netStatus.textContent = '🔴 Server not reachable — solo play active'; netStatus.className = 'mm-net-status error'; }
           }
         }, CONNECTION_STATUS_CHECK_DELAY_MS);
       });

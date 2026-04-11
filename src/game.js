@@ -150,7 +150,8 @@ class Game {
     // ── Idle hardware mesh contribution ─────────────────────────────────────
     this._meshContrib = new HardwareMeshContribution();
     this._setupMeshContribution();
-    this._autoConnect();
+    // Auto-connect is deferred until the player selects a class (so we use
+    // the real display name and don't create ghost sessions in the lobby).
     this._setLoad(75, 'Loading star systems…');
     this._currentSystem = this._universe.getCurrentSystem();
     this._setLoad(80, 'Generating planet…');
@@ -625,12 +626,20 @@ class Game {
       this._giveStarterKit(classId);
     }
 
+    // ── Build display name from class and persist it ─────────────────────────
+    const CLASS_NAMES = { runekeeper: 'Runekeeper', technomancer: 'Technomancer', voidhunter: 'Voidhunter' };
+    const displayName = CLASS_NAMES[classId] || 'Traveller';
+    localStorage.setItem('aetheria_player_name', displayName);
+
     this._hud.hideMainMenu();
     if (!this._audio.initialized) this._audio.init();
     this._audio.playAmbient(this._currentPlanet?.type || 'LUSH');
     this._setState(GS.PLANET_SURFACE);
     const canvas = document.getElementById('game-canvas');
     if (canvas) canvas.requestPointerLock();
+
+    // ── Auto-connect / rename on the primary server ───────────────────────────
+    this._autoConnect(displayName);
   }
 
   /** Hand the player their starting inventory based on chosen class. */
@@ -929,6 +938,13 @@ class Game {
 
     // Network state sync (~20 Hz, throttled inside NetworkManager)
     this._syncNetworkState();
+
+    // Network HUD status refresh (~1 Hz)
+    if (Math.floor(this._elapsed) !== Math.floor(this._elapsed - dt)) {
+      if (this._network?.isConnected()) {
+        this._hud?.updateNetStatus?.(true, this._network._playerCount ?? 1, this._network.getPing());
+      }
+    }
 
     this._composer.render();
   }
@@ -1619,6 +1635,8 @@ class Game {
       if (data.factions  && this._factions)  this._factions.load?.(data.factions);
       if (data.trading   && this._trading)   this._trading.load?.(data.trading);
       this._hud.showNotification('💾 Game loaded', 'info', 2000);
+      // Auto-connect with saved player name when loading
+      this._autoConnect(this._getOrCreatePlayerName());
     } catch (e) {
       console.warn('Load failed:', e);
       this._hud.showNotification('Load failed', 'error', 2000);
@@ -1697,6 +1715,7 @@ class Game {
 
     net.onConnect(({ playerId, playerCount }) => {
       this._hud?.showNotification(`🌐 Connected — ${playerCount} player(s) online`, 'info', 3000);
+      this._hud?.updateNetStatus?.(true, playerCount, net.getPing());
       // Pass server as a mesh peer so the worker can relay to it
       if (this._meshContrib?.isEnabled() && net._serverUrl) {
         this._meshContrib.setPeers([{ id: 'server', url: net._serverUrl }]);
@@ -1704,7 +1723,8 @@ class Game {
     });
 
     net.onDisconnect(() => {
-      this._hud?.showNotification('🔌 Disconnected from server', 'warn', 3000);
+      this._hud?.showNotification('🔌 Disconnected from server — playing solo', 'warn', 3000);
+      this._hud?.updateNetStatus?.(false, 0, 0);
     });
 
     net.onChatMessage(({ name, text }) => {
@@ -1714,6 +1734,7 @@ class Game {
     net.onServerMessage(({ type, data }) => {
       if (type === 'kicked') {
         this._hud?.showNotification(`🚫 Kicked: ${data.reason || 'No reason given'}`, 'error', 6000);
+        this._hud?.updateNetStatus?.(false, 0, 0);
       }
       if (type === 'announce') {
         this._hud?.showNotification(`📢 ${data.text}`, data.severity === 'danger' ? 'error' : 'warn', 8000);
@@ -1731,21 +1752,31 @@ class Game {
 
   // ─── Connect to game server (called from UI / main menu) ──────────────────
   /** Auto-connect to the game server using the page's current hostname */
-  _autoConnect() {
-    const host = window.location.hostname || 'localhost';
-    const port = window.location.port || '8080';
+  /** Auto-connect to the game server using the page's current hostname.
+   *  Called once per session when the game is ready.  Re-uses any existing
+   *  WebSocket — if already connected we simply update the display name.
+   */
+  _autoConnect(playerName) {
+    const host  = window.location.hostname || 'localhost';
+    const port  = window.location.port     || '8080';
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const url = `${proto}//${host}:${port}`;
-    // Small delay so the UI is ready before connection attempt
-    setTimeout(() => {
-      this.connectToServer(url, 'Explorer');
-    }, 800);
+    const url   = `${proto}//${host}:${port}`;
+    const name  = playerName || this._getOrCreatePlayerName();
+
+    if (this._network?.isConnected()) {
+      // Already on the server — just update our display name
+      this._network.send({ type: 'rename', name });
+    } else {
+      // First connection — small delay so the UI is fully ready
+      setTimeout(() => this.connectToServer(url, name), 600);
+    }
   }
 
   connectToServer(serverUrl, playerName) {
     if (!serverUrl) return;
     const playerId = this._getOrCreatePlayerId();
-    this._network?.connect(serverUrl, playerName || 'Explorer', playerId);
+    const name     = playerName || this._getOrCreatePlayerName();
+    this._network?.connect(serverUrl, name, playerId);
   }
 
   _getOrCreatePlayerId() {
@@ -1755,6 +1786,10 @@ class Game {
       localStorage.setItem('aetheria_player_id', id);
     }
     return id;
+  }
+
+  _getOrCreatePlayerName() {
+    return localStorage.getItem('aetheria_player_name') || 'Traveller';
   }
 
   // ─── Send player state to network peers (called from _tickSurface) ────────

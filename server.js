@@ -150,7 +150,7 @@ const DEFAULT_TERMINAL_ROWS = 24;
 
 /** Build the canonical Players line string, padded to fit the banner box. */
 function _playerCountLine() {
-  const content = `  Players → ${players.size} / ${MAX_PLAYERS}`;
+  const content = `  Players online: ${players.size} / ${MAX_PLAYERS}`;
   return `║${content.padEnd(BANNER_CONTENT_WIDTH)}║`;
 }
 
@@ -554,6 +554,19 @@ wss.on('connection', (ws, req) => {
         break;
       }
 
+      case 'rename': {
+        // Player updated their display name (e.g. after selecting a class)
+        const session = players.get(ws.playerId);
+        if (!session) break;
+        const newName = (msg.name || '').trim().slice(0, 32);
+        if (!newName) break;
+        const oldName = session.name;
+        session.name = newName;
+        broadcast({ type: 'player_rename', id: session.id, oldName, newName });
+        log(`Player renamed: ${oldName} → ${newName} (${session.id})`);
+        break;
+      }
+
       case 'warp': {
         const session = players.get(ws.playerId);
         if (!session) return;
@@ -686,28 +699,26 @@ httpServer.listen(PORT, '0.0.0.0', () => {
 
 function printBanner(ips) {
   const ipList = Array.isArray(ips) ? ips : [ips];
-  const pad = s => s.padEnd(42);
-  const networkLines = ipList.map(ip =>
-    `║  Network → ${pad(`http://${ip}:${PORT}  (LAN players)`)}`
-  ).join('\n');
-  const adminLines = ipList.map(ip =>
-    `║  Admin   → ${pad(`http://${ip}:${PORT}/admin.html`)}`
-  ).join('\n');
-  console.log(`
-╔══════════════════════════════════════════════════════════╗
-║      AETHERIA : ENDLESS FRONTIERS — GAME SERVER          ║
-╠══════════════════════════════════════════════════════════╣
-║  Local   → http://localhost:${PORT}                        ║
-${networkLines}
-${adminLines}
-╠══════════════════════════════════════════════════════════╣
-║  ⚠  If LAN access fails, allow port ${PORT} in firewall   ║
-${_playerCountLine()}
-╚══════════════════════════════════════════════════════════╝
-Press Ctrl+C to stop.`);
-  // After the template literal above, the cursor sits one line below
-  // "Press Ctrl+C to stop." — which is 3 lines below the Players line
-  // (Players → ╚═══╝ → Press Ctrl+C → cursor).
+  const W = 58; // box inner width
+  const boxLine = s => `║  ${s.padEnd(W - 4)}║`;
+  const sep = `╠${'═'.repeat(W)}╣`;
+  const lines = [
+    `╔${'═'.repeat(W)}╗`,
+    boxLine('AETHERIA : ENDLESS FRONTIERS — GAME SERVER'),
+    sep,
+    boxLine(`Local   →  http://localhost:${PORT}`),
+    ...ipList.map(ip => boxLine(`Network →  http://${ip}:${PORT}   ← share with LAN`)),
+    ...ipList.map(ip => boxLine(`Admin   →  http://${ip}:${PORT}/admin.html`)),
+    sep,
+    boxLine(`⚠  Firewall: ensure port ${PORT} is open for LAN access`),
+    boxLine(`   (Windows: allow in Windows Defender Firewall)`),
+    boxLine(`   (Linux:   sudo ufw allow ${PORT}/tcp)`),
+    sep,
+    _playerCountLine(),
+    `╚${'═'.repeat(W)}╝`,
+    'Press Ctrl+C to stop.',
+  ];
+  console.log('\n' + lines.join('\n'));
   if (process.stdout.isTTY) _rowsBelowPlayerLine = 3;
 }
 

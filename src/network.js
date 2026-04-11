@@ -130,6 +130,11 @@ export class NetworkManager {
     this._send({ type: 'warp', systemId });
   }
 
+  /** Send a raw message object — used for generic server messages like 'rename' */
+  send(msg) {
+    this._send(msg);
+  }
+
   // ── Callback setters ──────────────────────────────────────────────────────
 
   /** @param {function(Map<string,object>):void} cb */
@@ -256,6 +261,13 @@ export class NetworkManager {
       case 'player_join':
         this._playerCount = (msg.playerCount ?? this._playerCount);
         break;
+
+      case 'player_rename': {
+        // Update name in other players map
+        const entry = this._otherPlayers.get(msg.id);
+        if (entry) { entry.name = msg.newName; this._onPlayersUpdate?.(new Map(this._otherPlayers)); }
+        break;
+      }
 
       case 'player_leave':
         this._otherPlayers.delete(msg.id);
