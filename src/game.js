@@ -643,7 +643,7 @@ class Game {
         }
       });
       document.addEventListener('fullscreenchange', () => {
-        fsBtn.textContent = document.fullscreenElement ? '⛶' : '⛶';
+        fsBtn.textContent = document.fullscreenElement ? '✕⛶' : '⛶';
         fsBtn.title = document.fullscreenElement ? 'Exit Fullscreen (F11)' : 'Fullscreen (F11)';
       });
     }
@@ -1073,11 +1073,13 @@ class Game {
   // ─── Resize ──────────────────────────────────────────────────────────────────
   _onResize() {
     const w = window.innerWidth, h = window.innerHeight;
-    this._renderer.setSize(w, h);
-    this._composer.setSize(w, h);
+    this._renderer?.setSize(w, h);
+    this._composer?.setSize(w, h);
     this._bloomPass?.setSize(w, h);
-    this._camera.aspect = w / h;
-    this._camera.updateProjectionMatrix();
+    if (this._camera) {
+      this._camera.aspect = w / h;
+      this._camera.updateProjectionMatrix();
+    }
   }
 
   // ─── RAF loop ─────────────────────────────────────────────────────────────────
