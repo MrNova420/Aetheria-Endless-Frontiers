@@ -106,8 +106,92 @@ while (GALAXY_NAMES.length < 255) {
   GALAXY_NAMES.push(`Galaxy-${GALAXY_NAMES.length + 1}`);
 }
 
-// ─── Star class distributions ─────────────────────────────────────────────────
-// Realistic: M most common, then K, G, then rarer hotter classes
+// ─── 255-Galaxy Tier & Progression System ────────────────────────────────────
+//
+//  Tier 1  (galaxies   0– 7)  Euclid Cluster     — starter, calm, lush worlds
+//  Tier 2  (galaxies   8–31)  Contested Expanse   — mix, moderate danger
+//  Tier 3  (galaxies  32–63)  Outer Reaches       — harsh, high sentinels
+//  Tier 4  (galaxies  64–127) Void Fringe         — extreme biomes, elite fauna
+//  Tier 5  (galaxies 128–191) The Abyss           — alien/exotic dominated, ruins
+//  Tier 6  (galaxies 192–254) Convergence Core    — maximum challenge, reality bends
+//
+export const GALAXY_TIERS = [
+  //  { range, tier, name,                 colour,   dangerMult, wealthMult, unlockLevel, loreTag,       skyTheme }
+  { min:  0, max:   7, tier:1, label:'Euclid Cluster',     col:'#44bbff', dangerM:1.0, wealthM:1.0, unlock:1,   tag:'starter',     sky:'#050a14' },
+  { min:  8, max:  31, tier:2, label:'Contested Expanse',  col:'#44ff88', dangerM:1.4, wealthM:1.2, unlock:10,  tag:'contested',   sky:'#060d0a' },
+  { min: 32, max:  63, tier:3, label:'Outer Reaches',      col:'#ffdd44', dangerM:1.9, wealthM:1.5, unlock:20,  tag:'harsh',       sky:'#0d0a05' },
+  { min: 64, max: 127, tier:4, label:'Void Fringe',        col:'#ff8844', dangerM:2.5, wealthM:2.0, unlock:35,  tag:'extreme',     sky:'#0d0505' },
+  { min:128, max: 191, tier:5, label:'The Abyss',          col:'#cc44ff', dangerM:3.5, wealthM:2.8, unlock:55,  tag:'alien',       sky:'#08020d' },
+  { min:192, max: 254, tier:6, label:'Convergence Core',   col:'#ff4466', dangerM:5.0, wealthM:4.0, unlock:80,  tag:'convergence', sky:'#0d0008' },
+];
+
+export function getGalaxyTier(galaxyIdx) {
+  for (const t of GALAXY_TIERS) {
+    if (galaxyIdx >= t.min && galaxyIdx <= t.max) return t;
+  }
+  return GALAXY_TIERS[GALAXY_TIERS.length - 1];
+}
+
+// Per-tier star-class weight overrides — higher tiers push toward hotter/more extreme stars
+const TIER_STAR_WEIGHTS = {
+  1: [0.30, 0.55, 0.80, 0.90, 0.96, 0.99, 1.00],  // Tier 1: mostly M/K/G
+  2: [0.22, 0.48, 0.76, 0.88, 0.95, 0.98, 1.00],
+  3: [0.18, 0.42, 0.68, 0.82, 0.92, 0.97, 1.00],
+  4: [0.12, 0.30, 0.56, 0.72, 0.87, 0.95, 1.00],
+  5: [0.08, 0.20, 0.44, 0.62, 0.80, 0.92, 1.00],
+  6: [0.05, 0.14, 0.32, 0.50, 0.72, 0.88, 1.00],  // Tier 6: more A/B/O
+};
+
+function pickStarClassTiered(rngVal, tier) {
+  const weights = TIER_STAR_WEIGHTS[tier] || TIER_STAR_WEIGHTS[1];
+  for (let i = 0; i < STAR_TABLE.length; i++) {
+    if (rngVal < weights[i]) return STAR_TABLE[i];
+  }
+  return STAR_TABLE[STAR_TABLE.length - 1];
+}
+
+// Per-tier lore text banks
+const GALAXY_LORE = {
+  starter:     [
+    'The Euclid cluster — the first galaxy seeded by the Atlas. Verdant worlds and gentle skies welcome explorers to the frontier.',
+    'A cradle galaxy where life blooms on every second world. The Atlas Interfaces here are calm; the universe feels young and full of promise.',
+    'Peaceful spiral arms host lush archipelago worlds and friendly trading hubs. This is where most explorers take their first breath.',
+  ],
+  contested:   [
+    'Pirate raiding lanes and contested mining rights have made this expanse volatile. Fortunes are made and lost daily at its border stations.',
+    'Faction wars have left derelict hulks orbiting a dozen systems. Navigate carefully — not every transmission is a distress call.',
+    'Resources are richer here, but so are the sentinels. Independent colonies cling to survival between Gek merchant runs.',
+  ],
+  harsh:       [
+    'Radiation storms sweep the outer spiral arms, scorching unshielded hulls. Outposts here are built to last — or not at all.',
+    'Temperature extremes and toxic atmospheres dominate. The creatures that survive here have evolved armour no weapon was designed to breach.',
+    'Ancient ruins are more common in this band. Whatever civilisation built them found no way to survive what the Outer Reaches became.',
+  ],
+  extreme:     [
+    'Volcanic supergiants and irradiated dead worlds define the Void Fringe. Only the most advanced life support systems sustain explorers here.',
+    'Elite fauna have adapted to extreme gravity and perpetual firestorms. Their biology is a marvel — if you can survive studying it.',
+    'Black market trading thrives here. Systems change hands between pirate lords, and the Atlas interface is frequently scrambled.',
+  ],
+  alien:       [
+    'Reality fractures at the edge of the Abyss. Flora exhibits non-Euclidean growth patterns; creatures navigate dimensions explorers cannot perceive.',
+    'Ancient Korvax scrolls call this galaxy "the wound that will not close." Every anomaly map leads to ruins older than any known civilisation.',
+    'Exotic worlds dominate every system. Bioluminescence paints entire hemispheres. The creatures here are beautiful, alien, and lethal.',
+  ],
+  convergence: [
+    'The Convergence Core pulses with Atlas energy. The laws of physics are suggestions here. Every system holds something that should not exist.',
+    'The final frontier of mortal exploration. Those who reach the Core report visions — the Atlas addressing them directly, demanding a choice.',
+    'Crimson skies and fractured gravity wells greet those who pierce the Convergence. Only explorers who have mastered the galaxy deserve what waits at its heart.',
+  ],
+};
+
+export function getGalaxyLore(galaxyIdx) {
+  const tierDef = getGalaxyTier(galaxyIdx);
+  const pool    = GALAXY_LORE[tierDef.tag] || GALAXY_LORE.starter;
+  // Deterministic pick from pool using galaxy index
+  return pool[galaxyIdx % pool.length];
+}
+
+// ─── Star class distributions (base, overridden per tier) ────────────────────
 const STAR_TABLE = [
   // [cumulative weight, type, color, glowColor, minSize, maxSize, minIntensity, maxIntensity]
   [0.234, 'M', '#ff7733', '#ff4400', 0.50, 0.75, 0.6, 0.9],
@@ -291,8 +375,11 @@ export class UniverseSystem {
 
     const pos = spiralPosition(r, s, rng);
 
-    // Star class
-    const starRow   = pickStarClass(rng());
+    // Galaxy tier drives star class distribution + baseline danger/wealth
+    const tierDef = getGalaxyTier(g);
+
+    // Star class — biased by tier
+    const starRow   = pickStarClassTiered(rng(), tierDef.tier);
     const starType  = starRow[1];
     const starColor = starRow[2];
     const starGlow  = starRow[3];
@@ -355,9 +442,11 @@ export class UniverseSystem {
       if (!traits.includes(tr)) traits.push(tr);
     }
 
-    // Wealth (0-5) and danger (0-5) driven by economy + conflict + traits
-    const wealth = Math.min(5, Math.floor(rng() * 3) + (econ.name === 'Trading' || econ.name === 'Technology' ? 2 : 0) + (traits.includes('trade_hub') ? 1 : 0));
-    const danger = Math.min(5, conflict + (traits.includes('pirate_stronghold') ? 2 : 0) + (traits.includes('conflict_zone') ? 1 : 0));
+    // Wealth (0-5) and danger (0-5) driven by tier baseline + economy + conflict + traits
+    const tierDangerBonus  = Math.floor((tierDef.dangerM - 1.0) * 2);
+    const tierWealthBonus  = Math.floor((tierDef.wealthM - 1.0) * 2);
+    const wealth = Math.min(5, Math.floor(rng() * 3) + (econ.name === 'Trading' || econ.name === 'Technology' ? 2 : 0) + (traits.includes('trade_hub') ? 1 : 0) + tierWealthBonus);
+    const danger = Math.min(5, conflict + (traits.includes('pirate_stronghold') ? 2 : 0) + (traits.includes('conflict_zone') ? 1 : 0) + tierDangerBonus);
 
     const id = `${g}_${r}_${s}`;
     const desc = {
@@ -369,6 +458,8 @@ export class UniverseSystem {
       hasBinary, binaryCompanion,
       planets,
       traits, wealth, danger,
+      galaxyTier: tierDef.tier,
+      galaxyTierLabel: tierDef.label,
       visited: this._visited.has(id),
     };
 
