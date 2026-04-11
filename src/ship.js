@@ -102,15 +102,48 @@ function buildShipMesh(seed = 1, shipClass = 'explorer') {
     wing.castShadow = true;
     root.add(wing);
 
-    // Wing detail stripe
+    // Wing detail stripe (trimMat — complementary colour)
     const stripe = new THREE.Mesh(
-      new THREE.BoxGeometry(0.08, 2.0, 0.08),
-      thrMat
+      new THREE.BoxGeometry(0.06, 2.0, 0.06),
+      trimMat
     );
     stripe.rotation.z = side * 0.22;
     stripe.position.set(side * 1.2, 0.18, 1.0);
     root.add(stripe);
   }
+
+  // ── Hull equator panel strips (accent + trim detail bands) ────────────────
+  // 8 small panels around the widest girth of the hull
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2;
+    const px = Math.cos(angle) * 0.92;
+    const pz = Math.sin(angle) * 0.92;
+    const panel = new THREE.Mesh(
+      new THREE.BoxGeometry(0.14, 0.22, 0.06),
+      i % 3 === 0 ? trimMat : accMat   // every 3rd panel gets the trim colour
+    );
+    panel.position.set(px, 0.18, pz);
+    panel.rotation.y = -angle;
+    root.add(panel);
+  }
+
+  // Mid-body accent stripe ring
+  const bodyBand = new THREE.Mesh(
+    new THREE.TorusGeometry(0.88, 0.03, 6, 48),
+    trimMat
+  );
+  bodyBand.rotation.x = Math.PI / 2;
+  bodyBand.position.y = 0.18;
+  root.add(bodyBand);
+
+  // Nose tip accent cap
+  const noseCap = new THREE.Mesh(
+    new THREE.ConeGeometry(0.12, 0.25, 12),
+    trimMat
+  );
+  noseCap.rotation.x = Math.PI / 2;
+  noseCap.position.set(0, 0, -3.3);
+  root.add(noseCap);
 
   // ── Engine nacelles (2 per side) ─────────────────────────────────────────
   const nacelleDef = [
@@ -128,7 +161,7 @@ function buildShipMesh(seed = 1, shipClass = 'explorer') {
 
     const ring = new THREE.Mesh(
       new THREE.TorusGeometry(0.19, 0.04, 8, 16),
-      accMat
+      trimMat     // trim colour on nacelle rings for contrast
     );
     ring.position.set(nd.x, 0.35, nd.z);
     ring.rotation.x = Math.PI / 2;
@@ -205,7 +238,7 @@ export class Ship {
     const shipSeed = Math.floor(Math.random() * 0xFFFF);
     const assetKey = shipClass === 'fighter' ? 'ship_fighter' : 'ship_explorer';
     const glbMesh  = getAssets()?.cloneModel(assetKey) ?? null;
-    this.mesh = glbMesh || buildShipMesh(shipSeed);
+    this.mesh = glbMesh || buildShipMesh(shipSeed, shipClass);
     this.scene.add(this.mesh);
 
     // Entry prompt sphere (visual indicator)
