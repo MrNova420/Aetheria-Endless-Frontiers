@@ -471,6 +471,8 @@ export class PlanetGenerator {
       return systemData.planets.map((p, i) => {
         const planetSeed = p.seed || ((systemSeed + i * 1031) >>> 0);
         const planet = PlanetGenerator.generate(planetSeed, p.typeOverride);
+        // Use orbit radius from system data so planets are properly spaced
+        if (p.orbitRadius != null) planet.orbitRadius = p.orbitRadius;
         if (p.moonCount != null) {
           // Override moon count if explicitly specified in system data
           const rng = seededRng(planetSeed + 99);

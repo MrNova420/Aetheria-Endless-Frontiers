@@ -172,7 +172,7 @@ export class SpaceScene {
         uColor1:  { value: planetConfig.vegetationColor || new THREE.Color(0.3,0.5,0.2) },
         uColor2:  { value: planetConfig.rockColor       || new THREE.Color(0.5,0.4,0.3) },
         uColor3:  { value: planetConfig.atmosphereColor || new THREE.Color(0.2,0.4,0.8) },
-        uSeed:    { value: (planetConfig.seed||1)*0.001 }
+        uSeed:    { value: ((planetConfig.seed || 1) % 1000) * 0.001 }
       },
       vertexShader: `
         varying vec3 vN; varying vec3 vP;
@@ -205,6 +205,21 @@ export class SpaceScene {
     mesh.userData.orbitSpeed = planetConfig.orbitSpeed || 0.00005;
     this.scene.add(mesh);
     this.planetMeshes.push(mesh);
+
+    // Atmosphere glow ring (additive overlay — larger sphere, inside-out)
+    const atmGeo = new THREE.SphereGeometry(r * 1.12, 32, 16);
+    const atmCol = planetConfig.atmosphereColor
+      ? planetConfig.atmosphereColor.clone()
+      : new THREE.Color(0.2, 0.5, 1.0);
+    const atmMat = new THREE.MeshBasicMaterial({
+      color: atmCol,
+      transparent: true, opacity: 0.18,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false, side: THREE.BackSide,
+    });
+    const atmMesh = new THREE.Mesh(atmGeo, atmMat);
+    mesh.add(atmMesh);
+
     return mesh;
   }
 

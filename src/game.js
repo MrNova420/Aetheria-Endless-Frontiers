@@ -230,6 +230,7 @@ class Game {
     this._camera.position.set(0, 20, 30);
 
     window.addEventListener('resize', () => this._onResize());
+    document.addEventListener('fullscreenchange', () => this._onResize());
   }
 
   // ─── Scene + post-processing ─────────────────────────────────────────────────
@@ -390,8 +391,11 @@ class Game {
       );
     };
 
-    // Space scene
-    this._spaceScene = new SpaceScene(this._scene, this._universe);
+    // Space scene — create once, then just re-enter the system on subsequent calls
+    // to avoid accumulating duplicate sky/starfield meshes in the scene.
+    if (!this._spaceScene) {
+      this._spaceScene = new SpaceScene(this._scene, this._universe);
+    }
     this._spaceScene.enterSystem(this._currentSystem);
     this._setSpaceVisible(false);
 
@@ -469,10 +473,13 @@ class Game {
 
   _setSpaceVisible(visible) {
     if (this._spaceScene) {
-      if (this._spaceScene.skyMesh)      this._spaceScene.skyMesh.visible      = visible;
-      if (this._spaceScene.starPoints)   this._spaceScene.starPoints.visible   = visible;
-      if (this._spaceScene.asteroidMesh) this._spaceScene.asteroidMesh.visible = visible;
-      if (this._spaceScene.sunMesh)      this._spaceScene.sunMesh.visible      = visible;
+      if (this._spaceScene.skyMesh)        this._spaceScene.skyMesh.visible        = visible;
+      if (this._spaceScene.starPoints)     this._spaceScene.starPoints.visible     = visible;
+      if (this._spaceScene.asteroidMesh)   this._spaceScene.asteroidMesh.visible   = visible;
+      if (this._spaceScene._asteroidMesh2) this._spaceScene._asteroidMesh2.visible = visible;
+      if (this._spaceScene.sunMesh)        this._spaceScene.sunMesh.visible        = visible;
+      if (this._spaceScene.stationMesh)    this._spaceScene.stationMesh.visible    = visible;
+      for (const pm of this._spaceScene.planetMeshes || []) pm.visible = visible;
     }
   }
 
@@ -541,6 +548,14 @@ class Game {
 
     document.addEventListener('keydown', e => {
       keys[e.code] = true;
+      if (e.code === 'F11') {
+        e.preventDefault();
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        } else {
+          document.exitFullscreen().catch(() => {});
+        }
+      }
       if (e.code === 'Escape')        this._onEsc();
       if (e.code === 'Tab')           { e.preventDefault(); this._toggleInventory(); }
       if (e.code === 'KeyN')          this._toggleCrafting();
@@ -616,6 +631,22 @@ class Game {
       inp.shipYaw    = (keys['KeyA'] || keys['ArrowLeft'])  ? -1 : (keys['KeyD'] || keys['ArrowRight']) ?  1   : 0;
       inp.shipPitch  = (keys['KeyW'] || keys['ArrowUp'])   ?  0.5 : (keys['KeyS'] || keys['ArrowDown']) ? -0.5 : 0;
     };
+
+    // Fullscreen button
+    const fsBtn = document.getElementById('btn-fullscreen');
+    if (fsBtn) {
+      fsBtn.addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        } else {
+          document.exitFullscreen().catch(() => {});
+        }
+      });
+      document.addEventListener('fullscreenchange', () => {
+        fsBtn.textContent = document.fullscreenElement ? '⛶' : '⛶';
+        fsBtn.title = document.fullscreenElement ? 'Exit Fullscreen (F11)' : 'Fullscreen (F11)';
+      });
+    }
   }
 
   _pollGamepad() {
@@ -767,7 +798,10 @@ class Game {
     if (state === GS.PLANET_SURFACE) {
       this._hud.showHUD();
       this._setSpaceVisible(false);
-      if (this._terrain)    this._terrain.update(new THREE.Vector3(0,0,0));
+      if (this._terrain) {
+        const spawnPos = this._player?.getPosition() ?? new THREE.Vector3(0, 0, 0);
+        this._terrain.update(spawnPos);
+      }
       if (this._audio.initialized) this._audio.playAmbient(this._currentPlanet?.type || 'LUSH');
     }
     if (state === GS.SHIP_ATM) {
@@ -1021,11 +1055,11 @@ class Game {
     const planet = PlanetGenerator.generate(_planetSeed, sys.planets?.[0]?.typeOverride) ?? PlanetGenerator.getSystemPlanets(sys.seed, sys)[0];
     this._currentPlanet = planet;
     this._hud.hideGalaxyMap();
-    this._setState(GS.PLANET_SURFACE);
     this._teardownSurface();
     this._setupSurface(planet);
     this._setupPlayer();
     this._setupShip();
+    this._setState(GS.PLANET_SURFACE);
     this._hud.showNotification(`🚀 Warped to ${sys.name}`, 'info', 3500);
     this._awardXP(50);
     this._quests.reportEvent('warp');
@@ -1041,6 +1075,7 @@ class Game {
     const w = window.innerWidth, h = window.innerHeight;
     this._renderer.setSize(w, h);
     this._composer.setSize(w, h);
+    this._bloomPass?.setSize(w, h);
     this._camera.aspect = w / h;
     this._camera.updateProjectionMatrix();
   }
@@ -1576,9 +1611,11 @@ class Game {
     if (!this._ship || !this._player) return;
     this._ship.update(dt, this._input, this._terrain);
 
-    // Follow camera to ship — reuse scratch vector (no allocation)
+    // Follow camera behind ship in local space (so camera rotates with ship)
     const sp = this._ship.getPosition();
-    this._camera.position.lerp(this._sv3.copy(sp).add(new THREE.Vector3(0, 8, 20)), 0.1);
+    const behindLocal = new THREE.Vector3(0, 8, 20);
+    const behindWorld = behindLocal.applyEuler(new THREE.Euler(0, this._ship._yaw, 0));
+    this._camera.position.lerp(this._sv3.copy(sp).add(behindWorld), 0.1);
     this._camera.lookAt(sp);
 
     // Transition to surface if landed
@@ -1601,7 +1638,10 @@ class Game {
     if (!this._ship) return;
     this._ship.update(dt, this._input, null);
     const sp = this._ship.getPosition();
-    this._camera.position.lerp(this._sv3.copy(sp).add(new THREE.Vector3(0, 4, 16)), 0.1);
+    // Camera follows behind ship in its local space
+    const spBehindLocal = new THREE.Vector3(0, 4, 16);
+    const spBehindWorld = spBehindLocal.applyEuler(new THREE.Euler(0, this._ship._yaw, 0));
+    this._camera.position.lerp(this._sv3.copy(sp).add(spBehindWorld), 0.1);
     this._camera.lookAt(sp);
 
     // Move skybox/starfield with ship

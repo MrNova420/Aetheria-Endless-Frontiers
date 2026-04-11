@@ -673,7 +673,7 @@ export class Player {
       const eyeY = pos.y + 1.65;
       this.camera.position.set(pos.x, eyeY, pos.z);
       this.camera.rotation.order = 'YXZ';
-      this.camera.rotation.y = Math.PI + this._camYaw;
+      this.camera.rotation.y = this._camYaw;
       this.camera.rotation.x = -this._camPitch;
       // Head-bob while walking
       if (this._isWalking && this._grounded) {
