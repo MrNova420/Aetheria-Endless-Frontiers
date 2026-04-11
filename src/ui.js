@@ -13,6 +13,7 @@ const WIND_DISPLAY_THRESHOLD = 1.5;  // m/s – show wind speed label above this
 const PULSE_BASE              = 0.03; // minimum vignette opacity base
 const PULSE_SPEED             = 2.0;  // radians/sec for vignette pulse sine wave
 const PULSE_AMPLITUDE         = 0.07; // max additional opacity from pulse
+const CONNECTION_STATUS_CHECK_DELAY_MS = 2000; // ms to wait before checking connect status
 
 // ─── Tiny DOM helpers ─────────────────────────────────────────────────────────
 function el(tag, cls, txt) {
@@ -136,7 +137,8 @@ export class GameHUD {
         const url = serverInput?.value?.trim() || null;
         if (netStatus) { netStatus.textContent = 'Connecting…'; netStatus.className = 'mm-net-status connecting'; }
         if (window.game) {
-          window.game.connectToServer(url || `ws://${window.location.hostname}:${window.location.port || 8080}`, 'Explorer');
+          const playerName = window.game._playerName || 'Explorer';
+          window.game.connectToServer(url || `ws://${window.location.hostname}:${window.location.port || 8080}`, playerName);
         }
         setTimeout(() => {
           if (window.game?._network?.isConnected()) {
@@ -144,7 +146,7 @@ export class GameHUD {
           } else {
             if (netStatus) { netStatus.textContent = '🔴 Could not connect (solo play active)'; netStatus.className = 'mm-net-status error'; }
           }
-        }, 2000);
+        }, CONNECTION_STATUS_CHECK_DELAY_MS);
       });
     }
 
