@@ -416,12 +416,16 @@ export class PlanetGenerator {
       dayDuration: (() => {
         const isTidal = modifier?.id === 'tidally';
         if (isTidal) return 999999;
+        // Full cycle lengths (day + night).  With the 75/25 day-bias in game.js
+        // these yield ~15 min day / 5 min night at the target value of 1200s,
+        // with per-type variety from slow-rotating Dead worlds (3000 s) to
+        // fast-spinning Crystal or Exotic worlds (720 s).
         const BASE = {
-          LUSH:120, BARREN:200, TOXIC:90, FROZEN:300, BURNING:180,
-          EXOTIC:60, DEAD:400, OCEAN:150, TROPICAL:100, ARCTIC:480,
-          VOLCANIC:240, SWAMP:110, DESERT:220, CRYSTAL:80,
+          LUSH:1200, BARREN:1600, TOXIC:800,  FROZEN:2400, BURNING:1400,
+          EXOTIC:600, DEAD:3000, OCEAN:1100,  TROPICAL:960, ARCTIC:2800,
+          VOLCANIC:1800, SWAMP:1000, DESERT:1600, CRYSTAL:720,
         };
-        const base = BASE[type] || 180;
+        const base = BASE[type] || 1200;
         return Math.round(base * (0.6 + rng() * 0.8));
       })(),
       isTidallyLocked: modifier?.id === 'tidally' || false,

@@ -341,7 +341,7 @@ class Game {
     }
 
     // Initialise day time from planet's seeded offset
-    const dayDur = planet.dayDuration ?? 600;
+    const dayDur = planet.dayDuration ?? 1200;
     if (!this._dayTimeInitialisedFor || this._dayTimeInitialisedFor !== planet.seed) {
       this._dayTime = (planet.dayTimeOffset ?? 0) * dayDur;
       this._dayTimeInitialisedFor = planet.seed;
@@ -1528,13 +1528,26 @@ class Game {
     const planet  = this._currentPlanet;
 
     // Per-planet cycle: each planet has its own seeded day duration + axial tilt
-    const cycle  = planet?.dayDuration    || 600;   // real seconds per day
+    const cycle  = planet?.dayDuration    || 1200;  // real seconds per full cycle
     const locked = planet?.isTidallyLocked || false;
     const tilt   = ((planet?.axialTilt    || 0) * Math.PI) / 180;  // radians
 
     // Normalised time 0-1; tidally locked planets fix the sun at "noon"
-    const t        = locked ? 0.25 : (this._dayTime % cycle) / cycle;
-    const sunAngle = t * Math.PI * 2;
+    const tRaw   = locked ? 0.25 : (this._dayTime % cycle) / cycle;
+
+    // ── Asymmetric day/night: 75 % of cycle is day (sun above horizon = 15 min),
+    //    25 % is night (sun below horizon = 5 min).
+    //    Map tRaw → sunAngle so the sun spends more time traversing the top arc.
+    const DAY_FRAC   = 0.75;  // fraction of cycle the sun is above horizon
+    const NIGHT_FRAC = 0.25;
+    let sunAngle;
+    if (tRaw < DAY_FRAC) {
+      // Day phase: sun sweeps 0 → π (horizon → horizon via zenith)
+      sunAngle = (tRaw / DAY_FRAC) * Math.PI;
+    } else {
+      // Night phase: sun sweeps π → 2π (below horizon)
+      sunAngle = Math.PI + ((tRaw - DAY_FRAC) / NIGHT_FRAC) * Math.PI;
+    }
 
     // Apply axial tilt: rotate sun orbit plane so the arc height varies per planet
     const cosT = Math.cos(tilt);
