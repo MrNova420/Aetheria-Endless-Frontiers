@@ -1535,11 +1535,11 @@ class Game {
     // Normalised time 0-1; tidally locked planets fix the sun at "noon"
     const tRaw   = locked ? 0.25 : (this._dayTime % cycle) / cycle;
 
-    // ── Asymmetric day/night: 75 % of cycle is day (sun above horizon = 15 min),
-    //    25 % is night (sun below horizon = 5 min).
-    //    Map tRaw → sunAngle so the sun spends more time traversing the top arc.
-    const DAY_FRAC   = 0.75;  // fraction of cycle the sun is above horizon
-    const NIGHT_FRAC = 0.25;
+    // ── Asymmetric day/night: use per-planet dayFraction.
+    //    Default 0.75 → ~15 min day / 5 min night on a 1200 s cycle.
+    //    Dark worlds (Toxic/Dead/Volcanic) average ~0.60; bright worlds ~0.80.
+    const DAY_FRAC   = planet?.dayFraction ?? 0.75;
+    const NIGHT_FRAC = 1.0 - DAY_FRAC;
     let sunAngle;
     if (tRaw < DAY_FRAC) {
       // Day phase: sun sweeps 0 → π (horizon → horizon via zenith)

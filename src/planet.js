@@ -429,6 +429,21 @@ export class PlanetGenerator {
         return Math.round(base * (0.6 + rng() * 0.8));
       })(),
       isTidallyLocked: modifier?.id === 'tidally' || false,
+      // ── Day fraction: proportion of the full cycle spent above the horizon.
+      //    0.75 = 15 min day / 5 min night on a 1200 s cycle (the target average).
+      //    Dark/hostile worlds average lower; bright/mild worlds average higher.
+      //    Each planet also gets a small random jitter (±0.10) so no two are alike.
+      dayFraction: (() => {
+        if (modifier?.id === 'tidally') return 1.0; // always day-side
+        const TYPE_CENTER = {
+          LUSH:0.78,  BARREN:0.72, TOXIC:0.60,  FROZEN:0.70, BURNING:0.68,
+          EXOTIC:0.65, DEAD:0.58,  OCEAN:0.80,  TROPICAL:0.82, ARCTIC:0.65,
+          VOLCANIC:0.60, SWAMP:0.63, DESERT:0.74, CRYSTAL:0.72,
+        };
+        const center = TYPE_CENTER[type] ?? 0.75;
+        // jitter ±0.10, clamped to [0.45, 0.90]
+        return Math.min(0.90, Math.max(0.45, center + (rng() - 0.5) * 0.20));
+      })(),
       axialTilt: (() => {
         const maxTilt = type === 'ARCTIC' ? 45 : type === 'EXOTIC' ? 50 : type === 'DEAD' ? 35 : 25;
         return rng() * maxTilt;
