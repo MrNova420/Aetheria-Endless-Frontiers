@@ -23,6 +23,14 @@ export const TerrainShader = {
     uEmissiveStrength:{ value: 0.0 },
     uWetness:         { value: 0.0 },  // 0=dry, 1=soaked (from weather)
     uWindTime:        { value: 0.0 },  // for lava UV scroll
+    uTexGrass:     { value: null },
+    uTexRock:      { value: null },
+    uTexSand:      { value: null },
+    uTexSnow:      { value: null },
+    uTexAlien:     { value: null },
+    uTexGrassNorm: { value: null },
+    uTexRockNorm:  { value: null },
+    uUseTextures:  { value: 0.0 },   // 0=no textures, 1=use textures
   },
   vertexShader: `
     varying vec3  vWorldPos;
@@ -47,6 +55,15 @@ export const TerrainShader = {
   fragmentShader: `
     precision highp float;
     #extension GL_OES_standard_derivatives : enable
+
+    uniform sampler2D uTexGrass;
+    uniform sampler2D uTexRock;
+    uniform sampler2D uTexSand;
+    uniform sampler2D uTexSnow;
+    uniform sampler2D uTexAlien;
+    uniform sampler2D uTexGrassNorm;
+    uniform sampler2D uTexRockNorm;
+    uniform float uUseTextures;
 
     uniform float uTime;
     uniform vec3  uBiomeColorLow;
@@ -193,6 +210,21 @@ export const TerrainShader = {
       albedo = mix(albedo, uBiomeColorHigh * 0.45 + vec3(0.08), smoothstep(0.40,0.72, slope));
       // Accent patches (mineral deposits, sand streaks)
       albedo = mix(albedo, uBiomeAccent * 0.7, crack * 0.13 * (1.0 - slope));
+
+      // Texture blending (when real textures are available)
+      if (uUseTextures > 0.5) {
+        vec2 uv = vWorldPos.xz * 0.08;
+        vec3 texGrass = texture2D(uTexGrass,  uv * 0.5).rgb;
+        vec3 texRock  = texture2D(uTexRock,   uv * 0.3).rgb;
+        vec3 texSand  = texture2D(uTexSand,   uv * 0.4).rgb;
+        vec3 texSnow  = texture2D(uTexSnow,   uv * 0.6).rgb;
+        vec3 texBase  = texGrass;
+        texBase = mix(texBase, texSand,  smoothstep(0.0,  0.07, h));
+        texBase = mix(texBase, texRock,  smoothstep(0.30, 0.68, h));
+        texBase = mix(texBase, texRock,  smoothstep(0.40, 0.72, slope));
+        texBase = mix(texBase, texSnow,  tSnow);
+        albedo = mix(albedo, albedo * texBase * 2.2, 0.65);
+      }
 
       // ── Per-zone material properties ───────────────────────────────────────
       float roughness = mix(0.82, 0.45, tSnow);             // snow is smoother

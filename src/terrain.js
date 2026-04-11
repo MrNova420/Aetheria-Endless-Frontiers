@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { WORLD } from './config.js';
 import { TerrainShader, WaterShader } from './shaders.js';
 import { SimplexNoise } from './noise.js';
+import { getAssets } from './assets.js';
 
 export class TerrainManager {
   constructor(scene, planet, sunLight) {
@@ -58,7 +59,31 @@ export class TerrainManager {
     mat.uniforms.uEmissiveStrength.value  = emissiveStr;
     mat.uniforms.uWetness.value           = 0.0;  // updated live by weather
     mat.uniforms.uWindTime.value          = 0.0;  // updated live each tick
+    // Wire real textures if available
+    this._applyTerrainTextures(mat);
     return mat;
+  }
+
+  _applyTerrainTextures(mat) {
+    try {
+      const assets = getAssets();
+      const texGrass = assets.getTexture('terrain_grass_albedo');
+      const texRock  = assets.getTexture('terrain_rock_albedo');
+      const texSand  = assets.getTexture('terrain_sand_albedo');
+      const texSnow  = assets.getTexture('terrain_snow_albedo');
+      const texAlien = assets.getTexture('terrain_alien_albedo');
+      const texGN    = assets.getTexture('terrain_grass_normal');
+      const texRN    = assets.getTexture('terrain_rock_normal');
+      let hasAny = false;
+      if (texGrass) { mat.uniforms.uTexGrass.value = texGrass; hasAny = true; }
+      if (texRock)  { mat.uniforms.uTexRock.value  = texRock;  hasAny = true; }
+      if (texSand)  mat.uniforms.uTexSand.value  = texSand;
+      if (texSnow)  mat.uniforms.uTexSnow.value  = texSnow;
+      if (texAlien) mat.uniforms.uTexAlien.value = texAlien;
+      if (texGN)    mat.uniforms.uTexGrassNorm.value = texGN;
+      if (texRN)    mat.uniforms.uTexRockNorm.value  = texRN;
+      if (hasAny)   mat.uniforms.uUseTextures.value  = 1.0;
+    } catch (_) {}
   }
 
   _buildWaterMat() {

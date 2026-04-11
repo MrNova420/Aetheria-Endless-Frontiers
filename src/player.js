@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { PLAYER_CONFIG, WORLD } from './config.js';
 import { PhysicsBody, PHYSICS } from './physics.js';
+import { getAssets } from './assets.js';
 
 // ─── Build detailed astronaut / explorer mesh ─────────────────────────────────
 function buildPlayerModel(classColor = 0x4488ff) {
@@ -184,7 +185,14 @@ export class Player {
     this.classColor   = 0x4488ff;
 
     // ── Mesh ─────────────────────────────────────────────────────────────────
-    this.model = buildPlayerModel(this.classColor);
+    // Try to use downloaded GLB model
+    const modelEntry = getAssets()?.cloneModel('player_explorer');
+    if (modelEntry) {
+      this.model = modelEntry;
+      this.model.scale.setScalar(1.0);
+    } else {
+      this.model = buildPlayerModel(this.classColor);
+    }
     this.scene.add(this.model);
 
     // ── Physics (PhysicsBody) ─────────────────────────────────────────────────

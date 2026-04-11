@@ -3,21 +3,27 @@
  */
 import * as THREE from 'three';
 import { FloraShader } from './shaders.js';
-
-const MAX_INSTANCES = 500;
+import { getAssets } from './assets.js';
 
 function buildTallAlienTree(planet) {
+  const assets = getAssets?.();
+  const modelClone = assets?.cloneModel('flora_tree_alien');
+  if (modelClone) return modelClone;
+
   const group = new THREE.Group();
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x553300, roughness: 0.85, metalness: 0.0 });
   const trunk = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.3, 0.7, 4, 8),
-    new THREE.MeshLambertMaterial({ color: 0x553300 })
+    new THREE.CylinderGeometry(0.3, 0.7, 4, 12),
+    trunkMat
   );
   trunk.position.y = 2;
   group.add(trunk);
+  const leafCol = planet.vegetationColor || new THREE.Color(0.2, 0.6, 0.2);
+  const leafMat = new THREE.MeshStandardMaterial({ color: leafCol, roughness: 0.75, metalness: 0.0 });
   for (let i = 0; i < 3; i++) {
     const cr = new THREE.Mesh(
-      new THREE.SphereGeometry(1.5 + i * 0.3, 8, 6),
-      new THREE.MeshLambertMaterial({ color: planet.vegetationColor || new THREE.Color(0.2,0.6,0.2) })
+      new THREE.SphereGeometry(1.5 + i * 0.3, 12, 10),
+      leafMat
     );
     cr.position.set(Math.cos(i*2.1)*0.8, 4.5 + i*0.5, Math.sin(i*2.1)*0.8);
     group.add(cr);
@@ -26,22 +32,27 @@ function buildTallAlienTree(planet) {
 }
 
 function buildCrystalFormation(planet) {
+  const assets = getAssets?.();
+  const modelClone = assets?.cloneModel('flora_crystal');
+  if (modelClone) return modelClone;
+
   const group = new THREE.Group();
   const col = planet.rockColor || new THREE.Color(0.5, 0.3, 0.8);
+  const mat = new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.3, roughness: 0.1, metalness: 0.3 });
   const count = 3 + Math.floor(Math.random() * 5);
   for (let i = 0; i < count; i++) {
     const h = 1 + Math.random() * 3;
     const mesh = new THREE.Mesh(
-      new THREE.ConeGeometry(0.2, h, 5),
-      new THREE.MeshPhongMaterial({ color: col, emissive: col, emissiveIntensity: 0.3, shininess: 100 })
+      new THREE.ConeGeometry(0.2, h, 6),
+      mat
     );
     mesh.position.set((Math.random()-0.5)*1.5, h/2, (Math.random()-0.5)*1.5);
     mesh.rotation.z = (Math.random()-0.5)*0.4;
     group.add(mesh);
   }
   const cap = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(0.4, 1),
-    new THREE.MeshPhongMaterial({ color: col, emissive: col, emissiveIntensity: 0.5 })
+    new THREE.IcosahedronGeometry(0.4, 2),
+    new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.5, roughness: 0.05, metalness: 0.4 })
   );
   cap.position.y = 3.5;
   group.add(cap);
@@ -49,19 +60,21 @@ function buildCrystalFormation(planet) {
 }
 
 function buildMushroomGiant(planet) {
+  const assets = getAssets?.();
+  const modelClone = assets?.cloneModel('flora_mushroom');
+  if (modelClone) return modelClone;
+
   const group = new THREE.Group();
   const capCol = planet.vegetationColor || new THREE.Color(0.7, 0.3, 0.2);
   const stem = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.4, 0.6, 3, 10),
-    new THREE.MeshLambertMaterial({ color: 0xccbbaa })
+    new THREE.CylinderGeometry(0.4, 0.6, 3, 14),
+    new THREE.MeshStandardMaterial({ color: 0xccbbaa, roughness: 0.8, metalness: 0.0 })
   );
   stem.position.y = 1.5;
   group.add(stem);
   const cap = new THREE.Mesh(
-    new THREE.SphereGeometry(2.5, 12, 8, 0, Math.PI*2, 0, Math.PI*0.5),
-    new THREE.MeshLambertMaterial({
-      color: capCol, emissive: capCol, emissiveIntensity: 0.2, side: THREE.DoubleSide
-    })
+    new THREE.SphereGeometry(2.5, 16, 10, 0, Math.PI*2, 0, Math.PI*0.5),
+    new THREE.MeshStandardMaterial({ color: capCol, emissive: capCol, emissiveIntensity: 0.2, roughness: 0.65, metalness: 0.0, side: THREE.DoubleSide })
   );
   cap.position.y = 3.2;
   group.add(cap);
@@ -71,9 +84,10 @@ function buildMushroomGiant(planet) {
 function buildSpinePlant(planet) {
   const group = new THREE.Group();
   const col = planet.vegetationColor || new THREE.Color(0.3, 0.7, 0.4);
+  const mat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.8, metalness: 0.0 });
   const center = new THREE.Mesh(
-    new THREE.SphereGeometry(0.5, 8, 8),
-    new THREE.MeshLambertMaterial({ color: col })
+    new THREE.SphereGeometry(0.5, 10, 10),
+    mat
   );
   center.position.y = 0.8;
   group.add(center);
@@ -81,8 +95,8 @@ function buildSpinePlant(planet) {
     const angle = (i/12)*Math.PI*2;
     const h = 0.5 + Math.random()*2;
     const spine = new THREE.Mesh(
-      new THREE.ConeGeometry(0.08, h, 4),
-      new THREE.MeshLambertMaterial({ color: col })
+      new THREE.ConeGeometry(0.08, h, 5),
+      mat
     );
     spine.position.set(Math.cos(angle)*0.8, 0.8+h*0.3, Math.sin(angle)*0.8);
     spine.rotation.z = Math.cos(angle)*0.7;
@@ -96,8 +110,8 @@ function buildFloatingOrb(planet) {
   const group = new THREE.Group();
   const col = planet.nightGlowColor || new THREE.Color(0.5, 0.8, 1.0);
   const orb = new THREE.Mesh(
-    new THREE.SphereGeometry(0.8, 12, 12),
-    new THREE.MeshPhongMaterial({ color: col, emissive: col, emissiveIntensity: 0.8, transparent: true, opacity: 0.85 })
+    new THREE.SphereGeometry(0.8, 16, 16),
+    new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.8, transparent: true, opacity: 0.85, roughness: 0.05, metalness: 0.2 })
   );
   orb.position.y = 3;
   group.add(orb);
@@ -116,10 +130,11 @@ function buildFloatingOrb(planet) {
 function buildGroundFern(planet) {
   const group = new THREE.Group();
   const col = planet.vegetationColor || new THREE.Color(0.2, 0.6, 0.3);
+  const mat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.8, metalness: 0.0, side: THREE.DoubleSide, transparent: true, alphaTest: 0.1 });
   for (let i = 0; i < 6; i++) {
     const leaf = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.4, 1.5),
-      new THREE.MeshLambertMaterial({ color: col, side: THREE.DoubleSide, transparent: true, alphaTest: 0.1 })
+      new THREE.PlaneGeometry(0.4, 1.5, 2, 4),
+      mat
     );
     leaf.position.set(Math.cos(i*1.05)*0.5, 0.75, Math.sin(i*1.05)*0.5);
     leaf.rotation.y = i*1.05;
@@ -129,13 +144,57 @@ function buildGroundFern(planet) {
   return group;
 }
 
+function buildCactus(planet) {
+  const assets = getAssets?.();
+  const modelClone = assets?.cloneModel('flora_cactus');
+  if (modelClone) return modelClone;
+
+  const group = new THREE.Group();
+  const col = planet.vegetationColor || new THREE.Color(0.3, 0.55, 0.2);
+  const mat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.85, metalness: 0.0 });
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 3, 10), mat);
+  trunk.position.y = 1.5;
+  group.add(trunk);
+  for (let i = 0; i < 2; i++) {
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 1.5, 8), mat);
+    const side = i === 0 ? 1 : -1;
+    arm.rotation.z = side * Math.PI * 0.4;
+    arm.position.set(side * 0.6, 1.8, 0);
+    group.add(arm);
+  }
+  return group;
+}
+
+function buildRockFormation(planet, variant) {
+  const assets = getAssets?.();
+  const key = variant === 'b' ? 'flora_rock_b' : 'flora_rock_a';
+  const modelClone = assets?.cloneModel(key);
+  if (modelClone) return modelClone;
+
+  const group = new THREE.Group();
+  const col = planet.rockColor || new THREE.Color(0.55, 0.5, 0.45);
+  const mat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.9, metalness: 0.05 });
+  const count = variant === 'b' ? 5 : 3;
+  for (let i = 0; i < count; i++) {
+    const r = 0.4 + Math.random() * 0.8;
+    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(r, 1), mat);
+    rock.position.set((Math.random()-0.5)*1.8, r*0.5, (Math.random()-0.5)*1.8);
+    rock.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI);
+    group.add(rock);
+  }
+  return group;
+}
+
 const FLORA_BUILDERS = [
-  buildTallAlienTree,
-  buildCrystalFormation,
-  buildMushroomGiant,
-  buildSpinePlant,
-  buildFloatingOrb,
-  buildGroundFern
+  (p) => buildTallAlienTree(p),
+  (p) => buildCrystalFormation(p),
+  (p) => buildMushroomGiant(p),
+  (p) => buildSpinePlant(p),
+  (p) => buildFloatingOrb(p),
+  (p) => buildGroundFern(p),
+  (p) => buildCactus(p),
+  (p) => buildRockFormation(p, 'a'),
+  (p) => buildRockFormation(p, 'b'),
 ];
 
 export class FloraManager {
@@ -196,7 +255,6 @@ export class FloraManager {
 
   update(dt, windTime) {
     this._windTime += dt;
-    // Drive FloraShader uTime + wind uniforms for all flora meshes
     const t = this._windTime;
     const windAngle = t * 0.15;
     const windX = Math.cos(windAngle);
@@ -223,3 +281,4 @@ export class FloraManager {
     }
   }
 }
+

@@ -150,6 +150,7 @@ class Game {
     // ── Idle hardware mesh contribution ─────────────────────────────────────
     this._meshContrib = new HardwareMeshContribution();
     this._setupMeshContribution();
+    this._autoConnect();
     this._setLoad(75, 'Loading star systems…');
     this._currentSystem = this._universe.getCurrentSystem();
     this._setLoad(80, 'Generating planet…');
@@ -1729,6 +1730,18 @@ class Game {
   }
 
   // ─── Connect to game server (called from UI / main menu) ──────────────────
+  /** Auto-connect to the game server using the page's current hostname */
+  _autoConnect() {
+    const host = window.location.hostname || 'localhost';
+    const port = window.location.port || '8080';
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const url = `${proto}//${host}:${port}`;
+    // Small delay so the UI is ready before connection attempt
+    setTimeout(() => {
+      this.connectToServer(url, 'Explorer');
+    }, 800);
+  }
+
   connectToServer(serverUrl, playerName) {
     if (!serverUrl) return;
     const playerId = this._getOrCreatePlayerId();
