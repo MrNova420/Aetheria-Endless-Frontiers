@@ -242,12 +242,13 @@ function listPlayerProfiles() {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function getLocalIP() {
+  const ips = [];
   for (const ifaces of Object.values(os.networkInterfaces())) {
     for (const i of ifaces) {
-      if (i.family === 'IPv4' && !i.internal) return i.address;
+      if (i.family === 'IPv4' && !i.internal) ips.push(i.address);
     }
   }
-  return '127.0.0.1';
+  return ips.length ? ips : ['127.0.0.1'];
 }
 
 function makeId() {
@@ -658,7 +659,7 @@ function connectMeshPeer(url) {
   ws.on('open', () => {
     meshPeers.set(url, ws);
     log(`Mesh peer connected: ${url}`);
-    ws.send(JSON.stringify({ type: 'mesh_hello', peerId: getLocalIP() + ':' + PORT }));
+    ws.send(JSON.stringify({ type: 'mesh_hello', peerId: getLocalIP()[0] + ':' + PORT }));
   });
   ws.on('message', raw => {
     let msg; try { msg = JSON.parse(raw); } catch (_) { return; }
@@ -683,14 +684,24 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   printBanner(ip);
 });
 
-function printBanner(ip) {
+function printBanner(ips) {
+  const ipList = Array.isArray(ips) ? ips : [ips];
+  const pad = s => s.padEnd(42);
+  const networkLines = ipList.map(ip =>
+    `║  Network → ${pad(`http://${ip}:${PORT}  (LAN players)`)}`
+  ).join('\n');
+  const adminLines = ipList.map(ip =>
+    `║  Admin   → ${pad(`http://${ip}:${PORT}/admin.html`)}`
+  ).join('\n');
   console.log(`
 ╔══════════════════════════════════════════════════════════╗
 ║      AETHERIA : ENDLESS FRONTIERS — GAME SERVER          ║
 ╠══════════════════════════════════════════════════════════╣
-║  Game    → http://localhost:${PORT}                        ║
-║  Network → http://${ip}:${PORT}                      ║
-║  Admin   → http://${ip}:${PORT}/admin              ║
+║  Local   → http://localhost:${PORT}                        ║
+${networkLines}
+${adminLines}
+╠══════════════════════════════════════════════════════════╣
+║  ⚠  If LAN access fails, allow port ${PORT} in firewall   ║
 ${_playerCountLine()}
 ╚══════════════════════════════════════════════════════════╝
 Press Ctrl+C to stop.`);

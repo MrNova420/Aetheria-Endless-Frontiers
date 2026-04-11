@@ -3,6 +3,7 @@
  * Procedural ship model + three flight modes: LANDED / ATMOSPHERIC / SPACE
  */
 import * as THREE from 'three';
+import { getAssets } from './assets.js';
 
 function seededRng(seed) {
   let s = (seed >>> 0) || 1;
@@ -152,8 +153,9 @@ function buildShipMesh(seed = 1) {
 
 // ─── Ship class ───────────────────────────────────────────────────────────────
 export class Ship {
-  constructor(scene) {
+  constructor(scene, shipClass = 'explorer') {
     this.scene = scene;
+    this.shipClass = shipClass;
     this.mode  = FlightMode.LANDED;
 
     // Physics
@@ -171,9 +173,11 @@ export class Ship {
     this._landing       = false;
     this._landTimer     = 0;
 
-    // Build mesh
+    // Build mesh — try GLB asset first, fall back to procedural
     const shipSeed = Math.floor(Math.random() * 0xFFFF);
-    this.mesh = buildShipMesh(shipSeed);
+    const assetKey = shipClass === 'fighter' ? 'ship_fighter' : 'ship_explorer';
+    const glbMesh  = getAssets()?.cloneModel(assetKey) ?? null;
+    this.mesh = glbMesh || buildShipMesh(shipSeed);
     this.scene.add(this.mesh);
 
     // Entry prompt sphere (visual indicator)

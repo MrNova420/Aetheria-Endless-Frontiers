@@ -165,6 +165,16 @@ const SYLLABLES_A = [
   'Xa','Xe','Xi','Xo','Xu',
   'Ya','Ye','Yi','Yo','Yu',
   'Za','Ze','Zi','Zo','Zu',
+  // Extended sci-fi prefixes
+  'Aes','Aet','Alx','Arx','Aux','Azh',
+  'Bra','Byx','Czh','Dyx','Ezh','Fyx',
+  'Gyx','Hyp','Ixo','Jyx','Kyx','Lyx',
+  'Myx','Nyx','Oyx','Pyx','Qyx','Ryx',
+  'Syx','Tyx','Uyx','Vyx','Wyx','Zyx',
+  'Aeth','Alph','Anth','Arth','Axth',
+  'Balth','Calth','Delth','Elth','Falx',
+  'Galth','Helx','Ialx','Jalx','Kalx',
+  'Lux','Malx','Nalx','Oalx','Palx',
 ];
 const SYLLABLES_B = [
   'bas','bek','bis','bon','bra','brek','bus',
@@ -191,6 +201,32 @@ const SYLLABLES_B = [
   'xan','xel','xem','xen','xes','xis','xon','xul',
   'yan','yel','yem','yen','yes','yis','yon','yul',
   'zan','zel','zem','zen','zes','zis','zon','zul','zun',
+  // Extended alien-sounding endings
+  'aeth','alyx','anox','arxis','astrum','axion',
+  'belyx','borax','braxis','brix','bron',
+  'calyp','ceron','chron','citrix','corvax',
+  'darix','deltron','deron','dexus','draxis',
+  'eclyx','ectron','elrix','elyxis','emrax',
+  'faryx','felux','ferion','firon','flaxis',
+  'galyx','geron','glaxis','gonix','graxis',
+  'helyx','herion','hexis','hixon','horax',
+  'icion','illix','imrax','ixion','ixyron',
+  'jaryx','jelion','jenox','jerax','jixon',
+  'karyx','kelion','kerox','kexon','kirax',
+  'laryx','lelion','lerox','lexon','lirax',
+  'maryx','melion','merox','mexon','mirax',
+  'naryx','nelion','nerox','nexon','nirax',
+  'onyx','orix','orax','oron','ortex',
+  'paryx','pelion','perox','pexon','pirax',
+  'raryx','relion','rerox','rexon','rirax',
+  'saryx','selion','serox','sexon','sirax',
+  'taryx','telion','terox','texon','tirax',
+  'ulyx','umrax','unrix','urion','usrax',
+  'varyx','velion','verox','vexon','virax',
+  'waryx','welion','werox','wexon','wirax',
+  'xaryx','xelion','xerox','xexon','xirax',
+  'yaryx','yelion','yerox','yexon','yirax',
+  'zaryx','zelion','zerox','zexon','zirax',
 ];
 
 function genSystemName(rng) {
@@ -250,7 +286,8 @@ export class UniverseSystem {
     const seed = hashCoord(g, r, s);
     const rng  = seededRng(seed);
 
-    const name = genSystemName(rng);
+    // Home system always named "New Meridian"
+    const name = (g === 0 && r === 0 && s === 0) ? 'New Meridian' : genSystemName(rng);
 
     const pos = spiralPosition(r, s, rng);
 

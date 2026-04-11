@@ -322,6 +322,12 @@ export class GameHUD {
       wxRow.append(el('span', 'haz-icon', '🌤'), el('span', 'haz-lbl', 'WEATHER'), this._el.weatherLbl);
       hazardWrap.appendChild(wxRow);
     }
+
+    // Network status indicator (top-right, next to level box)
+    this._el.netStatus = document.createElement('div');
+    this._el.netStatus.className = 'net-status-hud hidden';
+    this._el.netStatus.innerHTML = '<span class="net-dot">●</span><span class="net-info">OFFLINE</span>';
+    document.getElementById('hud')?.appendChild(this._el.netStatus);
   }
 
   _buildArcSVG(id, strokeColor, trackColor) {
@@ -1217,6 +1223,23 @@ export class GameHUD {
 
   hideHelpOverlay() {
     if (this._el.helpOverlay) this._el.helpOverlay.classList.add('hidden');
+  }
+
+  // ─── Network Status HUD ─────────────────────────────────────────────────────
+  updateNetStatus(connected, playerCount = 0, ping = 0) {
+    const el = this._el.netStatus;
+    if (!el) return;
+    el.classList.remove('hidden', 'online', 'offline');
+    if (connected) {
+      el.classList.add('online');
+      const info = playerCount > 1
+        ? `${playerCount} ONLINE · ${ping}ms`
+        : `ONLINE · ${ping}ms`;
+      el.querySelector('.net-info').textContent = info;
+    } else {
+      el.classList.add('offline');
+      el.querySelector('.net-info').textContent = 'OFFLINE';
+    }
   }
 
   dispose() {}

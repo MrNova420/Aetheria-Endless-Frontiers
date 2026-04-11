@@ -18,21 +18,21 @@ const PLANET_NAMES = [
 ];
 
 const TYPE_DEFAULTS = {
-  LUSH:     { temperature:18,  toxicity:0,   radiation:0,   stormFreq:0.3, floraDens:0.9, faunaDens:0.8, hazard:'none',      waterLevel:10, hasWater:true,  sunColor:'#fff4c0', ambientColor:'#2a4a2a', emissiveStr:0.0, heightMult:1.0 },
+  LUSH:     { temperature:18,  toxicity:0,   radiation:0,   stormFreq:0.3, floraDens:1.0, faunaDens:0.8, hazard:'none',      waterLevel:10, hasWater:true,  sunColor:'#fff4c0', ambientColor:'#2a4a2a', emissiveStr:0.0, heightMult:1.0 },
   BARREN:   { temperature:35,  toxicity:0,   radiation:0.3, stormFreq:0.6, floraDens:0.1, faunaDens:0.2, hazard:'heat',      waterLevel:0,  hasWater:false, sunColor:'#ffa060', ambientColor:'#3a2010', emissiveStr:0.0, heightMult:0.8 },
   TOXIC:    { temperature:25,  toxicity:0.9, radiation:0.2, stormFreq:0.5, floraDens:0.5, faunaDens:0.4, hazard:'toxic',     waterLevel:5,  hasWater:true,  sunColor:'#c8ff60', ambientColor:'#203a10', emissiveStr:0.05,heightMult:0.9 },
   FROZEN:   { temperature:-40, toxicity:0,   radiation:0,   stormFreq:0.4, floraDens:0.2, faunaDens:0.3, hazard:'cold',      waterLevel:8,  hasWater:true,  sunColor:'#c0d8ff', ambientColor:'#1a2840', emissiveStr:0.0, heightMult:1.1 },
   BURNING:  { temperature:80,  toxicity:0.3, radiation:0.5, stormFreq:0.8, floraDens:0.0, faunaDens:0.1, hazard:'heat',      waterLevel:0,  hasWater:false, sunColor:'#ff6020', ambientColor:'#3a1008', emissiveStr:0.4, heightMult:1.2 },
-  EXOTIC:   { temperature:22,  toxicity:0.1, radiation:0.1, stormFreq:0.2, floraDens:1.0, faunaDens:1.0, hazard:'exotic',    waterLevel:12, hasWater:true,  sunColor:'#e060ff', ambientColor:'#200a40', emissiveStr:0.2, heightMult:0.7 },
+  EXOTIC:   { temperature:22,  toxicity:0.1, radiation:0.1, stormFreq:0.2, floraDens:1.0, faunaDens:1.0, hazard:'exotic',    waterLevel:12, hasWater:true,  sunColor:'#e060ff', ambientColor:'#200a40', emissiveStr:1.0, heightMult:0.7 },
   DEAD:     { temperature:10,  toxicity:0,   radiation:0.8, stormFreq:0.1, floraDens:0.0, faunaDens:0.0, hazard:'radiation', waterLevel:0,  hasWater:false, sunColor:'#d8d0c0', ambientColor:'#181818', emissiveStr:0.0, heightMult:0.6 },
   OCEAN:    { temperature:15,  toxicity:0,   radiation:0,   stormFreq:0.4, floraDens:0.6, faunaDens:0.7, hazard:'none',      waterLevel:30, hasWater:true,  sunColor:'#a8e0ff', ambientColor:'#082840', emissiveStr:0.0, heightMult:0.5 },
   // New subtypes
   TROPICAL: { temperature:32,  toxicity:0,   radiation:0,   stormFreq:0.7, floraDens:1.0, faunaDens:0.9, hazard:'heat',      waterLevel:14, hasWater:true,  sunColor:'#ffe060', ambientColor:'#1a4010', emissiveStr:0.0, heightMult:0.8 },
   ARCTIC:   { temperature:-60, toxicity:0,   radiation:0.1, stormFreq:0.9, floraDens:0.1, faunaDens:0.2, hazard:'cold',      waterLevel:6,  hasWater:true,  sunColor:'#d0e8ff', ambientColor:'#101830', emissiveStr:0.0, heightMult:1.3 },
-  VOLCANIC: { temperature:120, toxicity:0.5, radiation:0.6, stormFreq:0.4, floraDens:0.0, faunaDens:0.05,hazard:'heat',      waterLevel:0,  hasWater:false, sunColor:'#ff4400', ambientColor:'#400800', emissiveStr:0.8, heightMult:1.8 },
+  VOLCANIC: { temperature:120, toxicity:0.5, radiation:0.6, stormFreq:0.4, floraDens:0.0, faunaDens:0.05,hazard:'heat',      waterLevel:0,  hasWater:false, sunColor:'#ff4400', ambientColor:'#400800', emissiveStr:1.5, heightMult:1.8 },
   SWAMP:    { temperature:28,  toxicity:0.6, radiation:0,   stormFreq:0.6, floraDens:0.9, faunaDens:0.7, hazard:'toxic',     waterLevel:8,  hasWater:true,  sunColor:'#aac840', ambientColor:'#1a3010', emissiveStr:0.05,heightMult:0.6 },
   DESERT:   { temperature:50,  toxicity:0,   radiation:0.2, stormFreq:0.8, floraDens:0.05,faunaDens:0.15,hazard:'heat',      waterLevel:0,  hasWater:false, sunColor:'#ffc040', ambientColor:'#402010', emissiveStr:0.0, heightMult:0.7 },
-  CRYSTAL:  { temperature:5,   toxicity:0,   radiation:0.3, stormFreq:0.1, floraDens:0.2, faunaDens:0.3, hazard:'radiation', waterLevel:4,  hasWater:true,  sunColor:'#a0e8ff', ambientColor:'#102838', emissiveStr:0.3, heightMult:1.4 },
+  CRYSTAL:  { temperature:5,   toxicity:0,   radiation:0.3, stormFreq:0.1, floraDens:0.2, faunaDens:0.3, hazard:'radiation', waterLevel:4,  hasWater:true,  sunColor:'#a0e8ff', ambientColor:'#102838', emissiveStr:0.9, heightMult:1.4 },
 };
 
 const RESOURCE_WEIGHTS_BY_TYPE = {
@@ -61,15 +61,58 @@ const MOON_TYPES = [
   { name:'Barren Moon',  color:'#b0a090',size:0.025,emissive:0.0 },
 ];
 
+/** Seed of the starting planet (New Meridian) — used for special-case overrides. */
+const STARTING_PLANET_SEED = 10001;
+
 export class PlanetGenerator {
   static generate(seed, typeOverride) {
     const rng  = seededRng(seed);
     const types = Object.keys(PLANET_TYPES);
     const type  = typeOverride || types[Math.floor(rng() * types.length)];
     const def   = TYPE_DEFAULTS[type] || TYPE_DEFAULTS.LUSH;
-    const bc    = BIOME_COLORS[type] || BIOME_COLORS.LUSH;
+
+    // Varied LUSH palettes for visual diversity
+    const LUSH_PALETTES = [
+      { low:'#1a5c1a', mid:'#2d8c2d', high:'#a0c8a0', fog:'#c8e8c8', water:'#1a6aff', accent:'#40ff40' },
+      { low:'#1a6030', mid:'#2aa060', high:'#70d090', fog:'#b0e8c8', water:'#1058e0', accent:'#30ffaa' },
+      { low:'#2a5010', mid:'#5a9820', high:'#a8cc60', fog:'#d0e8a0', water:'#2060e0', accent:'#aaff30' },
+      { low:'#3a4010', mid:'#7a9030', high:'#c0c880', fog:'#e0e8b0', water:'#2040cc', accent:'#e0ff20' },
+      { low:'#104020', mid:'#1c7040', high:'#60b080', fog:'#90d0b0', water:'#0850d0', accent:'#20ffa0' },
+      { low:'#1c4830', mid:'#388060', high:'#80c0a0', fog:'#a8dcc0', water:'#1048c8', accent:'#50ffb0' },
+    ];
+
+    let bc;
+    if (type === 'LUSH') {
+      const palette = LUSH_PALETTES[Math.floor(rng() * LUSH_PALETTES.length)];
+      // First planet seed (New Meridian) always gets rich palette index 0
+      bc = seed === STARTING_PLANET_SEED ? LUSH_PALETTES[0] : palette;
+    } else {
+      bc = BIOME_COLORS[type] || BIOME_COLORS.LUSH;
+    }
+
+    // Override biome colors for EXOTIC, CRYSTAL, and VOLCANIC for vibrancy
+    if (type === 'EXOTIC') {
+      bc = {
+        low:    '#6010c0', mid:    '#b020e0', high:   '#e060ff',
+        accent: '#ff40ff', fog:    '#c050e8', water:  '#6020d0',
+      };
+    } else if (type === 'CRYSTAL') {
+      bc = {
+        low:    '#0080a0', mid:    '#20c0e8', high:   '#80ffff',
+        accent: '#c0ffff', fog:    '#80e0ff', water:  '#1060c0',
+      };
+    } else if (type === 'VOLCANIC') {
+      bc = {
+        low:    '#500000', mid:    '#cc2200', high:   '#ff6600',
+        accent: '#ff8800', fog:    '#802010', water:  '#cc2200',
+      };
+    }
+
     const nameIdx = Math.floor(rng() * PLANET_NAMES.length);
     const suffix  = String.fromCharCode(65 + Math.floor(rng()*26));
+
+    // Special name override for the starting planet
+    const planetName = seed === STARTING_PLANET_SEED ? 'New Meridian' : `${PLANET_NAMES[nameIdx]}-${suffix}`;
 
     // Moon descriptors (rendered in atmosphere shader as small discs)
     const moonCount = Math.floor(rng() * 3);
@@ -89,7 +132,7 @@ export class PlanetGenerator {
 
     return {
       id: `planet_${seed}`,
-      name: `${PLANET_NAMES[nameIdx]}-${suffix}`,
+      name: planetName,
       seed,
       type,
       radius: 800 + rng() * 400,
@@ -106,8 +149,8 @@ export class PlanetGenerator {
       rockColor: new THREE.Color(bc.high),
       sandColor: new THREE.Color(bc.low).multiplyScalar(1.3),
       snowColor: new THREE.Color(0.9, 0.93, 0.98),
-      sunColor: new THREE.Color(def.sunColor),
-      ambientColor: new THREE.Color(def.ambientColor),
+      sunColor: new THREE.Color(seed === STARTING_PLANET_SEED ? '#ffe8a0' : def.sunColor),
+      ambientColor: new THREE.Color(seed === STARTING_PLANET_SEED ? '#3a6a2a' : def.ambientColor),
       temperature: def.temperature + (rng()-0.5)*20,
       toxicity: def.toxicity + rng()*0.1,
       radiation: def.radiation + rng()*0.1,

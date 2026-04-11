@@ -363,6 +363,26 @@ canvas { display: block; }
 .mm-net-status.connecting { color: var(--col-yellow); }
 .mm-net-status.error      { color: var(--col-red); }
 
+/* ── Network Status HUD (top-right, next to level box) ───────────────────── */
+.net-status-hud {
+  position: fixed;
+  top: var(--hud-pad);
+  right: calc(var(--hud-pad) + 130px);
+  background: var(--col-panel);
+  border: var(--border);
+  border-radius: var(--radius);
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  display: flex; align-items: center; gap: 6px;
+  z-index: 100;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.net-dot { font-size: 0.7rem; color: var(--col-text-dim); }
+.net-status-hud.online  .net-dot { color: var(--col-green); }
+.net-status-hud.offline .net-dot { color: var(--col-red); }
+.net-info { font-family: var(--font-mono); color: var(--col-text-dim); letter-spacing: 0.05em; }
+
 /* ── HUD wrapper ─────────────────────────────────────────────────────────── */
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 100; }
 #hud > * { pointer-events: auto; }
