@@ -1,6 +1,6 @@
-# 🏛️ Architecture & System Design – Aetheria: Endless Frontiers
+# Aetheria: Endless Frontiers — Architecture
 
-Quick reference diagram and data-flow notes for developers.
+> Module dependency map, data flow, and memory management reference.
 
 ---
 
@@ -8,213 +8,237 @@ Quick reference diagram and data-flow notes for developers.
 
 ```
 index.html
-  └─ <script type="module" src="src/game.js">
-        │
-        ├─ src/assets.js       (AssetManager singleton)
-        │     └─ assets/manifest.json
-        │
-        ├─ src/config.js       (pure constants – no dependencies)
-        ├─ src/noise.js        (pure math – no dependencies)
-        │
-        ├─ src/planet.js       ← config, noise
-        ├─ src/terrain.js      ← config, noise, shaders, flora*, mining*
-        ├─ src/flora.js        ← noise, shaders, assets
-        ├─ src/creatures.js    ← noise, assets
-        ├─ src/mining.js       ← config, noise, assets
-        │
-        ├─ src/player.js       ← config, THREE
-        ├─ src/ship.js         ← config, assets, THREE
-        ├─ src/space.js        ← noise, shaders, assets, THREE
-        ├─ src/galaxy.js       ← noise, THREE
-        │
-        ├─ src/inventory.js    (pure data – no THREE dependency)
-        ├─ src/crafting.js     ← inventory
-        │
-        ├─ src/audio.js        (Web Audio API – no THREE)
-        ├─ src/ui.js           (DOM – no THREE)
-        └─ src/shaders.js      (GLSL strings – no dependencies)
-
-* terrain.js receives floraManager and miningSystem via setManagers() callback
-  to avoid circular imports
+ └─ src/game.js  (main entry, ES module)
+      ├─ config.js          constants (WORLD, PLANET_TYPES, BIOME_COLORS, CLASSES…)
+      ├─ noise.js            SimplexNoise, fBm
+      ├─ shaders.js          GLSL: TerrainShader, WaterShader, AtmosphereShader,
+      │                            FloraShader, PostShader
+      ├─ assets.js           GLTFLoader, TextureLoader, manifest.json
+      ├─ audio.js            Web Audio procedural SFX + ambient
+      ├─ physics.js          Bodies, projectiles, gravity wells, separation
+      │
+      ├─ universe.js         UniverseSystem (255 galaxies, 6 tiers, _genSystem)
+      ├─ planet.js           PlanetGenerator, PlanetAtmosphere
+      ├─ terrain.js          TerrainManager (LOD chunks, water, lighting)
+      ├─ flora.js            FloraManager (biome-weighted, per-instance colour jitter)
+      ├─ creatures.js        CreatureManager (genome, AI, BIOME_TINTS)
+      ├─ weather.js          WeatherSystem
+      ├─ space.js            SpaceScene (stars, asteroid belt, sun mesh)
+      │
+      ├─ player.js           Player (11-zone mesh, movement, camera, life support)
+      ├─ ship.js             Ship (5-class PBR, 3 flight modes)
+      ├─ npcs.js             NpcManager (4-species genome, settlements)
+      ├─ sentinels.js        SentinelManager (drones, wanted level)
+      ├─ building.js         BuildingSystem (10 types, power grid)
+      ├─ extractor.js        AutoExtractor (deploy, drip resources)
+      │
+      ├─ inventory.js        Inventory (48 slots, add/remove/serialize)
+      ├─ crafting.js         CraftingSystem (40+ recipes)
+      ├─ mining.js           MiningSystem (resource nodes, beam, XP)
+      ├─ trading.js          TradingSystem (30 commodities, market prices)
+      ├─ factions.js         FactionManager (6 factions, reputation)
+      ├─ quests.js           QuestSystem (event tracking, 3-quest chain)
+      ├─ status.js           StatusEffectManager (burn/freeze/poison/energised/shield)
+      │
+      ├─ lore.js             LoreSystem (planet/creature/system descriptions)
+      ├─ help.js             HelpSystem (in-game controls overlay)
+      ├─ network.js          NetworkManager (WebSocket, proximity, ghost meshes)
+      ├─ ui.js               HUD, menus, galaxy map, tech tree, crafting UI
+      ├─ galaxy.js           Galaxy map data helper
+      ├─ spawn.js            SpawnSystem (safe spawn finder, FNV-1a RNG)
+      ├─ hardware-mesh.js    HardwareMeshContribution (idle CPU sharing)
+      └─ mesh-worker.js      Web Worker relay
 ```
 
 ---
 
-## Frame Update Order
-
-Every animation frame, `game._tick(dt)` runs in this order:
+## Game State Machine
 
 ```
-1. Input poll       (_pollInput)
-2. Game state tick
-   ├─ LOADING       (asset progress only)
-   ├─ MAIN_MENU     (idle)
-   ├─ PLANET_SURFACE
-   │    ├─ terrain.update(playerPos)      ← chunk streaming
-   │    ├─ flora.update(dt, windTime)     ← wind animation
-   │    ├─ creatures.update(dt, pos, h)   ← AI step
-   │    ├─ mining.update(dt, pos, ...)    ← beam + extraction
-   │    ├─ player.update(dt, input, ...)  ← physics + camera
-   │    ├─ ship.update(dt, input, ...)    ← idle engine
-   │    ├─ atmosphere.update(dt, sun, p)  ← sky shader uniforms
-   │    └─ hud.update(dt, ...)            ← DOM updates
-   ├─ SHIP_ATM
-   │    ├─ terrain.update(playerPos)
-   │    ├─ ship.update(dt, input, terrain)
-   │    └─ hud.update(dt, ...)
-   ├─ SPACE_LOCAL
-   │    ├─ spaceScene.update(dt, camera)
-   │    └─ hud.update(dt, ...)
-   ├─ PAUSED / DEAD / GALAXY_MAP  ← no simulation tick
-3. renderer / composer.render()
-```
+GS.LOADING
+  └─ _setLoad(pct, msg) → progress bar
+  └─ → GS.MAIN_MENU (after assets + terrain ready)
 
----
+GS.MAIN_MENU
+  └─ selectClass() → _giveStarterKit() → _setupSurface() → _setupPlayer() → _setupShip()
+  └─ _loadGame() → restore state → GS.PLANET_SURFACE
+  └─ → GS.PLANET_SURFACE
 
-## State Machine Transitions
+GS.PLANET_SURFACE
+  └─ _tickSurface(dt) every frame
+  └─ G key → _boardShip() → GS.SHIP_ATMOSPHERE
+  └─ M key → _toggleGalaxyMap() → GS.GALAXY_MAP
 
-```
-[LOADING] ──preloadDone──► [MAIN_MENU]
-[MAIN_MENU] ──selectClass──► [PLANET_SURFACE]
-[PLANET_SURFACE] ──enterShip──► [SHIP_ATM]
-[SHIP_ATM] ──exitShip──► [PLANET_SURFACE]
-[SHIP_ATM] ──reachOrbit──► [SPACE_LOCAL]
-[SPACE_LOCAL] ──enterAtmo──► [SHIP_ATM]
-[SPACE_LOCAL] ──warpTo──► [SPACE_LOCAL] (new system)
-any ──KeyM──► [GALAXY_MAP] (overlay)
-any ──Escape──► [PAUSED] (overlay)
-any ──hp≤0──► [DEAD] (overlay)
+GS.SHIP_ATMOSPHERE
+  └─ _tickShip(dt) every frame
+  └─ altitude > threshold → GS.SPACE_LOCAL
+  └─ G key (landed) → GS.PLANET_SURFACE
+
+GS.SPACE_LOCAL
+  └─ _tickSpace(dt) every frame
+  └─ G key → descend → GS.SHIP_ATMOSPHERE
+  └─ M key → GS.GALAXY_MAP
+
+GS.GALAXY_MAP
+  └─ Click star → _warpToSystem(sys) → consume Warp Cell
+  └─ → GS.PLANET_SURFACE (after warp)
 ```
 
 ---
 
-## Data Flow: Mining → Inventory → Crafting
+## Per-Frame Tick: _tickSurface(dt)
 
 ```
-Player presses E near resource node
-  → mining.update(..., isMining=true, ...)
-      → _miningProgress += dt * rate
-      → when _miningProgress >= nodeYield:
-          inventory.addItem(node.resourceType, amount)
-          spawnLootParticles()
-
-Player opens Crafting (C key)
-  → ui.showCraftingMenu(crafting, inventory)
-      → crafting.getAvailableRecipes()
-          → inventory.hasIngredients(recipe) for each
-      → render available recipes in DOM
-
-Player clicks recipe
-  → crafting.craft(recipeId)
-      → inventory.removeItem(each input)
-      → inventory.addItem(each output)
-      → ui.showNotification("Crafted: " + name)
-```
-
----
-
-## Data Flow: Galaxy Navigation
-
-```
-Player presses M
-  → game._toggleGalaxyMap()
-      → hud.showGalaxyMap(galaxy, currentSystemId)
-          → GalaxyMap renders canvas with system nodes
-          → Click on system → galaxy.getSystem(id)
-
-Player selects warp target in SPACE_LOCAL
-  → _tickSpace() detects player near planet
-      → spaceScene.getPlanetAt(pos, radius)
-      → if warp key pressed:
-          galaxy.warpTo(targetId)
-          spaceScene.enterSystem(newSystem)
-          game._setState(SPACE_LOCAL)
+1.  Input polling (_keyPoll)
+2.  Player.update(inputs, dt, terrain, physics)
+3.  Camera follow (lerp with Vector3 scratch)
+4.  TerrainManager.update(playerPos, dt)       ← streams chunks
+5.  FloraManager.update(dt, windTime)           ← wind animation
+6.  CreatureManager.update(dt, playerPos)       ← AI tick
+7.  NpcManager.update(dt, playerPos)            ← NPC AI tick
+8.  SentinelManager.update(dt, playerPos)       ← sentinel drones
+9.  WeatherSystem.update(dt)                    ← particles + uniforms
+10. MiningSystem.update(dt, playerPos)          ← beam, resource drip
+11. PhysicsWorld.step(dt)                       ← bodies + projectiles
+12. StatusEffectManager.update(dt, player)      ← burn/freeze/…
+13. AutoExtractor.update(dt, inventory)         ← resource drip
+14. TerrainManager.updateLighting(sunDir, …)    ← sun changes per day cycle
+15. Atmosphere.update(dt, sunDir, playerPos)    ← moon orbits, day factor
+16. HUD updates (HP, shield, life support, XP, wanted level)
+17. Day/night cycle advance (_dayTime)
+18. Hazard damage check (planet hazard type)
+19. Autosave every AUTOSAVE_INTERVAL seconds
 ```
 
 ---
 
-## Planet Generation Pipeline
+## Data Flow: Planet Generation → Surface Setup
 
 ```
-Seed (integer)
-  ↓
-PlanetGenerator.generate(seed)
-  ├─ Hashes seed → picks PLANET_TYPE
-  ├─ Generates name from seed
-  ├─ Assigns fog, atmosphere, sun colors
-  ├─ Assigns hazard levels (toxicity, radiation, temperature)
-  ├─ Assigns flora/fauna density
-  └─ Returns plain object (no Three.js)
-
-TerrainManager.constructor(scene, planet, sunLight)
-  ├─ Creates TerrainShader instance
-  ├─ Creates water plane
-  └─ Begins streaming first chunks
-
-FloraManager.constructor(scene, planet)
-  └─ Picks 3-4 plant types for this biome
-
-CreatureManager.constructor(scene, planet)
-  └─ Defines genome rules for this biome
+_warpToSystem(sys)
+  └─ universe.warpTo(sys.id)          → updates _galaxyIdx, _regionIdx, _systemIdx
+  └─ PlanetGenerator.generate(
+       planetSeed,
+       sys.planets[0].typeOverride,
+       { galaxyIdx: sys.galaxyIdx }
+     )
+     ├─ TYPE_PALETTES[type][palIdx]   → base colours
+     ├─ galaxyChromaTint(galaxyIdx)   → ΔH/ΔS/ΔL tint applied to all colours
+     ├─ PLANET_MODIFIERS[rng]         → modifier (paradise/mega/irradiated/…)
+     ├─ MOON_TYPES × moonCount        → moon descriptors
+     └─ settlements[] + habitability  → settlement descriptors
+  └─ _setupSurface(planet)
+       ├─ TerrainManager(scene, planet, noise)
+       ├─ FloraManager(scene, planet)
+       ├─ CreatureManager(scene, planet)
+       ├─ WeatherSystem(scene, planet)
+       ├─ PlanetAtmosphere(scene, planet)
+       ├─ SpaceScene.enterSystem(sys)
+       ├─ scene.fog = FogExp2(planet.fogColor, planet.fogDensity)
+       └─ _spawnSettlements(planet)
+            └─ for each settlement:
+                 NpcManager.spawnSettlement(pos, faction, size)
+                 BuildingSystem.place(type, pos, quat) × bTypes
 ```
-
----
-
-## Asset Loading Fallback Pattern
-
-Every module that uses assets follows this pattern:
-
-```js
-import { getAssets } from './assets.js';
-
-function buildMyMesh(key) {
-  const model = getAssets().cloneModel(key);
-  if (model) {
-    // Use real GLB model
-    scene.add(model);
-    return model;
-  }
-  // Fallback: build procedural geometry
-  const geo = new THREE.BoxGeometry(1, 1, 1);
-  const mat = new THREE.MeshStandardMaterial({ color: 0x888888 });
-  const mesh = new THREE.Mesh(geo, mat);
-  scene.add(mesh);
-  return mesh;
-}
-```
-
-If no `.glb` file exists (e.g. `npm run assets` was not run), every single call returns `null` and the procedural fallback runs. **The game is always fully playable without downloading assets.**
-
----
-
-## Shader Uniform Update Pattern
-
-Shaders receive per-frame updates via `material.uniforms`:
-
-```js
-// In game.js _tickSurface():
-if (this._terrain) {
-  const mat = this._terrain.getMaterial();
-  mat.uniforms.uTime.value      = elapsed;
-  mat.uniforms.uSunDir.value    = sunDir;
-  mat.uniforms.uCamPos.value    = camPos;
-}
-```
-
-All shader uniforms are declared in `src/shaders.js` in the `uniforms` object and are strongly typed (`THREE.Uniform`).
 
 ---
 
 ## Memory Management
 
-Three.js objects must be explicitly disposed to free GPU memory:
+### Three.js Resource Lifecycle
 
-| What | How |
-|------|-----|
-| Terrain chunks (unloaded) | `geometry.dispose(); material.dispose(); scene.remove(mesh)` |
-| Flora meshes | `instancedMesh.dispose()` |
-| Creature meshes | `geometry.dispose(); material.dispose()` |
-| Atmosphere | `atmosphereMesh.geometry.dispose(); ...material.dispose()` |
-| Entire scene change (Surface→Space) | All managers call `.dispose()` |
+| Resource | Created | Disposed |
+|---|---|---|
+| Terrain chunk geometry | `_buildChunk()` | `_removeChunk()` → `geometry.dispose()` |
+| Terrain chunk material | Clone per chunk | `material.dispose()` on remove |
+| Water chunk mesh | `_buildWaterChunk()` | `waterChunks.delete(key)` + dispose |
+| Flora group | `spawnForChunk()` | `removeForChunk()` → traverse dispose |
+| Building mesh | `_createMesh()` | `dispose()` → traverse dispose |
+| NPC mesh | `buildNpcMesh()` | `NpcManager.dispose()` |
+| Creature mesh | `buildCreatureMesh()` | `CreatureManager.dispose()` |
+| Atmosphere mesh | `PlanetAtmosphere._build()` | `atmosphere.dispose()` |
 
-The `dispose()` method on every manager calls `.dispose()` on all its owned Three.js objects.
+### Chunk Streaming
+
+Chunks are indexed by `(cx, cz)` coordinates. The terrain manager maintains:
+- `_chunks` Map: active chunk meshes (4 LOD levels)
+- `waterChunks` Map: water plane meshes
+- `_chunkFlora` Map (FloraManager): flora groups per chunk
+
+On each `update(playerPos, dt)`:
+1. Compute visible chunk range from player position
+2. Remove chunks outside `RENDER_DISTANCE`
+3. Add chunks inside range at appropriate LOD
+4. LOD transition: seamless via vertex count (64→32→16→8 subdivisions)
+
+---
+
+## Shader Uniforms Reference
+
+### TerrainShader
+| Uniform | Type | Description |
+|---|---|---|
+| `uTime` | float | Elapsed seconds |
+| `uSunDir` | vec3 | Normalised sun direction |
+| `uSunColor` | vec3 | Sun light colour |
+| `uAmbientColor` | vec3 | Ambient fill colour |
+| `uWetness` | float | 0–1, set by WeatherSystem |
+| `uWindTime` | float | Wind animation time |
+| `uEmissiveStrength` | float | Lava/crystal glow intensity |
+| `uLowColor` | vec3 | Ground / vegetation colour |
+| `uMidColor` | vec3 | Rock / soil colour |
+| `uHighColor` | vec3 | Peak / snow colour |
+| `uWaterLevel` | float | Water plane height |
+
+### AtmosphereShader
+| Uniform | Type | Description |
+|---|---|---|
+| `uRayleighColor` | vec3 | Sky scatter colour |
+| `uMieColor` | vec3 | Haze colour |
+| `uSunDir` | vec3 | Sun direction |
+| `uDayFactor` | float | 0–1 day brightness |
+| `uCloudCoverage` | float | Cloud density |
+| `uAuroraColor` | vec3 | Night glow / aurora |
+| `uMoon0Dir/1Dir/2Dir` | vec3 | Moon direction vectors |
+| `uMoon0Color/…` | vec3 | Moon disc colours |
+| `uMoon0Size/…` | float | Angular size of moon disc |
+| `uMoonCount` | int | Number of active moons |
+
+---
+
+## Server Architecture (server.js)
+
+```
+WebSocket server (port 8080 default)
+  ├─ Static file handler (index.html, src/*, css/*, assets/*)
+  ├─ Connection lifecycle:
+  │   join  → assign playerId → spawnHint → savePlayerProfile()
+  │   move  → proximity filter (800u) → broadcast to nearby
+  │   chat  → broadcast to all
+  │   leave → savePlayerProfile() → broadcast playerLeft
+  ├─ broadcastInterval: setInterval(20Hz)
+  │   └─ per-player spatial filter before send
+  ├─ savePlayerProfile(id, data) → data/players/<id>.json
+  └─ checkStorageHotPlug() → 30s interval → /storage/ /mnt/media_rw/ /run/media/
+```
+
+---
+
+## Verify Build Health
+
+```bash
+# Check all JS files are brace-balanced
+node --input-type=module -e '
+import fs from "fs";
+let ok=true;
+for(const f of fs.readdirSync("src").filter(f=>f.endsWith(".js")).map(f=>"src/"+f)){
+  const s=fs.readFileSync(f,"utf8");
+  const d=(s.match(/\{/g)||[]).length-(s.match(/\}/g)||[]).length;
+  if(d){console.log("WARN",f,d);ok=false;}
+}
+if(ok)console.log("All balanced");
+'
+
+# Check server syntax
+node -c server.js
+```
