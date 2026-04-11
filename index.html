@@ -64,6 +64,36 @@
       <div class="mm-tagline">Explore. Survive. Transcend.</div>
     </div>
 
+    <!-- Character slot picker (shown when New Game or Continue is clicked) -->
+    <div id="slot-select" class="hidden">
+      <h2 class="menu-heading">SELECT CHARACTER SLOT</h2>
+      <div class="slot-cards" id="slot-cards"></div>
+      <button class="mm-btn back-btn" id="btn-slots-back">← BACK</button>
+    </div>
+
+    <!-- Character creation (name + colour before class selection) -->
+    <div id="char-create-panel" class="hidden">
+      <h2 class="menu-heading">CREATE EXPLORER</h2>
+      <div class="char-create-form">
+        <label class="form-label">YOUR NAME</label>
+        <input id="char-name-input" class="mm-input char-name-input"
+               type="text" maxlength="20" placeholder="Enter explorer name…" />
+        <label class="form-label" style="margin-top:14px">SUIT COLOUR</label>
+        <div class="suit-color-row" id="suit-color-row">
+          <div class="suit-swatch selected" data-color="0x4488ff" style="background:#4488ff"></div>
+          <div class="suit-swatch" data-color="0xff8800" style="background:#ff8800"></div>
+          <div class="suit-swatch" data-color="0xaa00ff" style="background:#aa00ff"></div>
+          <div class="suit-swatch" data-color="0x00cc44" style="background:#00cc44"></div>
+          <div class="suit-swatch" data-color="0xff2244" style="background:#ff2244"></div>
+          <div class="suit-swatch" data-color="0x00ddff" style="background:#00ddff"></div>
+          <div class="suit-swatch" data-color="0xffdd00" style="background:#ffdd00"></div>
+          <div class="suit-swatch" data-color="0xffffff" style="background:#ffffff"></div>
+        </div>
+        <button class="mm-btn primary" id="btn-create-continue" style="margin-top:18px">CHOOSE CLASS →</button>
+        <button class="mm-btn back-btn" id="btn-create-back">← BACK</button>
+      </div>
+    </div>
+
     <!-- Class selection -->
     <div id="class-select" class="hidden">
       <h2 class="menu-heading">CHOOSE YOUR PATH</h2>
@@ -134,7 +164,7 @@
     <!-- Main buttons -->
     <div id="main-buttons">
       <button class="mm-btn primary" id="btn-new-game">▶  NEW GAME</button>
-      <button class="mm-btn" id="btn-load-game" style="display:none">📂  LOAD GAME</button>
+      <button class="mm-btn" id="btn-load-game">📂  CONTINUE GAME</button>
       <button class="mm-btn" id="btn-controls">⌨  CONTROLS</button>
       <button class="mm-btn" id="btn-help">?  HELP / LORE</button>
       <!-- Server connect row -->

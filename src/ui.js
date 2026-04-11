@@ -173,6 +173,126 @@ export class GameHUD {
     // Help button
     const btnHelp = document.getElementById('btn-help');
     if (btnHelp) btnHelp.addEventListener('click', () => window.game?._help?.show());
+
+    // ── Multi-slot character system ─────────────────────────────────────────
+    this._pendingSlot      = 0;
+    this._pendingSuitColor = 0x4488ff;
+
+    const btnNew2  = document.getElementById('btn-new-game');
+    const btnLoad2 = document.getElementById('btn-load-game');
+    const btnSlotsBack = document.getElementById('btn-slots-back');
+    const slotCards    = document.getElementById('slot-cards');
+
+    const showPanel = (id) => {
+      ['main-buttons','slot-select','char-create-panel','class-select','controls-panel'].forEach(pid => {
+        const el = document.getElementById(pid);
+        if (el) el.classList.toggle('hidden', pid !== id);
+      });
+    };
+
+    const buildSlotCards = (mode) => {
+      if (!slotCards) return;
+      slotCards.innerHTML = '';
+      const summaries = window.game?.getSlotSummaries?.() ?? [null, null, null];
+      for (let i = 0; i < 3; i++) {
+        const s = summaries[i];
+        const card = document.createElement('div');
+        card.className = 'slot-card';
+        if (s) {
+          const colorHex = '#' + (s.suitColor).toString(16).padStart(6, '0');
+          card.innerHTML = `
+            <div class="slot-color-dot" style="background:${colorHex}"></div>
+            <div class="slot-info">
+              <div class="slot-name">${s.name}</div>
+              <div class="slot-sub">${(s.classId||'').toUpperCase()} · LV ${s.level}</div>
+            </div>
+            <div class="slot-actions">
+              <button class="mm-btn primary sm slot-continue-btn">▶ CONTINUE</button>
+              <button class="mm-btn danger sm slot-delete-btn">✕ DELETE</button>
+            </div>`;
+          card.querySelector('.slot-continue-btn').addEventListener('click', () => {
+            window.game?.loadSave?.(i);
+          });
+          card.querySelector('.slot-delete-btn').addEventListener('click', () => {
+            if (confirm(`Delete character "${s.name}"?`)) {
+              localStorage.removeItem(`aetheria_save_${i}`);
+              buildSlotCards(mode);
+            }
+          });
+        } else {
+          card.innerHTML = `
+            <div class="slot-empty-icon">+</div>
+            <div class="slot-info"><div class="slot-name">Empty Slot</div></div>
+            <button class="mm-btn sm slot-new-btn">CREATE CHARACTER</button>`;
+          card.querySelector('.slot-new-btn').addEventListener('click', () => {
+            this._pendingSlot = i;
+            showPanel('char-create-panel');
+            const nameInput = document.getElementById('char-name-input');
+            if (nameInput) nameInput.value = '';
+          });
+        }
+        slotCards.appendChild(card);
+      }
+    };
+
+    if (btnNew2) {
+      const newBtn = btnNew2.cloneNode(true);
+      btnNew2.parentNode.replaceChild(newBtn, btnNew2);
+      newBtn.addEventListener('click', () => {
+        buildSlotCards('new');
+        showPanel('slot-select');
+      });
+    }
+
+    if (btnLoad2) {
+      const loadBtn = btnLoad2.cloneNode(true);
+      btnLoad2.parentNode.replaceChild(loadBtn, btnLoad2);
+      loadBtn.addEventListener('click', () => {
+        buildSlotCards('continue');
+        showPanel('slot-select');
+      });
+    }
+
+    if (btnSlotsBack) {
+      btnSlotsBack.addEventListener('click', () => showPanel('main-buttons'));
+    }
+
+    // ── Character creation form ──────────────────────────────────────────────
+    const btnCreateContinue = document.getElementById('btn-create-continue');
+    const btnCreateBack     = document.getElementById('btn-create-back');
+    const suitColorRow      = document.getElementById('suit-color-row');
+
+    if (suitColorRow) {
+      suitColorRow.querySelectorAll('.suit-swatch').forEach(sw => {
+        sw.addEventListener('click', () => {
+          suitColorRow.querySelectorAll('.suit-swatch').forEach(s => s.classList.remove('selected'));
+          sw.classList.add('selected');
+          this._pendingSuitColor = parseInt(sw.dataset.color, 16);
+        });
+      });
+    }
+
+    if (btnCreateContinue) {
+      btnCreateContinue.addEventListener('click', () => {
+        const nameVal = (document.getElementById('char-name-input')?.value || '').trim();
+        const finalName = nameVal || 'Traveller';
+        if (window.game) {
+          window.game._charSlot  = this._pendingSlot      ?? 0;
+          window.game._charName  = finalName;
+          window.game._suitColor = this._pendingSuitColor ?? 0x4488ff;
+        }
+        showPanel('class-select');
+      });
+    }
+
+    if (btnCreateBack) {
+      btnCreateBack.addEventListener('click', () => showPanel('slot-select'));
+    }
+
+    // Show Continue button only if at least one save exists
+    const anySlot = [0,1,2].some(i => localStorage.getItem(`aetheria_save_${i}`));
+    const loadBtnEl = document.getElementById('btn-load-game');
+    if (loadBtnEl) loadBtnEl.style.display = anySlot ? '' : 'none';
   }
 
   showMainMenu() {

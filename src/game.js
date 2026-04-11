@@ -106,6 +106,9 @@ class Game {
     this._meshContrib = null;   // idle hardware mesh contribution
     this._units       = 0;      // in-game currency: Units
     this._nanites     = 0;      // Nanites currency
+    this._charSlot    = 0;           // active save slot (0-2)
+    this._charName    = 'Traveller'; // display name set during character creation
+    this._suitColor   = 0x4488ff;    // hex colour set during character creation
     this._buildMode   = false;
     this._selectedBuildType = null;
     // XP / leveling
@@ -477,10 +480,14 @@ class Game {
       if (this._physicsWorld) this._physicsWorld.setGravity(this._currentPlanet.gravity);
     }
     // Spawn on terrain
-    const spawnX = 0, spawnZ = 0;
+    const spawnX = 15, spawnZ = 5;  // near ship spawn at (20, sy, 10)
     if (this._terrain) {
       const sy = this._terrain.getHeightAt(spawnX, spawnZ);
-      this._player.setPosition(new THREE.Vector3(spawnX, sy + 1, spawnZ));
+      this._player.setPosition(new THREE.Vector3(spawnX, sy + 2, spawnZ));
+      if (this._player._body) {
+        this._player._body.velocity.set(0, 0, 0);
+        this._player._body.grounded = false;
+      }
     } else {
       this._player.setPosition(new THREE.Vector3(0, 5, 0));
     }
@@ -492,8 +499,8 @@ class Game {
     const spawnX = 20, spawnZ = 10;
     if (this._terrain) {
       const sy = this._terrain.getHeightAt(spawnX, spawnZ);
-      this._ship.mesh.position.set(spawnX, sy, spawnZ);
-      this._ship._landingY = sy;
+      this._ship.mesh.position.set(spawnX, sy + 0.5, spawnZ);
+      this._ship._landingY = sy + 0.5;
     } else {
       this._ship.mesh.position.set(20, 0, 10);
     }
@@ -727,7 +734,7 @@ class Game {
 
   selectClass(classId) {
     const colors = { runekeeper: 0x4488ff, technomancer: 0xff8800, voidhunter: 0xaa00ff };
-    if (this._player) this._player.setClass(classId, colors[classId] || 0x4488ff);
+    if (this._player) this._player.setClass(classId, this._suitColor || colors[classId] || 0x4488ff);
 
     // ── Give starter kit (only on fresh new game, not on load) ──────────────
     if (this._inventory && this._inventory.getAllItems().length === 0) {
@@ -736,7 +743,8 @@ class Game {
 
     // ── Build display name from class and persist it ─────────────────────────
     const CLASS_NAMES = { runekeeper: 'Runekeeper', technomancer: 'Technomancer', voidhunter: 'Voidhunter' };
-    const displayName = CLASS_NAMES[classId] || 'Traveller';
+    const displayName = this._charName || CLASS_NAMES[classId] || 'Traveller';
+    if (this._player) this._player.charName = displayName;
     localStorage.setItem('aetheria_player_name', displayName);
 
     this._hud.hideMainMenu();
@@ -960,7 +968,7 @@ class Game {
     const planet = PlanetGenerator.generate(_planetSeed, sys.planets?.[0]?.typeOverride) ?? PlanetGenerator.getSystemPlanets(sys.seed, sys)[0];
     this._currentPlanet = planet;
     this._hud.hideGalaxyMap();
-    this._setState(this._prevState || GS.PLANET_SURFACE);
+    this._setState(GS.PLANET_SURFACE);
     this._teardownSurface();
     this._setupSurface(planet);
     this._setupPlayer();
@@ -1500,7 +1508,7 @@ class Game {
 
     // Check if near planet to re-enter
     if (this._spaceScene) {
-      const entry = this._spaceScene.getPlanetAt(sp, 5000);
+      const entry = this._spaceScene.getPlanetAt(sp, 8000);
       if (entry) {
         this._hud.showNotification(`Entering atmosphere of ${entry.name}…`, 'info', 3000);
         this._currentPlanet = entry;
@@ -1795,7 +1803,9 @@ class Game {
         factions:   this._factions?.serialize?.() ?? null,
         trading:    this._trading?.serialize?.()  ?? null,
       };
-      localStorage.setItem('aetheria_save', JSON.stringify(data));
+      data.charName  = this._charName  || this._getOrCreatePlayerName();
+      data.timestamp = Date.now();
+      localStorage.setItem(this._getSlotKey(this._charSlot), JSON.stringify(data));
       if (!silent) this._hud.showNotification('💾 Game saved', 'info', 2000);
     } catch (e) {
       console.warn('Save failed:', e);
@@ -1804,7 +1814,7 @@ class Game {
 
   _loadGame() {
     try {
-      const raw = localStorage.getItem('aetheria_save');
+      const raw = localStorage.getItem(this._getSlotKey(this._charSlot));
       if (!raw) { this._hud.showNotification('No save found', 'warn', 2000); return; }
       const data = JSON.parse(raw);
       if (data.player    && this._player)    this._player.loadState(data.player);
@@ -1825,6 +1835,12 @@ class Game {
       if (data.factions  && this._factions)  this._factions.load?.(data.factions);
       if (data.trading   && this._trading)   this._trading.load?.(data.trading);
       this._hud.showNotification('💾 Game loaded', 'info', 2000);
+      if (data.charName) {
+        this._charName = data.charName;
+        localStorage.setItem('aetheria_player_name', this._charName);
+      }
+      if (data.player?.suitColor) this._suitColor = data.player.suitColor;
+      if (data.player?.charName)  this._charName  = data.player.charName;
 
       // If called from the main menu, transition into gameplay now.
       // This avoids the need for a separate selectClass() call (which would
@@ -1999,6 +2015,43 @@ class Game {
 
   _getOrCreatePlayerName() {
     return localStorage.getItem('aetheria_player_name') || 'Traveller';
+  }
+
+  _getSlotKey(slot = 0) {
+    return `aetheria_save_${slot}`;
+  }
+
+  getSlotSummaries() {
+    const slots = [];
+    for (let i = 0; i < 3; i++) {
+      try {
+        const raw = localStorage.getItem(this._getSlotKey(i));
+        if (!raw) { slots.push(null); continue; }
+        const d = JSON.parse(raw);
+        slots.push({
+          slot:      i,
+          name:      d.charName  || d.player?.charName || 'Traveller',
+          classId:   d.player?.classId || 'explorer',
+          level:     d.level  ?? 1,
+          suitColor: d.player?.suitColor ?? 0x4488ff,
+          timestamp: d.timestamp ?? 0,
+        });
+      } catch (_) { slots.push(null); }
+    }
+    return slots;
+  }
+
+  startNewCharacter(slot, name, suitColor, classId) {
+    this._charSlot  = slot  ?? 0;
+    this._charName  = name  || 'Traveller';
+    this._suitColor = suitColor ?? 0x4488ff;
+    localStorage.setItem('aetheria_player_name', this._charName);
+    this.selectClass(classId || 'technomancer');
+  }
+
+  loadSave(slot) {
+    this._charSlot = slot ?? 0;
+    this._loadGame();
   }
 
   // ─── Send player state to network peers (called from _tickSurface) ────────
