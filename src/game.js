@@ -73,6 +73,12 @@ const ATTACK_COOLDOWN        = 0.5;  // seconds between shots
 const WARP_FUEL_COST         = 1;    // Warp Cells per inter-system jump
 const WEATHER_SPEED_BLIZZARD = 0.45; // blizzard/sandstorm speed fraction
 const WEATHER_SPEED_STORM    = 0.70; // storm speed fraction
+// Maps building cost resource keys (lowercase) → inventory display names
+const BUILD_RESOURCE_MAP = {
+  iron: 'Ferrite Dust', carbon: 'Carbon', sodium: 'Sodium',
+  gold: 'Chromatic Metal', titanium: 'Titanium', cobalt: 'Cobalt',
+  copper: 'Copper', platinum: 'Platinum',
+};
 const DEATH_PENALTY_DROP_RATE = 0.5; // fraction of inventory dropped on death
 const CREATURE_LOOT_DROP_CHANCE = 0.55; // probability of loot drop on creature kill
 
@@ -1355,13 +1361,8 @@ class Game {
           // Deduct real inventory for matching resource names
           const def = this._buildings.getBuildingTypes().find(t => t.id === this._selectedBuildType);
           if (def) {
-            const RESOURCE_MAP = {
-              iron: 'Ferrite Dust', carbon: 'Carbon', sodium: 'Sodium',
-              gold: 'Chromatic Metal', titanium: 'Titanium', cobalt: 'Cobalt',
-              copper: 'Copper', platinum: 'Platinum',
-            };
             for (const [res, amt] of Object.entries(def.cost || {})) {
-              const realName = RESOURCE_MAP[res] || res;
+              const realName = BUILD_RESOURCE_MAP[res] || res;
               this._inventory.removeItem(realName, amt);
             }
           }
@@ -1370,16 +1371,11 @@ class Game {
         } else {
           // Check what's missing
           const def = this._buildings.getBuildingTypes().find(t => t.id === this._selectedBuildType);
-          const RESOURCE_MAP = {
-            iron: 'Ferrite Dust', carbon: 'Carbon', sodium: 'Sodium',
-            gold: 'Chromatic Metal', titanium: 'Titanium', cobalt: 'Cobalt',
-            copper: 'Copper', platinum: 'Platinum',
-          };
           const missing = Object.entries(def?.cost || {}).filter(([res, amt]) => {
-            const realName = RESOURCE_MAP[res] || res;
+            const realName = BUILD_RESOURCE_MAP[res] || res;
             return this._inventory.getAmount(realName) < amt;
           }).map(([res, amt]) => {
-            const realName = RESOURCE_MAP[res] || res;
+            const realName = BUILD_RESOURCE_MAP[res] || res;
             return `${realName} ×${amt}`;
           }).join(', ');
           this._hud?.showNotification(
