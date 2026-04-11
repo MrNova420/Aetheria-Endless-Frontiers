@@ -10,6 +10,7 @@ import { RenderPass }         from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass }    from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass }         from 'three/addons/postprocessing/OutputPass.js';
 import { SMAAPass }           from 'three/addons/postprocessing/SMAAPass.js';
+import { ShaderPass }         from 'three/addons/postprocessing/ShaderPass.js';
 
 import { UniverseSystem }       from './universe.js';
 import { LoreSystem }           from './lore.js';
@@ -40,6 +41,7 @@ import { BuildingSystem }  from './building.js';
 import { NetworkManager }  from './network.js';
 import { HelpSystem }      from './help.js';
 import { HardwareMeshContribution, formatMeshStats } from './hardware-mesh.js';
+import { VignetteShader } from './shaders.js';
 
 // ─── Game states ──────────────────────────────────────────────────────────────
 const GS = {
@@ -110,6 +112,7 @@ class Game {
     this._level    = 1;
     this._xp       = 0;
     this._xpToNext = XP_BASE;
+    this._highestGalaxy = 0;
   }
 
   // ─── Async init ─────────────────────────────────────────────────────────────
@@ -208,6 +211,7 @@ class Game {
     this._renderer.setSize(window.innerWidth, window.innerHeight);
     this._renderer.shadowMap.enabled = true;
     this._renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
+    this._renderer.shadowMap.autoUpdate = true;
     this._renderer.toneMapping       = THREE.ACESFilmicToneMapping;
     this._renderer.toneMappingExposure = 1.1;
     this._renderer.outputColorSpace  = THREE.SRGBColorSpace;
@@ -235,7 +239,8 @@ class Game {
     this._sun = new THREE.DirectionalLight(0xfff4e0, 1.6);
     this._sun.position.set(300, 500, 200);
     this._sun.castShadow = true;
-    this._sun.shadow.mapSize.set(2048, 2048);
+    this._sun.shadow.mapSize.set(4096, 4096);
+    this._sun.shadow.normalBias = 0.02;
     this._sun.shadow.camera.near = 0.5;
     this._sun.shadow.camera.far  = 500;   // tighter = sharper shadows
     this._sun.shadow.camera.left = this._sun.shadow.camera.bottom = -200;
@@ -260,6 +265,11 @@ class Game {
     this._composer.addPass(this._bloomPass);
     const smaa = new SMAAPass(window.innerWidth * this._renderer.getPixelRatio(), window.innerHeight * this._renderer.getPixelRatio());
     this._composer.addPass(smaa);
+    this._vignettePass = new ShaderPass(VignetteShader);
+    this._vignettePass.uniforms.uVignetteStr.value    = 0.52;
+    this._vignettePass.uniforms.uVignetteSmooth.value = 0.32;
+    this._vignettePass.uniforms.uChromaStr.value      = 0.0020;
+    this._composer.addPass(this._vignettePass);
     this._composer.addPass(new OutputPass());
   }
 
@@ -277,27 +287,25 @@ class Game {
     this._sun.color.set(sunCol);
     this._sun.intensity = 1.6;
 
-    // Hemisphere light sky/ground colors from planet palette
-    if (this._hemi) {
-      this._hemi.color.set(planet.atmosphereColor || '#88aacc');
-      this._hemi.groundColor.set(planet.ambientColor || '#3a3010');
-      // Volcanic/burning → hot red hemisphere
-      if (planet.type === 'VOLCANIC' || planet.type === 'BURNING') {
-        this._hemi.groundColor.set('#400800');
-        this._hemi.intensity = 0.6;
-      } else if (planet.type === 'CRYSTAL' || planet.type === 'EXOTIC') {
-        this._hemi.intensity = 0.5;
-      } else {
-        this._hemi.intensity = 0.35;
-      }
+    // Per-planet hemisphere sky/ground colours for immersive lighting
+    if (this._hemi && planet) {
+      const skyC = new THREE.Color(planet.atmosphereColor || '#88aacc');
+      const gndC = new THREE.Color(planet.vegetationColor  || '#2a4a1a');
+      this._hemi.color.copy(skyC);
+      this._hemi.groundColor.copy(gndC);
+      this._hemi.intensity = 0.55;
     }
-
-    // Bloom strength per planet type
-    if (this._bloomPass) {
+    // Per-planet ambient base colour
+    if (this._ambient && planet) {
+      this._ambient.color.set(planet.ambientColor || '#223344');
+      this._ambient.intensity = 0.4;
+    }
+    // Per-planet bloom tuning (immediate, before day/night loop kicks in)
+    if (this._bloomPass && planet) {
       const emissive = planet.emissiveStrength || 0;
-      const base = window.devicePixelRatio <= 1 ? 0.7 : 0.85;
-      this._bloomPass.strength = base + emissive * 0.6;
-      this._bloomPass.threshold = planet.type === 'VOLCANIC' ? 0.05 : 0.10;
+      this._bloomPass.strength  = 0.55 + emissive * 0.55;
+      this._bloomPass.threshold = emissive > 0.5 ? 0.05 : 0.10;
+      this._bloomPass.radius    = 0.45 + emissive * 0.2;
     }
 
     // Terrain
@@ -485,6 +493,7 @@ class Game {
       if (e.code === 'KeyP')          this._saveGame();
       if (e.code === 'KeyO')          this._loadGame();
       if (e.code === 'KeyH') this._hud?.showHelpOverlay?.('controls');
+      if (e.code === 'KeyV' && this.state === GS.PLANET_SURFACE) this._toggleCameraMode();
       if (e.code === 'KeyB' && this.state === GS.PLANET_SURFACE) this._toggleBuildMode();
       if (e.code === 'KeyJ') this.toggleMeshContribution();
       // Quickslot 1–0
@@ -966,6 +975,9 @@ class Game {
       if (sentResult?.pendingDamage > 0) {
         this._player?.takeDamage?.(sentResult.pendingDamage);
         this._hud?.flashDamage?.();
+        if (this._vignettePass) {
+          this._vignettePass.uniforms.uDamageFlash.value = 0.9;
+        }
       }
       this._hud?.setWantedLevel?.(
         this._sentinels.getWantedLevel(),
@@ -1072,6 +1084,9 @@ class Game {
           if (actual > 0) {
             this._audio?.playOneShot('hit');
             this._hud.flashDamage?.();
+            if (this._vignettePass) {
+              this._vignettePass.uniforms.uDamageFlash.value = 0.9;
+            }
             this._hud.showNotification(`⚔ Attacked! −${Math.floor(actual)} HP`, 'warn', 1500);
             // Show damage number at roughly screen-centre
             this._hud.showDamageNumber(
@@ -1500,19 +1515,34 @@ class Game {
     );
     this._sun.intensity = 0.3 + dayFactor * 1.3;
 
-    // Hemisphere: sky blue at day, deep blue at night — reuse scratch colors
+    // Hemisphere: sky colour at day, deep indigo at night
     if (this._hemi) {
       this._hemi.color.lerpColors(
         this._sc3.set(this._currentPlanet?.atmosphereColor || '#88aacc'),
-        this._sc4.setHex(0x050820),
+        this._sc4.setHex(0x020510),
+        nightFactor * 0.90
+      );
+      this._hemi.groundColor.lerpColors(
+        this._sc1.set(this._currentPlanet?.vegetationColor || '#2a4a1a'),
+        this._sc2.setHex(0x050305),
         nightFactor * 0.85
       );
-      this._hemi.intensity = 0.2 + dayFactor * 0.3;
+      this._hemi.intensity = 0.25 + dayFactor * 0.35;
     }
 
-    // Fill light: blue moonlight at night
+    // Fill light: opposite to sun (sky fill at day, moonlight at night)
     if (this._fillLight) {
-      this._fillLight.intensity = nightFactor * 0.35;
+      this._fillLight.position.set(
+        playerPos.x - sunDir.x * 200,
+        playerPos.y + 150,
+        playerPos.z - sunDir.z * 150
+      );
+      this._fillLight.color.lerpColors(
+        this._sc3.setHex(0x4466aa),   // day fill: sky blue
+        this._sc4.setHex(0x1a2050),   // night fill: deep moonlight
+        nightFactor * 0.8
+      );
+      this._fillLight.intensity = 0.12 + nightFactor * 0.22;
     }
 
     // Sync terrain shader sun direction
@@ -1526,8 +1556,18 @@ class Game {
       this._bloomPass.strength = base + dayFactor * 0.4 + emissive * 0.5;
     }
 
-    // Tone mapping exposure: brighter at day
-    this._renderer.toneMappingExposure = 0.9 + dayFactor * 0.35;
+    // Decay damage flash
+    if (this._vignettePass && this._vignettePass.uniforms.uDamageFlash.value > 0) {
+      this._vignettePass.uniforms.uDamageFlash.value = Math.max(0,
+        this._vignettePass.uniforms.uDamageFlash.value - dt * 3.5
+      );
+      this._vignettePass.uniforms.uTime.value += dt;
+    }
+
+    // Tone mapping exposure: smooth S-curve through day, cinematic dusk/dawn
+    const exposureBase = 0.85 + dayFactor * 0.40;
+    const horizonBoost = horizonWarmth * 0.08;  // slight boost at sunrise/sunset
+    this._renderer.toneMappingExposure = exposureBase + horizonBoost;
 
     // Fog: thicker at night / dusk
     if (this._scene.fog) {
@@ -1644,7 +1684,7 @@ class Game {
   _saveGame(silent = false) {
     try {
       const data = {
-        version: 4,
+        version: 5,
         systemId: this._currentSystem?.id,
         planetSeed: this._currentPlanet?.seed,
         planetType: this._currentPlanet?.type,
@@ -1654,6 +1694,7 @@ class Game {
         level: this._level,
         xp: this._xp,
         xpToNext: this._xpToNext,
+        highestGalaxy: this._highestGalaxy ?? 0,
         techTree: this._techTree?.serialize(),
         quests: this._quests?.serialize(),
         status: this._status?.serialize(),
@@ -1683,6 +1724,7 @@ class Game {
       if (data.level     != null)            this._level   = data.level;
       if (data.xp        != null)            this._xp      = data.xp;
       if (data.xpToNext  != null)            this._xpToNext = data.xpToNext;
+      if (data.highestGalaxy != null) this._highestGalaxy = data.highestGalaxy;
       if (data.techTree  && this._techTree)  this._techTree.load(data.techTree);
       if (data.quests    && this._quests)    this._quests.load(data.quests);
       if (data.status    && this._status)    this._status.load(data.status);
@@ -1721,6 +1763,14 @@ class Game {
     } else {
       this._hud?.showNotification('Build Mode: OFF', 'info', 1500);
     }
+  }
+
+  _toggleCameraMode() {
+    if (!this._player) return;
+    const mode = this._player.toggleCameraMode();
+    this._hud?.showNotification(
+      mode === 'first' ? '👁 First-Person View' : '🎥 Third-Person View', 'info', 1500
+    );
   }
 
   // ─── Idle hardware mesh contribution ─────────────────────────────────────

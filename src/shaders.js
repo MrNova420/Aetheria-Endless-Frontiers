@@ -5,6 +5,60 @@
 
 import * as THREE from 'three';
 
+// ─── Vignette + Subtle Chromatic Aberration Post-Process Shader ──────────────
+export const VignetteShader = {
+  name: 'VignetteShader',
+  uniforms: {
+    tDiffuse:       { value: null },
+    uVignetteStr:   { value: 0.55 },       // vignette darkness at edges
+    uVignetteSmooth:{ value: 0.30 },       // softness of vignette falloff
+    uChromaStr:     { value: 0.0025 },     // chromatic aberration strength
+    uDamageFlash:   { value: 0.0 },        // 0-1, red flash on hit
+    uTime:          { value: 0.0 },
+  },
+  vertexShader: /* glsl */`
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tDiffuse;
+    uniform float uVignetteStr;
+    uniform float uVignetteSmooth;
+    uniform float uChromaStr;
+    uniform float uDamageFlash;
+    uniform float uTime;
+    varying vec2 vUv;
+
+    void main() {
+      vec2 uv = vUv;
+
+      // Subtle chromatic aberration — offset R/B channels slightly from centre
+      vec2 dir   = uv - 0.5;
+      float dist = length(dir);
+      vec2 offset = dir * uChromaStr * dist;
+
+      float r = texture2D(tDiffuse, uv + offset).r;
+      float g = texture2D(tDiffuse, uv).g;
+      float b = texture2D(tDiffuse, uv - offset).b;
+      vec4 col = vec4(r, g, b, 1.0);
+
+      // Vignette — smooth circular darkening at edges
+      float vignette = smoothstep(uVignetteStr, uVignetteStr - uVignetteSmooth, dist);
+      col.rgb *= mix(0.0, 1.0, vignette);
+
+      // Damage flash — brief red tint
+      if (uDamageFlash > 0.0) {
+        col.rgb = mix(col.rgb, vec3(0.9, 0.05, 0.05), uDamageFlash * 0.35);
+      }
+
+      gl_FragColor = col;
+    }
+  `,
+};
+
 export const TerrainShader = {
   uniforms: {
     uTime:            { value: 0 },

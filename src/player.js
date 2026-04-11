@@ -85,6 +85,7 @@ function buildPlayerModel(classColor = 0x4488ff) {
   const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.22, 14, 12), helmetMat);
   helmet.position.y = 1.42;
   helmet.castShadow = true;
+  helmet.userData.isHead = true;
   root.add(helmet);
 
   // Helmet trim band
@@ -100,6 +101,7 @@ function buildPlayerModel(classColor = 0x4488ff) {
   );
   visorMesh.position.set(0.04, 1.42, 0.08);
   visorMesh.rotation.y = -0.1;
+  visorMesh.userData.isHead = true;
   root.add(visorMesh);
 
   // Antenna nub
@@ -333,6 +335,9 @@ export class Player {
     this._camYaw    = 0;
     this._camPitch  = -0.18;
     this._camDist   = 5.5;
+    this._camMode   = 'third';      // 'third' | 'first'
+    this._camFOV    = 70;           // current effective FOV
+    this._targetFOV = 70;
     this._camTarget = new THREE.Vector3();
 
     // ── Animation ─────────────────────────────────────────────────────────────
@@ -397,6 +402,18 @@ export class Player {
     this.scene.remove(this.model);
     this.model = buildPlayerModel(this.classColor);
     this.scene.add(this.model);
+  }
+
+  toggleCameraMode() {
+    this._camMode = this._camMode === 'third' ? 'first' : 'third';
+    // Hide the head/helmet parts in first-person so they don't clip the camera
+    if (this.model) {
+      this.model.traverse(c => {
+        if (c.isMesh && c.userData.isHead) c.visible = (this._camMode === 'third');
+      });
+    }
+    this._targetFOV = this._camMode === 'first' ? 80 : 70;
+    return this._camMode;
   }
 
   getPosition()     { return this.model.position.clone(); }
@@ -629,20 +646,51 @@ export class Player {
       }
     }
 
+    this._isWalking = moving;
+
     // ── Camera ───────────────────────────────────────────────────────────────
     this._camYaw   += input.mouseDX * 0.003;
-    this._camPitch  = Math.max(-0.6, Math.min(0.5, this._camPitch + input.mouseDY * 0.003));
+    this._camPitch  = Math.max(-1.2, Math.min(0.8, this._camPitch + input.mouseDY * 0.003));
 
-    const camOffset = new THREE.Vector3(
-      Math.sin(this._camYaw) * Math.cos(this._camPitch) * this._camDist,
-      Math.sin(this._camPitch) * this._camDist + 1.6,
-      Math.cos(this._camYaw) * Math.cos(this._camPitch) * this._camDist
-    );
+    // Smooth FOV transition (sprint swell + mode change)
+    const isSprinting = input.sprint && (input.forward || input.back || input.left || input.right);
+    this._targetFOV = (this._camMode === 'first' ? 80 : 70) + (isSprinting ? 4 : 0);
+    this._camFOV += (this._targetFOV - this._camFOV) * Math.min(1, dt * 6);
+    if (this.camera.fov !== undefined && Math.abs(this.camera.fov - this._camFOV) > 0.1) {
+      this.camera.fov = this._camFOV;
+      this.camera.updateProjectionMatrix();
+    }
 
-    const target = pos.clone().add(new THREE.Vector3(0, 1.4, 0));
-    this._camTarget.lerp(target, 0.15);
-    this.camera.position.lerp(target.clone().add(camOffset), 0.12);
-    this.camera.lookAt(this._camTarget);
+    if (this._camMode === 'first') {
+      // ── First-person: camera sits at eye level inside the player ──────────
+      const eyeY = pos.y + 1.65;
+      this.camera.position.set(pos.x, eyeY, pos.z);
+      this.camera.rotation.order = 'YXZ';
+      this.camera.rotation.y = Math.PI + this._camYaw;
+      this.camera.rotation.x = -this._camPitch;
+      // Head-bob while walking
+      if (this._isWalking && this._grounded) {
+        this.camera.position.y = eyeY + Math.sin(this._walkTime * 12) * 0.03;
+      }
+    } else {
+      // ── Third-person: orbit camera around player ───────────────────────────
+      const dx = Math.sin(this._camYaw) * Math.cos(this._camPitch) * this._camDist;
+      const dy = Math.sin(this._camPitch) * this._camDist + 1.6;
+      const dz = Math.cos(this._camYaw) * Math.cos(this._camPitch) * this._camDist;
+
+      const targetCamPos = new THREE.Vector3(pos.x - dx, pos.y + dy, pos.z - dz);
+
+      // Terrain collision: prevent camera clipping into ground
+      if (terrain) {
+        const groundY = terrain.getHeightAt(targetCamPos.x, targetCamPos.z);
+        if (targetCamPos.y < groundY + 0.6) targetCamPos.y = groundY + 0.6;
+      }
+
+      const target = new THREE.Vector3(pos.x, pos.y + 1.4, pos.z);
+      this._camTarget.lerp(target, 0.18);
+      this.camera.position.lerp(targetCamPos, 0.14);
+      this.camera.lookAt(this._camTarget);
+    }
 
     // Store for external use
     input.mouseDX = 0;
