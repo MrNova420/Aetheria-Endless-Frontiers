@@ -126,6 +126,46 @@ export class GameHUD {
     if (btnCtrl) btnCtrl.addEventListener('click', () => this._toggleControls());
     const btnBack = document.getElementById('btn-back-ctrl');
     if (btnBack) btnBack.addEventListener('click', () => this._toggleControls(false));
+
+    // Server connect
+    const btnConnect = document.getElementById('btn-connect-server');
+    const serverInput = document.getElementById('mm-server-url');
+    const netStatus = document.getElementById('mm-net-status');
+    if (btnConnect) {
+      btnConnect.addEventListener('click', () => {
+        const url = serverInput?.value?.trim() || null;
+        if (netStatus) { netStatus.textContent = 'Connecting…'; netStatus.className = 'mm-net-status connecting'; }
+        if (window.game) {
+          window.game.connectToServer(url || `ws://${window.location.hostname}:${window.location.port || 8080}`, 'Explorer');
+        }
+        setTimeout(() => {
+          if (window.game?._network?.isConnected()) {
+            if (netStatus) { netStatus.textContent = '🟢 Connected to server'; netStatus.className = 'mm-net-status connected'; }
+          } else {
+            if (netStatus) { netStatus.textContent = '🔴 Could not connect (solo play active)'; netStatus.className = 'mm-net-status error'; }
+          }
+        }, 2000);
+      });
+    }
+
+    // Load game button
+    const btnLoad = document.getElementById('btn-load-game');
+    if (btnLoad) {
+      if (localStorage.getItem('aetheria_save')) btnLoad.style.display = '';
+      btnLoad.addEventListener('click', () => {
+        if (window.game) {
+          window.game._loadGame();
+          const saveRaw = localStorage.getItem('aetheria_save');
+          let cls = 'technomancer';
+          try { cls = JSON.parse(saveRaw)?.player?.class || cls; } catch (_) {}
+          window.game.selectClass(cls);
+        }
+      });
+    }
+
+    // Help button
+    const btnHelp = document.getElementById('btn-help');
+    if (btnHelp) btnHelp.addEventListener('click', () => window.game?._help?.show());
   }
 
   showMainMenu() {
@@ -618,6 +658,8 @@ export class GameHUD {
     if (resume) resume.addEventListener('click', () => window.game && window.game.resume());
     const mmBtn = document.getElementById('btn-main-menu-from-pause');
     if (mmBtn) mmBtn.addEventListener('click', () => window.game && window.game.goToMainMenu());
+    const helpPause = document.getElementById('btn-help-pause');
+    if (helpPause) helpPause.addEventListener('click', () => window.game?._help?.show());
   }
 
   showPause() { if (this._el.pauseScreen) this._el.pauseScreen.classList.remove('hidden'); }
@@ -641,7 +683,13 @@ export class GameHUD {
   hideDeath() { this._el.deathScreen.classList.add('hidden'); }
 
   // ─── Bind menu buttons ────────────────────────────────────────────────────────
-  _bindMenuButtons() {}
+  _bindMenuButtons() {
+    const btnSave = document.getElementById('btn-save-from-pause');
+    if (btnSave) btnSave.addEventListener('click', () => {
+      window.game?._saveGame();
+      this.showNotification('💾 Game saved!', 'success', 2000);
+    });
+  }
 
   // ─── Main update ──────────────────────────────────────────────────────────────
   update(dt, player, planet, ship, terrain, gameState, creatures, mining) {

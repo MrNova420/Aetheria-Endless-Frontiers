@@ -218,14 +218,14 @@ class Game {
   // ─── Scene + post-processing ─────────────────────────────────────────────────
   _setupScene() {
     this._scene = new THREE.Scene();
-    this._scene.fog = new THREE.FogExp2(0x0a1020, 0.008);
+    this._scene.fog = new THREE.FogExp2(0x0a1020, 0.005);
 
     // Hemisphere light: sky → ground gradient
-    this._hemi = new THREE.HemisphereLight(0x88aacc, 0x3a3010, 0.4);
+    this._hemi = new THREE.HemisphereLight(0x88aacc, 0x3a3010, 0.6);
     this._scene.add(this._hemi);
 
     // Ambient (planet-tinted fill)
-    this._ambient = new THREE.AmbientLight(0x223344, 0.35);
+    this._ambient = new THREE.AmbientLight(0x223344, 0.45);
     this._scene.add(this._ambient);
 
     // Sun (primary key light)
@@ -234,9 +234,9 @@ class Game {
     this._sun.castShadow = true;
     this._sun.shadow.mapSize.set(2048, 2048);
     this._sun.shadow.camera.near = 0.5;
-    this._sun.shadow.camera.far  = 600;   // tighter = sharper shadows
-    this._sun.shadow.camera.left = this._sun.shadow.camera.bottom = -250;
-    this._sun.shadow.camera.right = this._sun.shadow.camera.top  =  250;
+    this._sun.shadow.camera.far  = 500;   // tighter = sharper shadows
+    this._sun.shadow.camera.left = this._sun.shadow.camera.bottom = -200;
+    this._sun.shadow.camera.right = this._sun.shadow.camera.top  =  200;
     this._sun.shadow.bias = -0.0002;
     this._scene.add(this._sun);
 
@@ -249,7 +249,7 @@ class Game {
     this._composer = new EffectComposer(this._renderer);
     this._composer.addPass(new RenderPass(this._scene, this._camera));
     const bloomRadius = 0.5;
-    const bloomStr    = window.devicePixelRatio <= 1 ? 0.75 : 0.9;
+    const bloomStr    = window.devicePixelRatio <= 1 ? 0.65 : 0.75;
     this._bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
       bloomStr, bloomRadius, 0.10

@@ -3,6 +3,25 @@
  */
 
 const TOPICS = {
+  getting_started: {
+    title: '🚀 Getting Started',
+    content: `
+      <h3>First Steps</h3>
+      <ol>
+        <li><strong>Choose your class</strong> — Runekeeper (balanced), Technomancer (tech/drones), or Voidhunter (stealth/burst). You can always start a new game to try another.</li>
+        <li><strong>Mine resources</strong> — Hold <kbd>LMB</kbd> on glowing deposits to extract materials. Carbon, Ferrite Dust, and Oxygen are common first finds.</li>
+        <li><strong>Open your Inventory</strong> — Press <kbd>Tab</kbd> to see what you've collected. Drag items to rearrange; click to inspect.</li>
+        <li><strong>Craft essentials</strong> — Press <kbd>N</kbd> for the crafting panel. Start with a Medkit (Sodium + Oxygen) and Shield Battery (Copper + Cobalt).</li>
+        <li><strong>Scan everything</strong> — Press <kbd>F</kbd> to activate the Analysis Visor. Scanning fauna, flora, and minerals earns Nanites for upgrades.</li>
+        <li><strong>Build a base</strong> — Press <kbd>B</kbd> to open the build menu. Place a Base Computer first, then expand with Extractors and Power Generators.</li>
+        <li><strong>Save often</strong> — Press <kbd>Esc</kbd> to pause, then click 💾 SAVE GAME. Your progress is stored locally in your browser.</li>
+      </ol>
+      <h3>Survival Priority</h3>
+      <p>Watch your <strong>Life Support</strong> and <strong>Hazard</strong> bars at the top of your HUD. Recharge Life Support with Oxygen or Di-hydrogen. Hazard varies by planet biome — craft the appropriate protection.</p>
+      <h3>First Quest</h3>
+      <p>A quest objective appears in the top-right tracker. Follow it to complete your first mission and earn bonus XP and resources to get started.</p>
+    `
+  },
   controls: {
     title: '🎮 Controls Reference',
     content: `
@@ -129,19 +148,21 @@ const TOPICS = {
   multiplayer: {
     title: '🌐 Multiplayer Guide',
     content: `
+      <h3>Auto-Detection</h3>
+      <p>The server URL is <strong>auto-detected</strong> from your browser. When you open the game directly from the server's IP address (e.g. <code>http://192.168.1.5:8080</code>), multiplayer connects automatically — no manual URL entry needed.</p>
       <h3>Joining a Server</h3>
-      <p>On the main menu, enter a server address (e.g. <code>ws://192.168.1.5:8080</code>) and click Connect. LAN servers appear automatically if on the same Wi-Fi.</p>
+      <p>On the main menu, use the <strong>CONNECT</strong> panel. Leave the URL blank for auto-detection, or enter a custom address (e.g. <code>ws://192.168.1.5:8080</code>) and click 🌐 CONNECT. Status shows green when connected.</p>
       <h3>Hosting on PC / Linux</h3>
       <pre>npm install
 node server.js</pre>
-      <p>Share your LAN IP. Default port: 8080.</p>
+      <p>Share your LAN IP with friends. Default port: <strong>8080</strong>. Friends open <code>http://your-ip:8080</code> in their browser and multiplayer connects automatically.</p>
       <h3>Hosting on Android (Termux)</h3>
       <pre>pkg install nodejs
 git clone &lt;repo&gt;
 cd Aetheria-Endless-Frontiers
 npm install
 node server.js</pre>
-      <p>Your phone becomes the game server! Share your phone's IP address with friends on the same Wi-Fi.</p>
+      <p>Your phone becomes the game server! Share your phone's IP address with friends on the same Wi-Fi network. They open <code>http://phone-ip:8080</code> and connect automatically.</p>
       <h3>Mesh Networking</h3>
       <p>Multiple servers auto-sync via peer mesh. Set <code>MESH_PEERS=ws://other:8080</code> env var. Players on any node see each other.</p>
       <h3>Admin Panel</h3>
@@ -195,6 +216,45 @@ node server.js</pre>
       </table>
       <h3>Freighters & Trade Routes</h3>
       <p>Own a Freighter to carry bulk cargo across systems. Set up automated routes: extract → store → sell. With 5+ extractors and a Research Station, you can earn 50,000+ units per real-time hour.</p>
+    `
+  },
+  tips: {
+    title: '💡 Tips & Tricks',
+    content: `
+      <h3>Combat</h3>
+      <ul>
+        <li>Use your class Ultimate (<kbd>F</kbd>) at the start of tough fights for a decisive advantage.</li>
+        <li>Strafe while firing — standing still makes you an easy target for Sentinels and elite creatures.</li>
+        <li>Void Hunters should open with Shadow Step (<kbd>Q</kbd>) to gain positional advantage before engaging.</li>
+        <li>Shield Battery cooldown is short — pop one proactively before a boss ability, not after.</li>
+      </ul>
+      <h3>Exploration</h3>
+      <ul>
+        <li>Jetpack has unlimited range — chain short bursts to traverse terrain without landing.</li>
+        <li>Scan the sky at night: rare fauna only spawn after dark and are worth 3× Nanite bounties.</li>
+        <li>Crashed ships are found near craters — repair them for a free upgrade or sell the tech modules.</li>
+        <li>Underwater biomes contain exclusive resources (Living Pearls, Kelp Sac) worth thousands of units.</li>
+      </ul>
+      <h3>Base Building</h3>
+      <ul>
+        <li>Place Extractors directly on highlighted deposit nodes for 2× yield.</li>
+        <li>Connect a Research Station to your base — it passively generates Nanites over time.</li>
+        <li>The Town Hub raises your base influence radius to 300u, letting you build further from the core.</li>
+        <li>Biofuel Reactors are unlimited-fuel generators — pair one with every 3 Extractors.</li>
+      </ul>
+      <h3>Economy</h3>
+      <ul>
+        <li>Refine raw ores before selling — Chromatic Metal sells for 3× the raw Copper value.</li>
+        <li>Living Pearls (₩5,200 each) are the best early-game income if you can handle underwater hazards.</li>
+        <li>Stack technology upgrades in adjacent slots for hidden synergy bonuses.</li>
+        <li>The Trading Post at your base auto-sells excess stock at market rate every few minutes.</li>
+      </ul>
+      <h3>Multiplayer</h3>
+      <ul>
+        <li>Build in a friend's base range to contribute to the shared empire — all buildings are server-persistent.</li>
+        <li>Sharing a waypoint marker (Galaxy Map → right-click) lets teammates warp to your exact location.</li>
+        <li>If you die in multiplayer, your loot bag spawns at the death site — teammates can return it to you.</li>
+      </ul>
     `
   },
 };
