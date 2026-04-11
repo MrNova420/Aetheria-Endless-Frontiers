@@ -412,6 +412,33 @@ export class PlanetGenerator {
       moons,
       cloudCoverage: 0.3 + rng() * 0.4,
       gravity: (PLANET_GRAVITY[type] || 1.0) * WORLD.GRAVITY,
+      // ── Day/night cycle ─────────────────────────────────────────────────
+      dayDuration: (() => {
+        const isTidal = modifier?.id === 'tidally';
+        if (isTidal) return 999999;
+        const BASE = {
+          LUSH:120, BARREN:200, TOXIC:90, FROZEN:300, BURNING:180,
+          EXOTIC:60, DEAD:400, OCEAN:150, TROPICAL:100, ARCTIC:480,
+          VOLCANIC:240, SWAMP:110, DESERT:220, CRYSTAL:80,
+        };
+        const base = BASE[type] || 180;
+        return Math.round(base * (0.6 + rng() * 0.8));
+      })(),
+      isTidallyLocked: modifier?.id === 'tidally' || false,
+      axialTilt: (() => {
+        const maxTilt = type === 'ARCTIC' ? 45 : type === 'EXOTIC' ? 50 : type === 'DEAD' ? 35 : 25;
+        return rng() * maxTilt;
+      })(),
+      dayTimeOffset: rng(),
+      // ── Star / solar data ────────────────────────────────────────────────
+      starType:           'G',
+      starColor:          new THREE.Color(def.sunColor),
+      starIntensity:      1.0,
+      starAngularSize:    0.05,
+      hasBinarySun:       false,
+      binarySunColor:     new THREE.Color(0xffaa55),
+      binarySunIntensity: 0.0,
+      binarySunPhase:     0.0,
       heightScale: WORLD.HEIGHT_SCALE * heightMult,
       habitability,
       settlements,

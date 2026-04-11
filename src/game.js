@@ -253,6 +253,12 @@ class Game {
     this._fillLight.position.set(-200, 100, -300);
     this._scene.add(this._fillLight);
 
+    // Binary star companion light (only active on binary-star systems)
+    this._sun2 = new THREE.DirectionalLight(0xffaa55, 0.0);
+    this._sun2.castShadow = false;
+    this._scene.add(this._sun2);
+    this._sun2.visible = false;
+
     // Post-processing
     this._composer = new EffectComposer(this._renderer);
     this._composer.addPass(new RenderPass(this._scene, this._camera));
@@ -307,6 +313,41 @@ class Game {
       this._bloomPass.threshold = emissive > 0.5 ? 0.05 : 0.10;
       this._bloomPass.radius    = 0.45 + emissive * 0.2;
     }
+
+    // ── Inject star data from system descriptor into planet ─────────────────
+    const sys = this._universe?.getCurrentSystem?.();
+    if (sys && planet) {
+      planet.starType          = sys.starType          ?? 'G';
+      planet.starColor         = new THREE.Color(sys.starColor    ?? '#fff4e0');
+      planet.starIntensity     = sys.starIntensity     ?? 1.0;
+      planet.starAngularSize   = Math.max(0.02, Math.min(0.18, (sys.starSize ?? 1.0) * 0.04));
+      planet.hasBinarySun      = sys.hasBinary         ?? false;
+      if (sys.hasBinary && sys.binaryCompanion) {
+        planet.binarySunColor     = new THREE.Color(sys.binaryCompanion.color ?? '#ffaa55');
+        planet.binarySunIntensity = sys.binaryCompanion.intensity ?? 0.4;
+        planet.binarySunPhase     = sys.binaryCompanion.offset    ?? 2.5;
+      }
+      this._sun.color.copy(planet.starColor);
+      this._sun.intensity = planet.starIntensity * 1.2;
+    }
+
+    // Setup binary sun light
+    if (this._sun2) {
+      this._sun2.visible   = planet.hasBinarySun ?? false;
+      this._sun2.intensity = planet.hasBinarySun ? (planet.binarySunIntensity ?? 0) : 0;
+      if (planet.hasBinarySun) {
+        this._sun2.color.copy(planet.binarySunColor ?? new THREE.Color(0xffaa55));
+      }
+    }
+
+    // Initialise day time from planet's seeded offset
+    const dayDur = planet.dayDuration ?? 600;
+    if (!this._dayTimeInitialisedFor || this._dayTimeInitialisedFor !== planet.seed) {
+      this._dayTime = (planet.dayTimeOffset ?? 0) * dayDur;
+      this._dayTimeInitialisedFor = planet.seed;
+    }
+
+    if (this._space && sys) this._space.updateForSystem(sys);
 
     // Terrain
     this._terrain = new TerrainManager(this._scene, planet, this._sun);
@@ -433,6 +474,7 @@ class Game {
     // Apply per-planet gravity
     if (this._currentPlanet?.gravity) {
       this._player.setGravity(this._currentPlanet.gravity);
+      if (this._physicsWorld) this._physicsWorld.setGravity(this._currentPlanet.gravity);
     }
     // Spawn on terrain
     const spawnX = 0, spawnZ = 0;
@@ -1483,12 +1525,26 @@ class Game {
   _sc4 = new THREE.Color();     // scratch color D (sky night)
   _updateDayNight(dt) {
     this._dayTime = (this._dayTime || 0) + dt;
-    const cycle = this._currentPlanet?.dayDuration || 600;
-    const t  = (this._dayTime % cycle) / cycle;
+    const planet  = this._currentPlanet;
+
+    // Per-planet cycle: each planet has its own seeded day duration + axial tilt
+    const cycle  = planet?.dayDuration    || 600;   // real seconds per day
+    const locked = planet?.isTidallyLocked || false;
+    const tilt   = ((planet?.axialTilt    || 0) * Math.PI) / 180;  // radians
+
+    // Normalised time 0-1; tidally locked planets fix the sun at "noon"
+    const t        = locked ? 0.25 : (this._dayTime % cycle) / cycle;
     const sunAngle = t * Math.PI * 2;
 
-    // Reuse scratch vector — no allocation
-    const sunDir = this._sv1.set(Math.cos(sunAngle), Math.sin(sunAngle), 0.4).normalize();
+    // Apply axial tilt: rotate sun orbit plane so the arc height varies per planet
+    const cosT = Math.cos(tilt);
+    const sinT = Math.sin(tilt);
+    const sunDir = this._sv1.set(
+      Math.cos(sunAngle) * cosT,
+      Math.sin(sunAngle),
+      Math.cos(sunAngle) * sinT   // tilt shifts north/south
+    ).normalize();
+
     const playerPos = this._player?.getPosition() ?? this._sv2.set(0, 0, 0);
 
     // Shadow camera follows player for sharp local shadows
@@ -1500,20 +1556,40 @@ class Game {
     this._sun.target.position.copy(playerPos);
     this._sun.target.updateMatrixWorld();
 
-    const dayFactor = Math.max(0, sunDir.y);
-    const nightFactor = 1 - dayFactor;
+    const dayFactor    = Math.max(0, sunDir.y);
+    const nightFactor  = 1 - dayFactor;
+    const horizonWarmth = Math.max(0, 1 - Math.abs(sunDir.y) * 3);
+
+    // ── Binary companion sun (e.g. system has two stars) ─────────────────────
+    if (this._sun2 && planet?.hasBinarySun && this._sun2.visible) {
+      const phase2   = sunAngle + (planet.binarySunPhase ?? 2.5);
+      const sun2Dir  = this._sv2.set(
+        Math.cos(phase2) * cosT,
+        Math.sin(phase2),
+        Math.cos(phase2) * sinT
+      ).normalize();
+      const day2 = Math.max(0, sun2Dir.y);
+      this._sun2.position.set(
+        playerPos.x + sun2Dir.x * 280,
+        playerPos.y + Math.abs(sun2Dir.y) * 380 + 40,
+        playerPos.z + sun2Dir.z * 140
+      );
+      this._sun2.target.position.copy(playerPos);
+      this._sun2.target.updateMatrixWorld();
+      this._sun2.intensity = (planet.binarySunIntensity ?? 0.4) * (0.08 + day2 * 0.92);
+    }
 
     // Smooth ambient transitions
-    this._ambient.intensity = 0.12 + dayFactor * 0.38;
+    this._ambient.intensity = 0.10 + dayFactor * 0.40;
 
-    // Sun warmth: orange at horizon, white at zenith — reuse scratch colors
-    const horizonWarmth = Math.max(0, 1 - Math.abs(sunDir.y) * 3);
+    // Sun colour: use star type colour + horizon orange glow
+    const baseStarCol = planet?.starColor || planet?.sunColor || '#fff4e0';
     this._sun.color.lerpColors(
-      this._sc1.set(this._currentPlanet?.sunColor || '#fff4e0'),
-      this._sc2.setHex(0xff8820),
-      horizonWarmth * 0.4
+      this._sc1.set(baseStarCol),
+      this._sc2.setHex(0xff6600),
+      horizonWarmth * 0.55
     );
-    this._sun.intensity = 0.3 + dayFactor * 1.3;
+    this._sun.intensity = (planet?.starIntensity ?? 1.0) * (0.15 + dayFactor * 1.25);
 
     // Hemisphere: sky colour at day, deep indigo at night
     if (this._hemi) {
