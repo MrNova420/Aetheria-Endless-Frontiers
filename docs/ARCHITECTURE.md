@@ -60,28 +60,36 @@ GS.LOADING
   └─ → GS.MAIN_MENU (after assets + terrain ready)
 
 GS.MAIN_MENU
-  └─ selectClass() → _giveStarterKit() → _setupSurface() → _setupPlayer() → _setupShip()
-  └─ _loadGame() → restore state → GS.PLANET_SURFACE
-  └─ → GS.PLANET_SURFACE
+  └─ Slot picker: getSlotSummaries() → show 3 slot cards
+  └─ New character flow:
+       1. Enter name (char-name-input)
+       2. Pick suit colour (suit-swatch, 8 options)
+       3. selectClass(classId) → _giveStarterKit() → startNewCharacter()
+       → _setupSurface() → _setupPlayer() → _setupShip() → GS.PLANET_SURFACE
+  └─ Continue character:
+       loadSave(slot) → _loadGame() → restore state → GS.PLANET_SURFACE
 
 GS.PLANET_SURFACE
   └─ _tickSurface(dt) every frame
-  └─ G key → _boardShip() → GS.SHIP_ATMOSPHERE
+  └─ B key → _toggleBuildMode()
+       └─ 1–9 keys select building type
+       └─ LMB → raycast + place building (deduct resources, award XP)
+  └─ G key (near ship) → _boardShip() → GS.SHIP_ATMOSPHERE
   └─ M key → _toggleGalaxyMap() → GS.GALAXY_MAP
 
 GS.SHIP_ATMOSPHERE
   └─ _tickShip(dt) every frame
-  └─ altitude > threshold → GS.SPACE_LOCAL
+  └─ altitude > SPACE_ALTITUDE_THRESHOLD → GS.SPACE_LOCAL
   └─ G key (landed) → GS.PLANET_SURFACE
 
 GS.SPACE_LOCAL
   └─ _tickSpace(dt) every frame
-  └─ G key → descend → GS.SHIP_ATMOSPHERE
+  └─ getPlanetAt(pos, ATMOSPHERE_ENTRY_RADIUS=600) → enter atmosphere
   └─ M key → GS.GALAXY_MAP
 
 GS.GALAXY_MAP
   └─ Click star → _warpToSystem(sys) → consume Warp Cell
-  └─ → GS.PLANET_SURFACE (after warp)
+  └─ → GS.PLANET_SURFACE (after warp, always)
 ```
 
 ---
@@ -91,6 +99,8 @@ GS.GALAXY_MAP
 ```
 1.  Input polling (_keyPoll)
 2.  Player.update(inputs, dt, terrain, physics)
+    └─ jump / jetpack (only airborne when !isGroundedOrCoyote)
+    └─ vel.y ≤ 0 guard for grounded-check (prevents mid-jump snap)
 3.  Camera follow (lerp with Vector3 scratch)
 4.  TerrainManager.update(playerPos, dt)       ← streams chunks
 5.  FloraManager.update(dt, windTime)           ← wind animation
@@ -102,12 +112,14 @@ GS.GALAXY_MAP
 11. PhysicsWorld.step(dt)                       ← bodies + projectiles
 12. StatusEffectManager.update(dt, player)      ← burn/freeze/…
 13. AutoExtractor.update(dt, inventory)         ← resource drip
-14. TerrainManager.updateLighting(sunDir, …)    ← sun changes per day cycle
-15. Atmosphere.update(dt, sunDir, playerPos)    ← moon orbits, day factor
-16. HUD updates (HP, shield, life support, XP, wanted level)
-17. Day/night cycle advance (_dayTime)
-18. Hazard damage check (planet hazard type)
-19. Autosave every AUTOSAVE_INTERVAL seconds
+14. BuildingSystem.update(dt, inventory, primaryRes) ← building automation
+15. Build mode placement check (if _buildMode && LMB)
+16. TerrainManager.updateLighting(sunDir, …)    ← sun changes per day cycle
+17. Atmosphere.update(dt, sunDir, playerPos)    ← moon orbits, day factor
+18. HUD updates (HP, shield, life support, XP, wanted level, build panel)
+19. Day/night cycle advance (_dayTime)
+20. Hazard damage check (planet hazard type)
+21. Autosave every AUTO_SAVE_INTERVAL seconds
 ```
 
 ---

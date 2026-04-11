@@ -14,6 +14,7 @@
 - [x] 12 system traits (nebula, pirate stronghold, ruins, anomaly…)
 - [x] System wealth (0–5) and danger (0–5) from tier + economy + traits
 - [x] Deterministic settlements (0–3 per planet) with faction, NPC count, type
+- [x] Star visual radius based on spectral class (650–1640 units, ×1.5 scale)
 
 ### Visual / Rendering
 - [x] Custom terrain GLSL shader: 4-layer biome blend, wetness, wind, emissive
@@ -24,7 +25,9 @@
 - [x] Dynamic day/night cycle with real-time sun/terrain/water lighting
 - [x] Water lighting bug fixed (`_waterMeshes` → `waterChunks`)
 - [x] Player: 11-zone AAA colour palette (PBR materials)
+- [x] Player: suit colour customisable per character (8 swatches)
 - [x] Ships: 5-class PBR palette, hull panels, nacelles, cockpit glass
+- [x] Planet sphere visual radius corrected — 4× larger (200+ units, ~57× ship size)
 - [x] Buildings: 10 per-type 5-layer palettes + unique accent geometry
 - [x] NPCs: 4 alien species, 12 skin tones, 7 role outfit palettes, accessories
 - [x] Creatures: `isBoss:false` fix; 14 biome colour tints
@@ -32,6 +35,7 @@
 
 ### Gameplay
 - [x] 3 player classes: Explorer, Warrior, Trader
+- [x] 3 independent character save slots with name + suit colour
 - [x] Mining, inventory (48 slots), crafting (40+ recipes)
 - [x] Tech tree upgrades (shield, jetpack, mining, life support, scan)
 - [x] XP / leveling system with level-up rewards
@@ -43,15 +47,32 @@
 - [x] 30-commodity trading system
 - [x] Sentinel drones with wanted level
 - [x] WebSocket multiplayer with proximity filtering
+- [x] Build Mode: digit keys 1–9 select type, LMB place, real resource cost, build panel HUD
+- [x] Building automation: extractors, research stations, farms produce resources passively
+- [x] Atmosphere entry detection radius corrected (`ATMOSPHERE_ENTRY_RADIUS = 600`)
+- [x] Ship boarding detection radius corrected (6 units)
+
+### Physics & Movement
+- [x] Jetpack physics fixed: activates only when airborne (vel.y ≤ 0 ground-check)
+- [x] Coyote time (0.14 s grace period after walking off ledge)
+- [x] Game balance tuned: GRAVITY=14, JETPACK_THRUST=40, WALK=12, SPRINT=26
+- [x] Terminal velocity cap (-55 m/s) — no pass-through on high-speed descent
+- [x] Creature damage capped at 35 per hit (no one-shots)
+
+### Mobile Controls
+- [x] 12-button touch layout across 4 rows: JUMP, JET, SCAN, ATK, MINE, HEAL, BOARD, EXIT, INV, BUILD, MAP, CRAFT
+- [x] Virtual joystick: floating origin on first touch, double-tap for sprint toggle
+- [x] All buttons fully wired with correct `this._input` flag mappings
 
 ---
 
 ## 🔄 In Progress
 
-- [ ] Galaxy progression unlock gate (level check in warpGalaxy)
-- [ ] Galaxy map tier colour coding
-- [ ] Save version bump to 5 with highestGalaxy field
-- [ ] Planet ownership tracking (ownedBy field wired to UI)
+- [ ] Galaxy progression unlock gate (level check in `warpGalaxy`)
+- [ ] Galaxy map tier colour coding (visual lock state for locked galaxies)
+- [ ] Save version bump to 5 with `highestGalaxy` field
+- [ ] Planet ownership tracking (`ownedBy` field wired to UI and server)
+- [ ] More quest chains — class-specific 5-step arcs
 
 ---
 
@@ -64,7 +85,9 @@
 - [ ] **Creature taming** — passive creatures become companions
 - [ ] **Planet claiming** — flag + beacon, shown to other players
 - [ ] **Galaxy map galaxy-jump UI** — show 255 galaxies, tier colours, lock state
-- [ ] **More quest chains** — faction-specific 5-step arcs
+- [ ] **More building types** — turret upgrades, advanced lab, hangar
+- [ ] **Conveyor automation** — item transport between buildings
+- [ ] **NPC dialogue expansion** — role-specific conversation trees
 
 ## 📋 Planned — Long Term
 
@@ -75,3 +98,4 @@
 - [ ] **Procedural music** — full generative soundtrack per biome/tier
 - [ ] **iOS / Android store release** — Capacitor-wrapped build
 - [ ] **WebXR VR support** — first-person mode for supported headsets
+- [ ] **Multiplayer co-op base building** — shared building placement sync

@@ -29,14 +29,16 @@ python3 -m http.server 8080
 |---|---|
 | `W A S D` | Move |
 | `Shift` | Sprint |
-| `Space` | Jump / Jetpack thrust |
+| `Space` | Jump (on ground) / Jetpack thrust (in air) |
 | `Mouse` | Look / aim |
 | `Left Click` (hold) | Mine resource node |
 | `Right Click` | Fire weapon / attack |
 | `F` | Scanner pulse |
-| `E` | Interact |
-| `G` | Board / exit ship |
-| `B` | Deploy Auto-Extractor |
+| `E` | Interact with NPC / object |
+| `G` | Board ship (near ship) / Exit ship (when landed) |
+| `B` | Toggle Build Mode |
+| `1–9` | In Build Mode: select building type; otherwise quick-slot select |
+| `Left Click` | In Build Mode: place selected building |
 | `Tab` | Inventory |
 | `N` | Crafting menu |
 | `T` | Tech tree |
@@ -45,7 +47,6 @@ python3 -m http.server 8080
 | `P` | Manual save |
 | `O` | Load save |
 | `Esc` | Pause |
-| `1–0` | Quick-slot select |
 
 ### Ship Flight
 | Key | Action |
@@ -56,16 +57,23 @@ python3 -m http.server 8080
 | `Space` | Boost |
 | `G` | Land / exit ship |
 
-### Touch (Mobile)
-| Control | Action |
+### Touch (Mobile) — 12-Button Layout
+| Button | Action |
 |---|---|
-| Left virtual joystick | Move |
+| Left virtual joystick | Move (double-tap = sprint toggle) |
 | Right drag | Look |
-| `JUMP` button | Jump / jetpack |
-| `MINE` button (hold) | Mine |
-| `ATK` button | Attack |
-| `SCAN` button | Scan |
-| `INV` button | Inventory |
+| `⬆ JUMP` | Jump (on ground) / Jetpack (in air) |
+| `🚀 JET` | Sustained jetpack burst |
+| `🔍 SCAN` | Scanner pulse |
+| `⚔ ATK` | Fire weapon |
+| `⛏ MINE` | Mine resource node |
+| `💊 HEAL` | Use Health Pack from inventory |
+| `🚀 BOARD` | Enter nearby ship |
+| `🪂 EXIT` | Exit ship when landed |
+| `🎒 INV` | Open inventory |
+| `🔨 BUILD` | Toggle Build Mode |
+| `🗺 MAP` | Galaxy map |
+| `⚙ CRAFT` | Crafting menu |
 
 ---
 
@@ -96,6 +104,12 @@ python3 -m http.server 8080
 ---
 
 ## ✨ Feature Set
+
+### Character Creation
+- **3 independent save slots** — each slot holds a fully separate character and progression
+- **Named characters** — choose any name displayed throughout the game
+- **Suit colour customisation** — 8 colour options (blue, orange, purple, green, red, cyan, yellow, white) applied to all 11 material zones of the player mesh
+- **3 character classes** to choose from after naming and colouring your character
 
 ### Procedural Generation
 - **14 planet types**: LUSH, BARREN, TOXIC, FROZEN, BURNING, EXOTIC, DEAD, OCEAN, TROPICAL, ARCTIC, VOLCANIC, SWAMP, DESERT, CRYSTAL
@@ -141,7 +155,9 @@ python3 -m http.server 8080
 - **5-layer per-type colour palettes**: base, accent, trim, emissive glow, window tint
 - **Unique geometry** per type (drill bits, panels, crop rows, turret barrel, etc.)
 - **Power grid**: buildings require power, generator supplies it
-- **Serialised/saved** per planet
+- **Build Mode** (`B` key): digit keys `1–9` select type, Left Click places at cursor + 6 units forward, real resource cost deducted from inventory, on-screen build panel shows costs colour-coded green (affordable) / red (can't afford)
+- **Resource automation**: powered Extractors produce resources every 10 s; Research Stations generate Nanites every 30 s; Farms generate Carbon every 15 s
+- **Serialised/saved** per planet across all 3 save slots
 
 ### Economy & Progression
 - **30 trade commodities** across 6 factions
@@ -150,6 +166,7 @@ python3 -m http.server 8080
 - **XP/level system** with level-up rewards
 - **Faction reputation** system (6 factions: Gek, Korvax, Vykeen, Atlas, Outlaw, Sentinel Order)
 - **Quest system**: 3-quest chain with event tracking
+- **Starter kit**: all classes begin with Carbon ×250, Ferrite Dust ×150, Di-Hydrogen ×60, Warp Cell ×2, Health Pack ×3, 3 000 Units, 100 Nanites — enough to immediately build a base and warp to the next system
 
 ### Multiplayer
 - **WebSocket server** with proximity filtering (800u range, 20Hz broadcast)
@@ -240,7 +257,19 @@ Aetheria-Endless-Frontiers/
 
 ---
 
-## ⚙️ Prerequisites
+## 🧪 Testing
+
+```bash
+npm test
+# Runs tests/run-all.js — 202 tests, 16 suites, pure Node.js ESM
+# Covers: physics, building automation, character save slots,
+#         planet scale, game balance, crafting, factions, trading,
+#         universe generation, full gameplay loop simulation
+```
+
+---
+
+
 
 | Tool | Version | Purpose |
 |---|---|---|
@@ -315,6 +344,7 @@ See [docs/MOBILE_RELEASE.md](docs/MOBILE_RELEASE.md) for store release steps.
 | File | Contents |
 |---|---|
 | [DESIGN.md](DESIGN.md) | Vision, pillars, all systems overview |
+| [docs/GAMEPLAY.md](docs/GAMEPLAY.md) | **Full player guide** — first steps, building, combat, trading, tips |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Module map, data flow, memory management |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | Per-module API, conventions, extending the game |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Current progress and planned features |
@@ -330,7 +360,8 @@ See [docs/MOBILE_RELEASE.md](docs/MOBILE_RELEASE.md) for store release steps.
 2. One module per system in `src/`
 3. Verify: `node --input-type=module -e 'import fs from "fs"; for(const f of fs.readdirSync("src").filter(f=>f.endsWith(".js")).map(f=>"src/"+f)){const s=fs.readFileSync(f,"utf8");const d=(s.match(/\{/g)||[]).length-(s.match(/\}/g)||[]).length;if(d)console.log("WARN",f,d);}'`
 4. `node -c server.js`
-5. Open a Pull Request
+5. `npm test` — all 202 tests must pass
+6. Open a Pull Request
 
 ---
 
