@@ -83,7 +83,7 @@ export class SpaceScene {
 
     // Sun – emissive sphere + corona rings
     const starColor = new THREE.Color(systemData.starColor || '#ffeeaa');
-    const starRadius = systemData.starRadius || 800;
+    const starRadius = (systemData.starRadius || 800) * 1.5;
     const sunGeo = new THREE.SphereGeometry(starRadius, 32, 16);
     const sunMat = new THREE.MeshStandardMaterial({
       color: starColor,
@@ -157,7 +157,11 @@ export class SpaceScene {
   }
 
   buildPlanetSphere(planetConfig, idx) {
-    const r = Math.max(50, (planetConfig.radius || 800) / 15);
+    // Visually larger planet spheres so they look like real worlds, not dots.
+    // Raw `radius` field is the gameplay terrain radius (800-1200 units).
+    // Dividing by 4 gives a display radius of 200-300 units which looks
+    // impressive at the typical orbit distances of 300-2000 units.
+    const r = Math.max(200, (planetConfig.radius || 800) / 4);
     const geo = new THREE.SphereGeometry(r, 48, 24);
     const orbitR = planetConfig.orbitRadius || (600 + idx*300);
     const angle = (idx || 0) * 1.3;

@@ -159,7 +159,7 @@ export class GameHUD {
     // Load game button
     const btnLoad = document.getElementById('btn-load-game');
     if (btnLoad) {
-      if (localStorage.getItem('aetheria_save')) btnLoad.style.display = '';
+      if ([0,1,2].some(i => localStorage.getItem(`aetheria_save_${i}`))) btnLoad.style.display = '';
       btnLoad.addEventListener('click', () => {
         if (window.game) {
           // _loadGame() restores state and triggers _autoConnect with the saved
@@ -173,6 +173,138 @@ export class GameHUD {
     // Help button
     const btnHelp = document.getElementById('btn-help');
     if (btnHelp) btnHelp.addEventListener('click', () => window.game?._help?.show());
+
+    // ── Multi-slot character system ─────────────────────────────────────────
+    this._pendingSlot      = 0;
+    this._pendingSuitColor = 0x4488ff;
+
+    const btnNew2  = document.getElementById('btn-new-game');
+    const btnLoad2 = document.getElementById('btn-load-game');
+    const btnSlotsBack = document.getElementById('btn-slots-back');
+    const slotCards    = document.getElementById('slot-cards');
+
+    const showPanel = (id) => {
+      ['main-buttons','slot-select','char-create-panel','class-select','controls-panel'].forEach(pid => {
+        const el = document.getElementById(pid);
+        if (el) el.classList.toggle('hidden', pid !== id);
+      });
+    };
+
+    const buildSlotCards = (mode) => {
+      if (!slotCards) return;
+      slotCards.innerHTML = '';
+      const summaries = window.game?.getSlotSummaries?.() ?? [null, null, null];
+      for (let i = 0; i < 3; i++) {
+        const s = summaries[i];
+        const card = document.createElement('div');
+        card.className = 'slot-card';
+        if (s) {
+          const colorHex = '#' + (s.suitColor & 0xFFFFFF).toString(16).padStart(6, '0');
+
+          const el = (tag, cls, text) => {
+            const node = document.createElement(tag);
+            if (cls) node.className = cls;
+            if (text !== undefined) node.textContent = text;
+            return node;
+          };
+
+          const colorDot = el('div', 'slot-color-dot');
+          colorDot.style.background = colorHex;
+
+          const info = el('div', 'slot-info');
+          info.appendChild(el('div', 'slot-name', s.name));
+          info.appendChild(el('div', 'slot-sub', `${(s.classId || '').toUpperCase()} · LV ${s.level}`));
+
+          const actions = el('div', 'slot-actions');
+          const continueBtn = el('button', 'mm-btn primary sm slot-continue-btn', '▶ CONTINUE');
+          continueBtn.addEventListener('click', () => { window.game?.loadSave?.(i); });
+          const deleteBtn = el('button', 'mm-btn danger sm slot-delete-btn', '✕ DELETE');
+          deleteBtn.addEventListener('click', () => {
+            if (confirm(`Delete character "${s.name}"?`)) {
+              localStorage.removeItem(`aetheria_save_${i}`);
+              buildSlotCards(mode);
+            }
+          });
+          actions.appendChild(continueBtn);
+          actions.appendChild(deleteBtn);
+
+          card.appendChild(colorDot);
+          card.appendChild(info);
+          card.appendChild(actions);
+        } else {
+          card.innerHTML = `
+            <div class="slot-empty-icon">+</div>
+            <div class="slot-info"><div class="slot-name">Empty Slot</div></div>
+            <button class="mm-btn sm slot-new-btn">CREATE CHARACTER</button>`;
+          card.querySelector('.slot-new-btn').addEventListener('click', () => {
+            this._pendingSlot = i;
+            showPanel('char-create-panel');
+            const nameInput = document.getElementById('char-name-input');
+            if (nameInput) nameInput.value = '';
+          });
+        }
+        slotCards.appendChild(card);
+      }
+    };
+
+    if (btnNew2) {
+      const newBtn = btnNew2.cloneNode(true);
+      btnNew2.parentNode.replaceChild(newBtn, btnNew2);
+      newBtn.addEventListener('click', () => {
+        buildSlotCards('new');
+        showPanel('slot-select');
+      });
+    }
+
+    if (btnLoad2) {
+      const loadBtn = btnLoad2.cloneNode(true);
+      btnLoad2.parentNode.replaceChild(loadBtn, btnLoad2);
+      loadBtn.addEventListener('click', () => {
+        buildSlotCards('continue');
+        showPanel('slot-select');
+      });
+    }
+
+    if (btnSlotsBack) {
+      btnSlotsBack.addEventListener('click', () => showPanel('main-buttons'));
+    }
+
+    // ── Character creation form ──────────────────────────────────────────────
+    const btnCreateContinue = document.getElementById('btn-create-continue');
+    const btnCreateBack     = document.getElementById('btn-create-back');
+    const suitColorRow      = document.getElementById('suit-color-row');
+
+    if (suitColorRow) {
+      suitColorRow.querySelectorAll('.suit-swatch').forEach(sw => {
+        sw.addEventListener('click', () => {
+          suitColorRow.querySelectorAll('.suit-swatch').forEach(s => s.classList.remove('selected'));
+          sw.classList.add('selected');
+          this._pendingSuitColor = parseInt(sw.dataset.color, 16);
+        });
+      });
+    }
+
+    if (btnCreateContinue) {
+      btnCreateContinue.addEventListener('click', () => {
+        const nameVal = (document.getElementById('char-name-input')?.value || '').trim();
+        const finalName = nameVal || 'Traveller';
+        if (window.game) {
+          window.game._charSlot  = this._pendingSlot      ?? 0;
+          window.game._charName  = finalName;
+          window.game._suitColor = this._pendingSuitColor ?? 0x4488ff;
+        }
+        showPanel('class-select');
+      });
+    }
+
+    if (btnCreateBack) {
+      btnCreateBack.addEventListener('click', () => showPanel('slot-select'));
+    }
+
+    // Show Continue button only if at least one save exists
+    const anySlot = [0,1,2].some(i => localStorage.getItem(`aetheria_save_${i}`));
+    const loadBtnEl = document.getElementById('btn-load-game');
+    if (loadBtnEl) loadBtnEl.style.display = anySlot ? '' : 'none';
   }
 
   showMainMenu() {
@@ -333,6 +465,14 @@ export class GameHUD {
     this._el.netStatus.className = 'net-status-hud hidden';
     this._el.netStatus.innerHTML = '<span class="net-dot">●</span><span class="net-info">OFFLINE</span>';
     document.getElementById('hud')?.appendChild(this._el.netStatus);
+
+    // Build-mode overlay (shows available buildings + costs)
+    this._el.buildPanel = el('div', 'build-panel hidden');
+    this._el.buildPanelList = el('div', 'build-panel-list');
+    this._el.buildPanel.appendChild(el('div', 'build-panel-title', '🔨 BUILD MODE'));
+    this._el.buildPanel.appendChild(this._el.buildPanelList);
+    this._el.buildPanel.appendChild(el('div', 'build-panel-hint', '[1-9] select  •  LMB place  •  B exit'));
+    hud.appendChild(this._el.buildPanel);
   }
 
   _buildArcSVG(id, strokeColor, trackColor) {
@@ -1245,6 +1385,33 @@ export class GameHUD {
       el.classList.add('offline');
       el.querySelector('.net-info').textContent = 'OFFLINE';
     }
+  }
+
+  showBuildPanel(buildingTypes, inventory) {
+    if (!this._el.buildPanel) return;
+    this._el.buildPanel.classList.remove('hidden');
+    const list = this._el.buildPanelList;
+    list.innerHTML = '';
+    const RESOURCE_MAP = {
+      iron: 'Ferrite Dust', carbon: 'Carbon', sodium: 'Sodium',
+      gold: 'Chromatic Metal', titanium: 'Titanium', cobalt: 'Cobalt',
+      copper: 'Copper', platinum: 'Platinum',
+    };
+    buildingTypes.forEach((bt, idx) => {
+      const row = el('div', 'build-row');
+      const costStr = Object.entries(bt.cost || {}).map(([r, a]) => {
+        const realName = RESOURCE_MAP[r] || r;
+        const have = inventory?.getAmount?.(realName) ?? 0;
+        const ok = have >= a;
+        return `<span style="color:${ok?'#8f8':'#f88'}">${realName} ×${a}</span>`;
+      }).join(' ');
+      row.innerHTML = `<span class="build-num">[${idx+1}]</span> <span class="build-name">${bt.name}</span> <span class="build-cost">${costStr}</span>`;
+      list.appendChild(row);
+    });
+  }
+
+  hideBuildPanel() {
+    this._el.buildPanel?.classList.add('hidden');
   }
 
   dispose() {}

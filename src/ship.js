@@ -253,7 +253,7 @@ export class Ship {
   getPosition() { return this.mesh.position.clone(); }
 
   isPlayerNear(playerPos) {
-    return this.mesh.position.distanceTo(playerPos) < 5;
+    return this.mesh.position.distanceTo(playerPos) < 6;
   }
 
   isPlayerInside() { return this._playerInside; }
@@ -383,8 +383,8 @@ export class Ship {
         }
       }
 
-      // Transition to space above ~3000 units
-      if (pos.y > 2800) this.mode = FlightMode.SPACE;
+      // Transition to space above ~1800 units
+      if (pos.y > 1800) this.mode = FlightMode.SPACE;
     }
 
     // ── Space flight (6DOF) ───────────────────────────────────────────────────
@@ -400,7 +400,7 @@ export class Ship {
       pos.addScaledVector(this._vel, dt);
 
       // Re-enter atmosphere
-      if (terrain && pos.y < 2600) this.mode = FlightMode.ATMOSPHERIC;
+      if (terrain && pos.y < 1600) this.mode = FlightMode.ATMOSPHERIC;
     }
 
     // ── Thruster particles ────────────────────────────────────────────────────

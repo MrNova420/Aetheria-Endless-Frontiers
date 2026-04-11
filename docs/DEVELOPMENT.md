@@ -208,16 +208,40 @@ export class NpcManager {
 ```js
 export class BuildingSystem {
   constructor(scene)
-  place(typeId, pos, quaternion)   // → building id
+  place(typeId, pos, invProxy)   // → building object | null
+  // invProxy: plain object keyed by building COST KEYS (not display names)
+  //   e.g. { iron: 50, carbon: 120, gold: 0, … }
+  // Use BUILD_RESOURCE_MAP (game.js) to convert inventory display names to cost keys:
+  //   const invProxy = {};
+  //   for (const [costKey, displayName] of Object.entries(BUILD_RESOURCE_MAP))
+  //     invProxy[costKey] = inventory.getAmount(displayName);
+  // Returns null if invProxy doesn't have sufficient resources
   remove(id)
-  update(dt)
+  update(dt, inventory, primaryRes?)
+  // inventory: plain object (or Proxy) keyed by LOWERCASE resource names
+  //   extractor writes  → inventory[primaryResource]  (default 'carbon')
+  //   research_station  → inventory.nanites
+  //   farm              → inventory.carbon
+  // primaryRes: lowercase resource name for extractor output (default 'carbon')
+  // Automation cycles: extractor→10s (2-5 units), research_station→30s (+5 nanites), farm→15s (+3 carbon)
   getPowerStatus()   // → { produced, consumed, surplus }
+  getBuildingTypes() // → array of { id, name, cost, powerCost, powerGen, maxHp }
   serialize() / load(data)
   dispose()
   static buildMesh(typeId)   // preview mesh for build mode
   // typeId: 'extractor'|'conveyor'|'storage'|'power_generator'|
   //         'research_station'|'turret'|'town_hub'|'wall'|'door'|'farm'
 }
+
+// Building cost keys (src/building.js BUILDING_TYPES) → inventory display names (BUILD_RESOURCE_MAP in game.js):
+// 'iron'     → 'Ferrite Dust'
+// 'carbon'   → 'Carbon'
+// 'sodium'   → 'Sodium'
+// 'gold'     → 'Chromatic Metal'
+// 'titanium' → 'Titanium'
+// 'cobalt'   → 'Cobalt'
+// 'copper'   → 'Copper'
+// 'platinum' → 'Platinum'
 ```
 
 ### inventory.js
@@ -242,9 +266,32 @@ export class PhysicsWorld {
 }
 ```
 
----
+### game.js (Character & Save Slot API)
+```js
+// Character save slots (3 independent slots)
+game.getSlotSummaries()
+  // → [ SlotSummary | null, SlotSummary | null, SlotSummary | null ]
+  // SlotSummary: { slot, name, classId, level, suitColor, timestamp }
 
-## Adding a New Planet Type
+game.startNewCharacter(slot, name, suitColor, classId)
+  // slot:      0 | 1 | 2
+  // name:      string  (displayed in HUD)
+  // suitColor: number  (hex e.g. 0x4488ff)
+  // classId:   'runekeeper' | 'technomancer' | 'voidhunter'
+
+game.loadSave(slot)
+  // Loads the save at the given slot index; sets _charSlot, _charName, _suitColor
+
+game._getSlotKey(slot)
+  // → 'aetheria_save_0' | 'aetheria_save_1' | 'aetheria_save_2'
+
+// Internal state:
+// game._charSlot    : number  (0–2, active slot)
+// game._charName    : string  (active character name)
+// game._suitColor   : number  (active suit colour hex)
+```
+
+
 
 1. Add entry to `PLANET_TYPES` in `config.js`
 2. Add `BIOME_COLORS[NEWTYPE]` in `config.js`
@@ -266,7 +313,10 @@ export class PhysicsWorld {
 1. Add entry to `BUILDING_TYPES` in `building.js`
 2. Add `BUILDING_PALETTES[typeId]` in `building.js`
 3. Implement geometry in `_createMesh(typeId, preview)` switch statement
-4. Wire into power grid if needed (`powerDraw` / `powerProduce`)
+4. Wire into power grid if needed (`powerCost` / `powerGen`)
+5. Add automation tick in `BuildingSystem.update()` if the building produces resources
+6. Add cost entry to `BUILD_RESOURCE_MAP` in `game.js` if it uses a non-standard resource key
+7. Add to build panel digit-key list in `_toggleBuildMode()` in `game.js`
 
 ---
 
@@ -311,3 +361,29 @@ for(const f of fs.readdirSync("src").filter(f=>f.endsWith(".js")).map(f=>"src/"+
 if(ok)console.log("All balanced");
 ' && node -c server.js
 ```
+
+## Running the Test Suite
+
+```bash
+npm test
+# Runs tests/run-all.js
+# 202 tests, 16 suites, pure Node.js ESM (no framework required)
+# All 202 must pass before opening a PR
+```
+
+**Test suites covered:**
+- Infrastructure (file integrity, brace balance, syntax)
+- Inventory, Equipment, Crafting, TechTree
+- StatusEffects, QuestSystem, FactionManager
+- TradingSystem, UniverseSystem, SimplexNoise
+- Day/Night simulation, Physics constants
+- Combat simulation, Economy simulation
+- Physics simulation (jetpack/jump/gravity/coyote time)
+- Building system simulation (power grid, automation, empire)
+- Character save slots (CRUD, stress, colour round-trips)
+- Planet & space scale invariants
+- Game balance invariants (gravity, thrust, speed)
+- UI & resource integration (build costs, inventory mapping)
+- Warp & galaxy exploration
+- Full gameplay loop (gather → craft → build → warp)
+- Limit & stress tests, bug-hunt regression tests

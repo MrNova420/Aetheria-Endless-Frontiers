@@ -104,15 +104,31 @@ WeatherSystem → rain/blizzard/sandstorm/electrical storm
 ## 4. Player & Character System
 
 ```
+Character Creation (index.html + game.js)
+  ├─ Up to 3 independent save slots (aetheria_save_0 / _1 / _2)
+  ├─ Character name input (free text, shown in HUD and multiplayer)
+  ├─ 8 suit colour swatches → sets _suitColor hex on all 11 player mesh zones
+  └─ Class selection (Runekeeper / Technomancer / Voidhunter)
+
 Player (src/player.js)
   ├─ 11 material zones (MeshStandardMaterial, PBR)
   │   helmet, visor(emissive), chest-plate, torso, shirt,
   │   shoulder-pads, arms, gloves, hips, legs/boots, belt, jetpack
-  ├─ Movement: walk, sprint, jump, jetpack (fuel drain/regen)
+  ├─ Movement: walk 12 m/s, sprint 26 m/s, jump, jetpack (fuel drain/regen)
+  │   Jetpack activates only when AIRBORNE (isGroundedOrCoyote = false)
+  │   Jetpack thrust (40) always exceeds max planetary gravity (VOLCANIC ≈19.6)
   ├─ Camera: 3rd-person with head-tracking + pitch limit
   ├─ Life support: drains over time, hazard damage per planet type
-  ├─ Health + shield system (shield regenerates)
+  ├─ Health + shield system (shield regenerates after 3s)
   └─ serializeState() / loadState() for save system
+
+Physics constants (src/game.js / src/player.js)
+  WORLD.GRAVITY = 14 m/s²   (per-planet multiplier: LUSH×1.0 → VOLCANIC×1.4)
+  JETPACK_THRUST = 40 m/s²  (always > gravity × 1.5 for all planet types)
+  WALK_SPEED     = 12 m/s
+  SPRINT_SPEED   = 26 m/s
+  JETPACK_FUEL   = 100       (depletes at 30/s, recharges at 25/s on ground)
+  COYOTE_TIME    = 0.14 s    (grace window to jump after walking off edge)
 ```
 
 ---
@@ -168,8 +184,22 @@ BuildingSystem (src/building.js)
   ├─ Per-type palette: { base, accent, trim, emissive, window }
   ├─ Per-type unique geometry (drill-bit, crop-rows, turret-barrel, etc.)
   ├─ Power grid: generator produces, others consume
+  ├─ update(dt, inventory, primaryRes) → automation tick each frame
+  │   extractor   : every 10 s → +2-5 primaryResource to inventory
+  │   research_stn: every 30 s → +5 Nanites
+  │   farm        : every 15 s → +3 Carbon
   ├─ serialize() / load() for save persistence
   └─ dispose() uses traverse() for full Three.js resource cleanup
+
+Build Mode (src/game.js _toggleBuildMode / _tickSurface)
+  ├─ B key toggles build mode on/off
+  ├─ Digit keys 1–9 select building type (BUILD_RESOURCE_MAP maps costs)
+  ├─ Left Click: raycast 6 units forward from player, snap to terrain height
+  ├─ Cost check: BUILD_RESOURCE_MAP { iron→'Ferrite Dust', carbon→'Carbon',
+  │              gold→'Chromatic Metal', sodium→'Sodium', … }
+  ├─ On success: deduct inventory, show ✅ notification, award 20 XP
+  └─ Build Panel HUD: shows all 10 types with colour-coded costs
+       Green = player can afford  |  Red = insufficient resources
 ```
 
 ---
@@ -188,17 +218,29 @@ GS.LOADING → GS.MAIN_MENU → GS.PLANET_SURFACE
 
 ---
 
-## 9. Save / Load System (Version 5)
+## 9. Save / Load System (Version 4 — Per-Slot)
 
-Saved to `localStorage['aetheria_save']`:
+Three independent save slots stored in `localStorage`:
+- `localStorage['aetheria_save_0']`  — Character slot 0
+- `localStorage['aetheria_save_1']`  — Character slot 1
+- `localStorage['aetheria_save_2']`  — Character slot 2
+
+Each slot's JSON shape:
 ```json
 {
   "version": 5,
+  "charName": "Nova",
   "systemId": "0_0_0",
   "planetSeed": 10001,
   "planetType": "LUSH",
   "dayTime": 0.0,
-  "player": { "pos":[], "hp":100, "shield":80, ... },
+  "player": {
+    "pos": [0, 5, 0],
+    "hp": 100, "shield": 80,
+    "classId": "technomancer",
+    "suitColor": 16744448,
+    "charName": "Nova"
+  },
   "inventory": { "slots": [] },
   "level": 1,
   "xp": 0,
@@ -207,14 +249,24 @@ Saved to `localStorage['aetheria_save']`:
   "quests": {},
   "status": {},
   "extractors": [],
-  "universe": { "g":0, "r":0, "s":0, "visited":[] },
+  "universe": { "g": 0, "r": 0, "s": 0, "visited": [] },
   "units": 3000,
   "nanites": 100,
   "buildings": [],
   "factions": {},
-  "trading": {}
+  "trading": {},
+  "timestamp": 1744387200000
 }
 ```
+
+**Slot lifecycle methods on the `Game` class:**
+| Method | Description |
+|---|---|
+| `getSlotSummaries()` | Returns array of 3 slot summaries (null if empty) |
+| `startNewCharacter(slot, name, suitColor, classId)` | Creates a fresh character in the given slot |
+| `loadSave(slot)` | Loads saved state from the given slot |
+| `_getSlotKey(slot)` | Returns `'aetheria_save_${slot}'` |
+| `_saveGame(silent?)` | Auto-saves or manual save to active slot |
 
 ---
 

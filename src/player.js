@@ -522,7 +522,11 @@ export class Player {
         const nLen = Math.sqrt(nx*nx + ny*ny + nz*nz) || 1;
         const slopeY = ny / nLen;
 
-        if (pos.y <= groundY + PHYSICS.STEP_HEIGHT) {
+        // Only treat as grounded when the player is NOT actively moving upward
+        // (jumping or using jetpack).  Without this guard the step-height check
+        // snaps the player back to the ground immediately after a jump, making
+        // both jump impulse and jetpack unresponsive.
+        if (pos.y <= groundY + PHYSICS.STEP_HEIGHT && vel.y <= 0) {
           if (slopeY < PHYSICS.SLOPE_THRESHOLD) {
             // Steep slope – slide
             body._slopeSliding = true;
@@ -537,6 +541,9 @@ export class Player {
             body.grounded = true;
             body._coyoteTimer = PHYSICS.COYOTE_TIME;
           }
+        } else if (pos.y < groundY && vel.y > 0) {
+          // Ascending through terrain surface – push above ground without clamping vel
+          pos.y = groundY;
         } else {
           if (body.grounded && body._coyoteTimer <= 0) body._coyoteTimer = PHYSICS.COYOTE_TIME;
           body.grounded = false;
@@ -768,6 +775,8 @@ export class Player {
       hp: this.hp, shield: this.shield,
       jetpackFuel: this.jetpackFuel,
       classId: this.classId,
+      charName:  this.charName  ?? null,
+      suitColor: this.classColor ?? 0x4488ff,
     };
   }
 
@@ -776,7 +785,8 @@ export class Player {
     this.hp          = data.hp;
     this.shield      = data.shield;
     this.jetpackFuel = data.jetpackFuel;
-    if (data.classId) this.setClass(data.classId);
+    if (data.classId)  this.setClass(data.classId, data.suitColor ?? this.classColor);
+    if (data.charName) this.charName = data.charName;
   }
 
   dispose() {

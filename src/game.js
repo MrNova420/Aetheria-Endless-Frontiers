@@ -57,9 +57,10 @@ const GS = {
 
 // ─── Game constants ───────────────────────────────────────────────────────────
 const COMBAT_TICK_INTERVAL = 0.5;   // seconds between creature damage ticks
-const SCAN_COOLDOWN_DURATION = 2.5; // seconds scanner recharge time
-const AUTO_SAVE_INTERVAL = 60;      // seconds between automatic saves
-const SCANNER_RANGE = 30;           // world-units radius for scanner detection
+const SCAN_COOLDOWN_DURATION    = 2.5;  // seconds scanner recharge time
+const AUTO_SAVE_INTERVAL        = 60;   // seconds between automatic saves
+const SCANNER_RANGE             = 30;   // world-units radius for scanner detection
+const ATMOSPHERE_ENTRY_RADIUS   = 600;  // ship must be within this many units of a planet sphere to enter atmosphere
 
 // ─── XP constants ─────────────────────────────────────────────────────────────
 const XP_PER_MINE_ITEM       = 3;    // XP per resource unit mined
@@ -73,6 +74,12 @@ const ATTACK_COOLDOWN        = 0.5;  // seconds between shots
 const WARP_FUEL_COST         = 1;    // Warp Cells per inter-system jump
 const WEATHER_SPEED_BLIZZARD = 0.45; // blizzard/sandstorm speed fraction
 const WEATHER_SPEED_STORM    = 0.70; // storm speed fraction
+// Maps building cost resource keys (lowercase) → inventory display names
+const BUILD_RESOURCE_MAP = {
+  iron: 'Ferrite Dust', carbon: 'Carbon', sodium: 'Sodium',
+  gold: 'Chromatic Metal', titanium: 'Titanium', cobalt: 'Cobalt',
+  copper: 'Copper', platinum: 'Platinum',
+};
 const DEATH_PENALTY_DROP_RATE = 0.5; // fraction of inventory dropped on death
 const CREATURE_LOOT_DROP_CHANCE = 0.55; // probability of loot drop on creature kill
 
@@ -106,6 +113,9 @@ class Game {
     this._meshContrib = null;   // idle hardware mesh contribution
     this._units       = 0;      // in-game currency: Units
     this._nanites     = 0;      // Nanites currency
+    this._charSlot    = 0;           // active save slot (0-2)
+    this._charName    = 'Traveller'; // display name set during character creation
+    this._suitColor   = 0x4488ff;    // hex colour set during character creation
     this._buildMode   = false;
     this._selectedBuildType = null;
     // XP / leveling
@@ -438,7 +448,9 @@ class Game {
           const by    = this._terrain.getHeightAt(bx, bz);
           const pos   = new THREE.Vector3(bx, by, bz);
           try {
-            this._buildings.place(bt, pos, new THREE.Quaternion());
+            // Supply an unlimited inventory object for procedural settlement generation
+            const unlimitedInv = new Proxy({}, { get: () => 9999, set: () => true });
+            this._buildings.place(bt, pos, unlimitedInv);
           } catch (_) {}
         }
       }
@@ -477,10 +489,14 @@ class Game {
       if (this._physicsWorld) this._physicsWorld.setGravity(this._currentPlanet.gravity);
     }
     // Spawn on terrain
-    const spawnX = 0, spawnZ = 0;
+    const spawnX = 15, spawnZ = 5;  // near ship spawn at (20, sy, 10)
     if (this._terrain) {
       const sy = this._terrain.getHeightAt(spawnX, spawnZ);
-      this._player.setPosition(new THREE.Vector3(spawnX, sy + 1, spawnZ));
+      this._player.setPosition(new THREE.Vector3(spawnX, sy + 2, spawnZ));
+      if (this._player._body) {
+        this._player._body.velocity.set(0, 0, 0);
+        this._player._body.grounded = false;
+      }
     } else {
       this._player.setPosition(new THREE.Vector3(0, 5, 0));
     }
@@ -492,8 +508,8 @@ class Game {
     const spawnX = 20, spawnZ = 10;
     if (this._terrain) {
       const sy = this._terrain.getHeightAt(spawnX, spawnZ);
-      this._ship.mesh.position.set(spawnX, sy, spawnZ);
-      this._ship._landingY = sy;
+      this._ship.mesh.position.set(spawnX, sy + 0.5, spawnZ);
+      this._ship._landingY = sy + 0.5;
     } else {
       this._ship.mesh.position.set(20, 0, 10);
     }
@@ -540,10 +556,20 @@ class Game {
       if (e.code === 'KeyJ') this.toggleMeshContribution();
       // Quickslot 1–0
       const digit = e.code.match(/^Digit(\d)$/);
-      if (digit) { inp.quickSlot = parseInt(digit[1], 10) - 1; }
+      if (digit) {
+        if (this._buildMode) {
+          inp[`digit${digit[1]}`] = true;
+        } else {
+          inp.quickSlot = parseInt(digit[1], 10) - 1;
+        }
+      }
     });
 
-    document.addEventListener('keyup', e => { keys[e.code] = false; });
+    document.addEventListener('keyup', e => {
+      keys[e.code] = false;
+      const digitUp = e.code.match(/^Digit(\d)$/);
+      if (digitUp) inp[`digit${digitUp[1]}`] = false;
+    });
 
     // Prevent right-click context menu in game
     const canvas = document.getElementById('game-canvas');
@@ -563,7 +589,7 @@ class Game {
 
     document.addEventListener('mousedown', e => {
       if (document.pointerLockElement === canvas) {
-        if (e.button === 0) inp.mine   = true;
+        if (e.button === 0) { inp.mine = true; inp.click = true; }
         if (e.button === 2) inp.attack = true;
       }
     });
@@ -664,17 +690,51 @@ class Game {
 
     // Touch buttons
     const btnMap = {
-      'tb-attack': () => { this._input.mine = true;  setTimeout(() => this._input.mine  = false, 300); },
-      'tb-q':      () => { /* ability Q */ },
-      'tb-e':      () => { /* ability E */ },
-      'tb-r':      () => { /* ability R */ },
-      'tb-f':      () => { /* ultimate F */ },
-      'tb-jump':   () => { this._input.jump = true;  setTimeout(() => this._input.jump  = false, 400); },
+      'tb-attack':    () => { this._input.attack = true; setTimeout(() => this._input.attack = false, 200); },
+      'tb-mine':      () => { this._input.mine   = true; setTimeout(() => this._input.mine   = false, 400); },
+      'tb-jump':      () => { this._input.jump   = true; setTimeout(() => this._input.jump   = false, 350); },
+      'tb-scan':      () => { this._input.scan   = true; setTimeout(() => this._input.scan   = false, 200); },
+      'tb-enter-ship':() => { this._tryEnterShip?.(); },
+      'tb-exit-ship': () => { this._tryExitShip?.(); },
+      'tb-jetpack':   () => { this._input.jump   = true; setTimeout(() => this._input.jump   = false, 800); },
+      'tb-inventory': () => { this._toggleInventory?.(); },
+      'tb-map':       () => { this._toggleGalaxyMap?.(); },
+      'tb-build':     () => { this._toggleBuildMode?.(); },
+      'tb-q': () => {
+        // Q = toggle crafting
+        this._toggleCrafting?.();
+      },
+      'tb-e': () => {
+        // E = interact / enter ship
+        this._tryEnterShip?.();
+      },
+      'tb-r': () => {
+        // R = reload / refill life support (use health pack)
+        const slot = this._inventory?.getAllItems?.()?.find?.(i => i.type === 'Health Pack');
+        if (slot) {
+          this._player?.heal?.(40);
+          this._inventory.removeItem('Health Pack', 1);
+          this._hud?.showNotification('💊 Health Pack used +40 HP', 'success', 2000);
+        }
+      },
+      'tb-f': () => {
+        // F = scan
+        this._input.scan = true;
+        setTimeout(() => this._input.scan = false, 200);
+      },
     };
     for (const [id, fn] of Object.entries(btnMap)) {
       const b = document.getElementById(id);
       if (b) b.addEventListener('touchstart', fn, { passive: true });
     }
+
+    // Double-tap joystick area = sprint toggle
+    let _lastJoyTap = 0;
+    base.addEventListener('touchstart', () => {
+      const now = Date.now();
+      if (now - _lastJoyTap < 300) this._input.sprint = !this._input.sprint;
+      _lastJoyTap = now;
+    }, { passive: true });
 
     // Right half of screen → look
     let lookId = -1, lookLast = null;
@@ -727,7 +787,7 @@ class Game {
 
   selectClass(classId) {
     const colors = { runekeeper: 0x4488ff, technomancer: 0xff8800, voidhunter: 0xaa00ff };
-    if (this._player) this._player.setClass(classId, colors[classId] || 0x4488ff);
+    if (this._player) this._player.setClass(classId, this._suitColor || colors[classId] || 0x4488ff);
 
     // ── Give starter kit (only on fresh new game, not on load) ──────────────
     if (this._inventory && this._inventory.getAllItems().length === 0) {
@@ -736,7 +796,8 @@ class Game {
 
     // ── Build display name from class and persist it ─────────────────────────
     const CLASS_NAMES = { runekeeper: 'Runekeeper', technomancer: 'Technomancer', voidhunter: 'Voidhunter' };
-    const displayName = CLASS_NAMES[classId] || 'Traveller';
+    const displayName = this._charName || CLASS_NAMES[classId] || 'Traveller';
+    if (this._player) this._player.charName = displayName;
     localStorage.setItem('aetheria_player_name', displayName);
 
     this._hud.hideMainMenu();
@@ -960,7 +1021,7 @@ class Game {
     const planet = PlanetGenerator.generate(_planetSeed, sys.planets?.[0]?.typeOverride) ?? PlanetGenerator.getSystemPlanets(sys.seed, sys)[0];
     this._currentPlanet = planet;
     this._hud.hideGalaxyMap();
-    this._setState(this._prevState || GS.PLANET_SURFACE);
+    this._setState(GS.PLANET_SURFACE);
     this._teardownSurface();
     this._setupSurface(planet);
     this._setupPlayer();
@@ -1044,7 +1105,38 @@ class Game {
 
     // Building automation tick
     if (this._buildings && this.state === GS.PLANET_SURFACE) {
-      this._buildings.tick?.(dt, this._inventory);
+      const primaryRes = this._currentPlanet?.resourceWeights
+        ? Object.entries(this._currentPlanet.resourceWeights).sort((a,b)=>b[1]-a[1])[0]?.[0] ?? 'Carbon'
+        : 'Carbon';
+      // building.js uses a plain-object inventory (cost-key style: 'carbon', 'nanites', …).
+      // Bridge it to the real Inventory class via a Proxy so automation output
+      // actually lands in the player's inventory slots.
+      const inv = this._inventory;
+      const nano = () => this._nanites ?? 0;
+      const setNano = (v) => { this._nanites = Math.max(0, v); };
+      const normalizeKey = (k) => (typeof k === 'string' && k.length > 1)
+        ? k.charAt(0).toUpperCase() + k.slice(1) : (k ? String(k) : k);
+      const buildingInventory = new Proxy({}, {
+        get: (_, prop) => {
+          if (prop === 'nanites') return nano();
+          if (prop === 'units')   return this._units ?? 0;
+          if (typeof prop !== 'string') return undefined;
+          return inv?.getAmount?.(normalizeKey(prop)) ?? 0;
+        },
+        set: (_, prop, value) => {
+          const next = Number(value) || 0;
+          if (prop === 'nanites') { setNano(next); return true; }
+          if (prop === 'units')   { this._units = Math.max(0, next); return true; }
+          if (typeof prop !== 'string') return true;
+          const key   = normalizeKey(prop);
+          const cur   = inv?.getAmount?.(key) ?? 0;
+          const delta = next - cur;
+          if (delta > 0)  inv?.addItem?.(key, delta);
+          else if (delta < 0) inv?.removeItem?.(key, -delta);
+          return true;
+        },
+      });
+      this._buildings.update?.(dt, buildingInventory, primaryRes);
     }
 
     // Network state sync (~20 Hz, throttled inside NetworkManager)
@@ -1121,7 +1213,7 @@ class Game {
       const nearby = this._creatures.getNearbyCreatures(pos, 4);
       for (const cr of nearby) {
         if (cr.genome?.aggression === 'hostile' && cr.state === CREATURE_STATE.ATTACKING) {
-          const dmg = cr.genome.bodySize * 8;
+          const dmg = Math.min(cr.genome.bodySize * 8, 35);
           const actual = this._player.applyDamage(dmg, 'creature');
           if (actual > 0) {
             this._audio?.playOneShot('hit');
@@ -1265,6 +1357,66 @@ class Game {
         }
       } else {
         this._hud.setResourceIndicator?.(null);
+      }
+    }
+
+    // ─── Build mode placement ─────────────────────────────────────────────────
+    if (this._buildMode && this._buildings) {
+      // Select building type with digit keys 1-9
+      for (let di = 0; di < 9; di++) {
+        if (inp[`digit${di+1}`]) {
+          const types = this._buildings.getBuildingTypes();
+          if (types[di]) {
+            this._selectedBuildType = types[di].id;
+            this._hud?.showNotification(`🔨 Selected: ${types[di].name}`, 'info', 1500);
+          }
+        }
+      }
+      // Place with left-click
+      if (inp.click && this._selectedBuildType) {
+        inp.click = false; // consume
+        // Raycast to terrain at player forward 6 units
+        const fwd = new THREE.Vector3(-Math.sin(this._player._camYaw), 0, -Math.cos(this._player._camYaw));
+        const placePos = pos.clone().addScaledVector(fwd, 6);
+        if (this._terrain) placePos.y = this._terrain.getHeightAt(placePos.x, placePos.z);
+
+        // Build cost proxy using cost keys expected by BuildingSystem.canAfford()
+        // (e.g. 'iron', 'carbon', …) mapped from real inventory display names.
+        const invProxy = {};
+        for (const [costKey, displayName] of Object.entries(BUILD_RESOURCE_MAP)) {
+          invProxy[costKey] = this._inventory.getAmount(displayName);
+        }
+        const result = this._buildings.place(this._selectedBuildType, placePos, invProxy);
+        if (result) {
+          // Deduct real inventory for matching resource names
+          const def = this._buildings.getBuildingTypes().find(t => t.id === this._selectedBuildType);
+          if (def) {
+            for (const [res, amt] of Object.entries(def.cost || {})) {
+              const realName = BUILD_RESOURCE_MAP[res] || res;
+              this._inventory.removeItem(realName, amt);
+            }
+          }
+          this._hud?.showNotification(`✅ ${def?.name || 'Building'} placed!`, 'success', 2000);
+          this._awardXP(20);
+        } else {
+          // Check what's missing
+          const def = this._buildings.getBuildingTypes().find(t => t.id === this._selectedBuildType);
+          const missing = Object.entries(def?.cost || {}).filter(([res, amt]) => {
+            const realName = BUILD_RESOURCE_MAP[res] || res;
+            return this._inventory.getAmount(realName) < amt;
+          }).map(([res, amt]) => {
+            const realName = BUILD_RESOURCE_MAP[res] || res;
+            return `${realName} ×${amt}`;
+          }).join(', ');
+          this._hud?.showNotification(
+            missing ? `❌ Need: ${missing}` : '❌ Cannot place here', 'warn', 3000
+          );
+        }
+      }
+      // Show build preview label
+      if (this._selectedBuildType) {
+        const def = this._buildings.getBuildingTypes().find(t => t.id === this._selectedBuildType);
+        if (def) this._hud?.showNotification(`🔨 [${def.name}] LMB=place B=exit`, 'info', 1000);
       }
     }
 
@@ -1495,20 +1647,23 @@ class Game {
       }
       const nearestName = nearest?.userData.planetConfig?.name ?? '---';
       const nearestKm   = Math.round(nearestDist / 10);
-      this._hud.setSpaceDistances?.({ distKm, distAU, nearestName, nearestKm });
+      this._hud.setSpaceDistances?.(distKm, nearestName, nearestKm);
     }
 
     // Check if near planet to re-enter
     if (this._spaceScene) {
-      const entry = this._spaceScene.getPlanetAt(sp, 5000);
+      const entry = this._spaceScene.getPlanetAt(sp, ATMOSPHERE_ENTRY_RADIUS);
       if (entry) {
-        this._hud.showNotification(`Entering atmosphere of ${entry.name}…`, 'info', 3000);
+        this._hud.showNotification(`🌍 Entering atmosphere of ${entry.name}…`, 'info', 3500);
         this._currentPlanet = entry;
+        this._teardownSurface();
         this._setupSurface(entry);
         this._setupPlayer();
-        this._ship._vel.set(0, -20, 0);
+        const entrySpeed = Math.min(this._ship._vel.length(), 40);
+        this._ship._vel.set(0, -entrySpeed, 0);
         this._ship.mode = FlightMode.ATMOSPHERIC;
         this._setState(GS.SHIP_ATM);
+        this._audio?.playAmbient?.(entry.type || 'LUSH');
       }
     }
   }
@@ -1795,7 +1950,9 @@ class Game {
         factions:   this._factions?.serialize?.() ?? null,
         trading:    this._trading?.serialize?.()  ?? null,
       };
-      localStorage.setItem('aetheria_save', JSON.stringify(data));
+      data.charName = this._charName || this._getOrCreatePlayerName();
+      data.timestamp = Date.now();
+      localStorage.setItem(this._getSlotKey(this._charSlot), JSON.stringify(data));
       if (!silent) this._hud.showNotification('💾 Game saved', 'info', 2000);
     } catch (e) {
       console.warn('Save failed:', e);
@@ -1804,7 +1961,7 @@ class Game {
 
   _loadGame() {
     try {
-      const raw = localStorage.getItem('aetheria_save');
+      const raw = localStorage.getItem(this._getSlotKey(this._charSlot));
       if (!raw) { this._hud.showNotification('No save found', 'warn', 2000); return; }
       const data = JSON.parse(raw);
       if (data.player    && this._player)    this._player.loadState(data.player);
@@ -1825,6 +1982,12 @@ class Game {
       if (data.factions  && this._factions)  this._factions.load?.(data.factions);
       if (data.trading   && this._trading)   this._trading.load?.(data.trading);
       this._hud.showNotification('💾 Game loaded', 'info', 2000);
+      if (data.charName) {
+        this._charName = data.charName;
+        localStorage.setItem('aetheria_player_name', this._charName);
+      }
+      if (data.player?.suitColor) this._suitColor = data.player.suitColor;
+      if (data.player?.charName)  this._charName  = data.player.charName;
 
       // If called from the main menu, transition into gameplay now.
       // This avoids the need for a separate selectClass() call (which would
@@ -1848,9 +2011,11 @@ class Game {
   _toggleBuildMode() {
     this._buildMode = !this._buildMode;
     if (this._buildMode) {
-      this._hud?.showNotification('🔨 Build Mode: ON — [B] toggle, [1-5] select, [LMB] place', 'info', 4000);
+      this._hud?.showBuildPanel?.(this._buildings?.getBuildingTypes() ?? [], this._inventory);
+      this._hud?.showNotification('🔨 Build Mode: ON — [1-9] select type  LMB place  B exit', 'info', 4000);
     } else {
-      this._hud?.showNotification('Build Mode: OFF', 'info', 1500);
+      this._hud?.hideBuildPanel?.();
+      this._hud?.showNotification('🔨 Build Mode: OFF', 'info', 1500);
     }
   }
 
@@ -1999,6 +2164,43 @@ class Game {
 
   _getOrCreatePlayerName() {
     return localStorage.getItem('aetheria_player_name') || 'Traveller';
+  }
+
+  _getSlotKey(slot = 0) {
+    return `aetheria_save_${slot}`;
+  }
+
+  getSlotSummaries() {
+    const slots = [];
+    for (let i = 0; i < 3; i++) {
+      try {
+        const raw = localStorage.getItem(this._getSlotKey(i));
+        if (!raw) { slots.push(null); continue; }
+        const d = JSON.parse(raw);
+        slots.push({
+          slot:      i,
+          name:      d.charName  || d.player?.charName || 'Traveller',
+          classId:   d.player?.classId || 'technomancer',
+          level:     d.level  ?? 1,
+          suitColor: d.player?.suitColor ?? 0x4488ff,
+          timestamp: d.timestamp ?? 0,
+        });
+      } catch (_) { slots.push(null); }
+    }
+    return slots;
+  }
+
+  startNewCharacter(slot, name, suitColor, classId) {
+    this._charSlot  = slot  ?? 0;
+    this._charName  = name  || 'Traveller';
+    this._suitColor = suitColor ?? 0x4488ff;
+    localStorage.setItem('aetheria_player_name', this._charName);
+    this.selectClass(classId || 'technomancer');
+  }
+
+  loadSave(slot) {
+    this._charSlot = slot ?? 0;
+    this._loadGame();
   }
 
   // ─── Send player state to network peers (called from _tickSurface) ────────
