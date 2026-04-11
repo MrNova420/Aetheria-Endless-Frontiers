@@ -57,9 +57,10 @@ const GS = {
 
 // ─── Game constants ───────────────────────────────────────────────────────────
 const COMBAT_TICK_INTERVAL = 0.5;   // seconds between creature damage ticks
-const SCAN_COOLDOWN_DURATION = 2.5; // seconds scanner recharge time
-const AUTO_SAVE_INTERVAL = 60;      // seconds between automatic saves
-const SCANNER_RANGE = 30;           // world-units radius for scanner detection
+const SCAN_COOLDOWN_DURATION    = 2.5;  // seconds scanner recharge time
+const AUTO_SAVE_INTERVAL        = 60;   // seconds between automatic saves
+const SCANNER_RANGE             = 30;   // world-units radius for scanner detection
+const ATMOSPHERE_ENTRY_RADIUS   = 600;  // ship must be within this many units of a planet sphere to enter atmosphere
 
 // ─── XP constants ─────────────────────────────────────────────────────────────
 const XP_PER_MINE_ITEM       = 3;    // XP per resource unit mined
@@ -1622,7 +1623,7 @@ class Game {
 
     // Check if near planet to re-enter
     if (this._spaceScene) {
-      const entry = this._spaceScene.getPlanetAt(sp, 600);
+      const entry = this._spaceScene.getPlanetAt(sp, ATMOSPHERE_ENTRY_RADIUS);
       if (entry) {
         this._hud.showNotification(`🌍 Entering atmosphere of ${entry.name}…`, 'info', 3500);
         this._currentPlanet = entry;
