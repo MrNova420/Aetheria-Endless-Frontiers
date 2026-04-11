@@ -339,6 +339,61 @@ class Game {
     // Physics world (re-created per planet)
     if (this._physicsWorld) this._physicsWorld.dispose(this._scene);
     this._physicsWorld = new PhysicsWorld();
+
+    // ── Spawn planet settlements (deterministic from planet seed) ────────────
+    this._spawnSettlements(planet);
+  }
+
+  _spawnSettlements(planet) {
+    if (!planet.settlements || planet.settlements.length === 0) return;
+    if (!this._npcs || !this._terrain) return;
+
+    for (const settle of planet.settlements) {
+      if (settle.npcCount === 0) {
+        // Ruins — visual only, nothing to spawn
+        continue;
+      }
+
+      const groundY = this._terrain.getHeightAt(settle.x, settle.z);
+      const basePos  = new THREE.Vector3(settle.x, groundY, settle.z);
+
+      const sizeMap = {
+        city:          'city',
+        trading_post:  'town',
+        research_base: 'village',
+        space_port:    'town',
+        mining_camp:   'camp',
+        outpost:       'camp',
+        ruins:         'camp',
+      };
+      const size = sizeMap[settle.type] || 'camp';
+
+      this._npcs.spawnSettlement(basePos, settle.faction, size);
+
+      if (this._buildings) {
+        const buildingTypes = {
+          city:          ['town_hub','power_generator','research_station','storage','farm','turret'],
+          trading_post:  ['storage','power_generator','town_hub'],
+          research_base: ['research_station','power_generator','storage'],
+          space_port:    ['power_generator','storage','town_hub'],
+          mining_camp:   ['extractor','storage','power_generator'],
+          outpost:       ['storage','power_generator'],
+        };
+        const bTypes = buildingTypes[settle.type] || ['storage'];
+        const r2 = (() => { let s=(settle.seed>>>0)||1; return ()=>{ s=(Math.imul(s,1664525)+1013904223)>>>0; return s/0x100000000; }; })();
+        for (const bt of bTypes) {
+          const angle = r2() * Math.PI * 2;
+          const dist  = 8 + r2() * 12;
+          const bx    = settle.x + Math.cos(angle) * dist;
+          const bz    = settle.z + Math.sin(angle) * dist;
+          const by    = this._terrain.getHeightAt(bx, bz);
+          const pos   = new THREE.Vector3(bx, by, bz);
+          try {
+            this._buildings.place(bt, pos, new THREE.Quaternion());
+          } catch (_) {}
+        }
+      }
+    }
   }
 
   _teardownSurface() {

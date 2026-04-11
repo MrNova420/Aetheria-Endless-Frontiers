@@ -10,6 +10,14 @@ function seededRng(seed) {
   return () => { s = (Math.imul(s,1664525)+1013904223)>>>0; return s/0x100000000; };
 }
 
+function hashCoord(a, b, c) {
+  let h = (a * 2654435761) >>> 0;
+  h = (h ^ (b * 2246822519)) >>> 0;
+  h = (h ^ (c * 3266489917)) >>> 0;
+  h = (Math.imul(h ^ (h >>> 16), 0x45d9f3b)) >>> 0;
+  return (h ^ (h >>> 16)) >>> 0 || 1;
+}
+
 const PLANET_NAMES = [
   'Xion','Velara','Nythus','Cruor','Helix','Zorath','Primen','Kalyx',
   'Duvek','Triox','Fenmara','Gloeth','Solva','Vortix','Ryekon','Umbra',
@@ -136,6 +144,65 @@ export class PlanetGenerator {
     // Height scale modified per subtype
     const heightMult = def.heightMult || 1.0;
 
+    // ── Habitability + Settlement generation ─────────────────────────────────
+    const habBase = {
+      LUSH:8, TROPICAL:7, OCEAN:6, SWAMP:5, BARREN:3, FROZEN:3, ARCTIC:2,
+      TOXIC:2, BURNING:1, VOLCANIC:1, DESERT:3, EXOTIC:5, CRYSTAL:4, DEAD:1,
+    };
+    const habitability = Math.min(10, Math.max(0,
+      (habBase[type] || 3) + Math.floor((rng()-0.5)*3)
+    ));
+
+    const SETTLE_POOLS = {
+      LUSH:    ['city','trading_post','research_base','outpost'],
+      TROPICAL:['city','trading_post','outpost','space_port'],
+      OCEAN:   ['research_base','outpost','trading_post'],
+      SWAMP:   ['outpost','mining_camp','research_base'],
+      BARREN:  ['mining_camp','outpost'],
+      DESERT:  ['mining_camp','outpost','trading_post'],
+      FROZEN:  ['outpost','mining_camp'],
+      ARCTIC:  ['outpost','mining_camp'],
+      TOXIC:   ['mining_camp','outpost'],
+      BURNING: ['mining_camp'],
+      VOLCANIC:['mining_camp'],
+      EXOTIC:  ['research_base','outpost','ruins'],
+      CRYSTAL: ['research_base','mining_camp','ruins'],
+      DEAD:    ['ruins','outpost'],
+    };
+    const pool = SETTLE_POOLS[type] || ['outpost'];
+
+    const FACTION_BY_TYPE = {
+      LUSH:'gek', TROPICAL:'gek', OCEAN:'korvax', SWAMP:'gek',
+      BARREN:'outlaw', DESERT:'outlaw', FROZEN:'vykeen', ARCTIC:'vykeen',
+      TOXIC:'vykeen', BURNING:'vykeen', VOLCANIC:'vykeen',
+      EXOTIC:'atlas', CRYSTAL:'korvax', DEAD:'sentinel_order',
+    };
+    const dominantFaction = FACTION_BY_TYPE[type] || 'gek';
+
+    const FACTION_IDS = ['gek','korvax','vykeen','outlaw','atlas','sentinel_order'];
+    const settleCount = habitability <= 2 ? 0 : habitability <= 5 ? Math.floor(rng()*2) : 1 + Math.floor(rng()*3);
+    const settlements = [];
+    for (let si = 0; si < settleCount; si++) {
+      const sType  = pool[Math.floor(rng() * pool.length)];
+      const angle  = rng() * Math.PI * 2;
+      const dist   = 150 + rng() * 600;
+      const npcCount = sType === 'city' ? 8 + Math.floor(rng()*12)
+                     : sType === 'trading_post' ? 4 + Math.floor(rng()*4)
+                     : sType === 'research_base' ? 3 + Math.floor(rng()*3)
+                     : sType === 'ruins' ? 0
+                     : 2 + Math.floor(rng()*3);
+      const factionOverride = rng() < 0.15 ? FACTION_IDS[Math.floor(rng()*FACTION_IDS.length)] : dominantFaction;
+      settlements.push({
+        id:      `settle_${seed}_${si}`,
+        type:    sType,
+        x:       Math.cos(angle) * dist,
+        z:       Math.sin(angle) * dist,
+        faction: factionOverride,
+        npcCount,
+        seed:    hashCoord(seed, si * 7, 99),
+      });
+    }
+
     return {
       id: `planet_${seed}`,
       name: planetName,
@@ -178,6 +245,10 @@ export class PlanetGenerator {
       cloudCoverage: 0.3 + rng() * 0.4,
       gravity: (PLANET_GRAVITY[type] || 1.0) * WORLD.GRAVITY,
       heightScale: WORLD.HEIGHT_SCALE * heightMult,
+      habitability,
+      settlements,
+      dominantFaction,
+      ownedBy: null,
     };
   }
 

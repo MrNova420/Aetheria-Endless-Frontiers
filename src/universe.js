@@ -316,16 +316,48 @@ export class UniverseSystem {
       };
     }
 
+    // Planet type distribution guided by star class
+    // M/K stars → more BARREN/FROZEN/DEAD; G → LUSH/OCEAN; A/B/O → BURNING/VOLCANIC/EXOTIC
+    const STAR_PLANET_BIAS = {
+      M: ['BARREN','BARREN','FROZEN','DEAD','ROCKY'],
+      K: ['BARREN','LUSH','LUSH','DESERT','SWAMP'],
+      G: ['LUSH','LUSH','OCEAN','TROPICAL','LUSH'],
+      F: ['LUSH','TROPICAL','EXOTIC','CRYSTAL','OCEAN'],
+      A: ['BURNING','EXOTIC','CRYSTAL','BARREN','VOLCANIC'],
+      B: ['BURNING','VOLCANIC','DEAD','EXOTIC','BARREN'],
+      O: ['VOLCANIC','BURNING','EXOTIC','DEAD','BURNING'],
+    };
+    const bias = STAR_PLANET_BIAS[starType] || STAR_PLANET_BIAS.G;
+
     // Planets
     const planetCount = 2 + Math.floor(rng() * 7);
     const planets = [];
     for (let p = 0; p < planetCount; p++) {
+      const typeOverride = bias[Math.floor(rng() * bias.length)];
       planets.push({
         seed:        hashCoord(g * 31 + r, s * 17 + p, p * 7 + 3),
         orbitRadius: 300 + p * 250 + rng() * 100,
         moonCount:   Math.floor(rng() * 4),
+        typeOverride,
       });
     }
+
+    // System traits (0-2 per system, deterministic)
+    const TRAIT_POOL = [
+      'nebula','pirate_stronghold','ancient_ruins','derelict_station',
+      'exotic_anomaly','rich_deposits','conflict_zone','trade_hub',
+      'abandoned','paradise','quarantine','pulsar_proximity',
+    ];
+    const traitCount = rng() < 0.4 ? 0 : rng() < 0.7 ? 1 : 2;
+    const traits = [];
+    for (let t = 0; t < traitCount; t++) {
+      const tr = TRAIT_POOL[Math.floor(rng() * TRAIT_POOL.length)];
+      if (!traits.includes(tr)) traits.push(tr);
+    }
+
+    // Wealth (0-5) and danger (0-5) driven by economy + conflict + traits
+    const wealth = Math.min(5, Math.floor(rng() * 3) + (econ.name === 'Trading' || econ.name === 'Technology' ? 2 : 0) + (traits.includes('trade_hub') ? 1 : 0));
+    const danger = Math.min(5, conflict + (traits.includes('pirate_stronghold') ? 2 : 0) + (traits.includes('conflict_zone') ? 1 : 0));
 
     const id = `${g}_${r}_${s}`;
     const desc = {
@@ -336,6 +368,7 @@ export class UniverseSystem {
       conflictLevel: conflict,
       hasBinary, binaryCompanion,
       planets,
+      traits, wealth, danger,
       visited: this._visited.has(id),
     };
 

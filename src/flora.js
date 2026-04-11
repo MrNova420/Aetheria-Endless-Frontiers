@@ -197,6 +197,26 @@ const FLORA_BUILDERS = [
   (p) => buildRockFormation(p, 'b'),
 ];
 
+// Flora type indices match FLORA_BUILDERS array order:
+// 0=alienTree, 1=crystal, 2=mushroom, 3=spinePlant, 4=floatingOrb,
+// 5=groundFern, 6=cactus, 7=rockA, 8=rockB
+const BIOME_FLORA_WEIGHTS = {
+  LUSH:    [8,0,3,5,1,7,0,3,2],
+  TROPICAL:[9,0,4,5,2,8,1,2,1],
+  OCEAN:   [4,1,3,4,2,8,0,4,2],
+  SWAMP:   [5,0,7,4,3,8,0,2,1],
+  BARREN:  [0,2,0,1,0,0,3,6,7],
+  DESERT:  [0,1,0,2,0,0,8,5,5],
+  FROZEN:  [1,3,0,2,0,2,0,7,8],
+  ARCTIC:  [0,4,0,1,0,1,0,8,9],
+  TOXIC:   [2,2,5,4,3,4,1,3,3],
+  BURNING: [0,1,0,1,0,0,2,6,8],
+  VOLCANIC:[0,0,0,1,0,0,1,6,9],
+  EXOTIC:  [4,7,5,4,8,3,1,1,1],
+  CRYSTAL: [2,9,2,3,6,2,0,2,2],
+  DEAD:    [0,1,0,0,0,0,0,7,9],
+};
+
 export class FloraManager {
   constructor(scene, planet) {
     this.scene = scene;
@@ -227,14 +247,41 @@ export class FloraManager {
       const wl = this.planet.waterLevel != null ? this.planet.waterLevel : 10;
       if (h < wl + 1) continue;
 
-      const typeIdx = Math.floor(rng() * FLORA_BUILDERS.length);
-      const group = FLORA_BUILDERS[typeIdx](this.planet);
+      // Weighted flora type selection by planet biome
+      const weights = BIOME_FLORA_WEIGHTS[this.planet.type] || BIOME_FLORA_WEIGHTS.LUSH;
+      const totalW  = weights.reduce((a,b) => a+b, 0);
+      let pick = rng() * totalW, wTypeIdx = 0;
+      for (let wi = 0; wi < weights.length; wi++) {
+        pick -= weights[wi];
+        if (pick <= 0) { wTypeIdx = wi; break; }
+      }
+      const wGroup = FLORA_BUILDERS[wTypeIdx](this.planet);
+
+      // Per-instance colour variation
+      wGroup.traverse(c => {
+        if (!c.isMesh || !c.material) return;
+        const mat = c.material.clone();
+        if (mat.color) {
+          const hsl = { h:0, s:0, l:0 };
+          mat.color.getHSL(hsl);
+          mat.color.setHSL(
+            (hsl.h + (rng()-0.5)*0.08 + 1) % 1,
+            Math.max(0, Math.min(1, hsl.s + (rng()-0.5)*0.15)),
+            Math.max(0.05, Math.min(0.95, hsl.l + (rng()-0.5)*0.12))
+          );
+          if (mat.emissive && mat.emissiveIntensity > 0) {
+            mat.emissive.copy(mat.color).multiplyScalar(0.7);
+          }
+        }
+        c.material = mat;
+      });
+
       const scale = 0.5 + rng() * 1.5;
-      group.scale.setScalar(scale);
-      group.position.set(wx, h, wz);
-      group.rotation.y = rng() * Math.PI * 2;
-      this.scene.add(group);
-      flora.push(group);
+      wGroup.scale.setScalar(scale);
+      wGroup.position.set(wx, h, wz);
+      wGroup.rotation.y = rng() * Math.PI * 2;
+      this.scene.add(wGroup);
+      flora.push(wGroup);
     }
     this._chunkFlora.set(key, flora);
   }
