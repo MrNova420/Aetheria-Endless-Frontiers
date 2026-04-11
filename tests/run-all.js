@@ -18,8 +18,8 @@ import path from 'path';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
-const __dir  = path.dirname(fileURLToPath(import.meta.url));
-const ROOT   = path.join(__dir, '..');
+const testDir = path.dirname(fileURLToPath(import.meta.url));
+const ROOT   = path.join(testDir, '..');
 const SRC    = path.join(ROOT, 'src');
 
 // ── Inline imports (avoid browser-only module chains) ────────────────────────
