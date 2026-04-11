@@ -1803,7 +1803,7 @@ class Game {
         factions:   this._factions?.serialize?.() ?? null,
         trading:    this._trading?.serialize?.()  ?? null,
       };
-      data.charName  = this._charName  || this._getOrCreatePlayerName();
+      data.charName = this._charName || this._getOrCreatePlayerName();
       data.timestamp = Date.now();
       localStorage.setItem(this._getSlotKey(this._charSlot), JSON.stringify(data));
       if (!silent) this._hud.showNotification('💾 Game saved', 'info', 2000);
@@ -2031,7 +2031,7 @@ class Game {
         slots.push({
           slot:      i,
           name:      d.charName  || d.player?.charName || 'Traveller',
-          classId:   d.player?.classId || 'explorer',
+          classId:   d.player?.classId || 'technomancer',
           level:     d.level  ?? 1,
           suitColor: d.player?.suitColor ?? 0x4488ff,
           timestamp: d.timestamp ?? 0,

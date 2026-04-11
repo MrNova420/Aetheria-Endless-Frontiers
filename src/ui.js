@@ -199,7 +199,7 @@ export class GameHUD {
         const card = document.createElement('div');
         card.className = 'slot-card';
         if (s) {
-          const colorHex = '#' + (s.suitColor).toString(16).padStart(6, '0');
+          const colorHex = '#' + (s.suitColor & 0xFFFFFF).toString(16).padStart(6, '0');
           card.innerHTML = `
             <div class="slot-color-dot" style="background:${colorHex}"></div>
             <div class="slot-info">

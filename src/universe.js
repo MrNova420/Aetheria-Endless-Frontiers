@@ -453,7 +453,7 @@ export class UniverseSystem {
       id, galaxyIdx: g, regionIdx: r, systemIdx: s, seed, name,
       position: pos,
       starType, starColor, starGlow, starSize, starIntensity,
-      starRadius: Math.round(500 + starSize * 300),  // 650–1640 units based on star class
+      starRadius: Math.round(500 + starSize * 300),  // ~650–1640 units (M→O star class)
       economy: econ.name, economyIcon: econ.icon, economyDescr: econ.descr,
       conflictLevel: conflict,
       hasBinary, binaryCompanion,
