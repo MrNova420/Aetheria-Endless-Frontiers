@@ -244,15 +244,15 @@ function makeNebulaTexture() {
 
 // ── Generate all procedural textures ──────────────────────────────────────────
 const PROCEDURAL_TEXTURES = [
-  { dst:'assets/textures/terrain/grass_albedo.jpg',  gen: makeGrassTexture,       label:'Grass albedo' },
-  { dst:'assets/textures/terrain/rock_albedo.jpg',   gen: makeRockTexture,        label:'Rock albedo' },
-  { dst:'assets/textures/terrain/sand_albedo.jpg',   gen: makeSandTexture,        label:'Sand albedo' },
-  { dst:'assets/textures/terrain/snow_albedo.jpg',   gen: makeSnowTexture,        label:'Snow albedo' },
-  { dst:'assets/textures/terrain/alien_albedo.jpg',  gen: makeAlienTexture,       label:'Alien albedo' },
-  { dst:'assets/textures/terrain/grass_normal.jpg',  gen: makeGrassNormalTexture, label:'Grass normal' },
-  { dst:'assets/textures/terrain/rock_normal.jpg',   gen: makeRockNormalTexture,  label:'Rock normal' },
-  { dst:'assets/textures/sky/stars.jpg',             gen: makeStarsTexture,       label:'Stars' },
-  { dst:'assets/textures/sky/nebula.jpg',            gen: makeNebulaTexture,      label:'Nebula' },
+  { dst:'assets/textures/terrain/grass_albedo.png',  gen: makeGrassTexture,       label:'Grass albedo' },
+  { dst:'assets/textures/terrain/rock_albedo.png',   gen: makeRockTexture,        label:'Rock albedo' },
+  { dst:'assets/textures/terrain/sand_albedo.png',   gen: makeSandTexture,        label:'Sand albedo' },
+  { dst:'assets/textures/terrain/snow_albedo.png',   gen: makeSnowTexture,        label:'Snow albedo' },
+  { dst:'assets/textures/terrain/alien_albedo.png',  gen: makeAlienTexture,       label:'Alien albedo' },
+  { dst:'assets/textures/terrain/grass_normal.png',  gen: makeGrassNormalTexture, label:'Grass normal' },
+  { dst:'assets/textures/terrain/rock_normal.png',   gen: makeRockNormalTexture,  label:'Rock normal' },
+  { dst:'assets/textures/sky/stars.png',             gen: makeStarsTexture,       label:'Stars' },
+  { dst:'assets/textures/sky/nebula.png',            gen: makeNebulaTexture,      label:'Nebula' },
 ];
 
 function generateProceduralTextures(force = false) {
@@ -266,7 +266,6 @@ function generateProceduralTextures(force = false) {
     log(`Generating ${tex.label}…`);
     try {
       const pixels = tex.gen();
-      // Note: writing .jpg extension but PNG data — Three.js TextureLoader handles both
       const pngData = encodePNG(TEX_SIZE, TEX_SIZE, pixels);
       fs.writeFileSync(dst, pngData);
       ok(`Generated: ${tex.dst}`);
