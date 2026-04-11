@@ -200,25 +200,37 @@ export class GameHUD {
         card.className = 'slot-card';
         if (s) {
           const colorHex = '#' + (s.suitColor & 0xFFFFFF).toString(16).padStart(6, '0');
-          card.innerHTML = `
-            <div class="slot-color-dot" style="background:${colorHex}"></div>
-            <div class="slot-info">
-              <div class="slot-name">${s.name}</div>
-              <div class="slot-sub">${(s.classId||'').toUpperCase()} · LV ${s.level}</div>
-            </div>
-            <div class="slot-actions">
-              <button class="mm-btn primary sm slot-continue-btn">▶ CONTINUE</button>
-              <button class="mm-btn danger sm slot-delete-btn">✕ DELETE</button>
-            </div>`;
-          card.querySelector('.slot-continue-btn').addEventListener('click', () => {
-            window.game?.loadSave?.(i);
-          });
-          card.querySelector('.slot-delete-btn').addEventListener('click', () => {
+
+          const el = (tag, cls, text) => {
+            const node = document.createElement(tag);
+            if (cls) node.className = cls;
+            if (text !== undefined) node.textContent = text;
+            return node;
+          };
+
+          const colorDot = el('div', 'slot-color-dot');
+          colorDot.style.background = colorHex;
+
+          const info = el('div', 'slot-info');
+          info.appendChild(el('div', 'slot-name', s.name));
+          info.appendChild(el('div', 'slot-sub', `${(s.classId || '').toUpperCase()} · LV ${s.level}`));
+
+          const actions = el('div', 'slot-actions');
+          const continueBtn = el('button', 'mm-btn primary sm slot-continue-btn', '▶ CONTINUE');
+          continueBtn.addEventListener('click', () => { window.game?.loadSave?.(i); });
+          const deleteBtn = el('button', 'mm-btn danger sm slot-delete-btn', '✕ DELETE');
+          deleteBtn.addEventListener('click', () => {
             if (confirm(`Delete character "${s.name}"?`)) {
               localStorage.removeItem(`aetheria_save_${i}`);
               buildSlotCards(mode);
             }
           });
+          actions.appendChild(continueBtn);
+          actions.appendChild(deleteBtn);
+
+          card.appendChild(colorDot);
+          card.appendChild(info);
+          card.appendChild(actions);
         } else {
           card.innerHTML = `
             <div class="slot-empty-icon">+</div>

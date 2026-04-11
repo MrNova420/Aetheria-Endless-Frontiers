@@ -341,13 +341,13 @@ Spend Nanites to unlock upgrades:
 
 ## 10. Character Classes
 
-| Class | Strength | Starting Bonus |
+| Class | Focus | Starting Bonus Items |
 |---|---|---|
-| **Explorer** | Jetpack fuel, scan range | +50 jetpack fuel, wider scanner |
-| **Warrior** | HP, shield, damage | +20 HP, +15 shield, +5 attack damage |
-| **Trader** | Units, trade prices | +1 500 starting Units, better buy/sell rates |
+| **Runekeeper** | Combat & survival | Chromatic Metal ×80, Magnetised Ferrite ×50, Runic Shard ×5, Shield Battery ×2 |
+| **Technomancer** | Technology & crafting | Chromatic Metal ×120, Copper Wire ×40, Circuit Board ×10, Nanite Cluster ×50, Tech Fragment ×3 |
+| **Voidhunter** | Stealth & mobility | Void Crystal ×8, Stellar Ash ×30, Quantum Essence ×1, Phase Shard ×5, Nanite Cluster ×25 |
 
-All classes receive the **same starter kit** of resources. Class choice affects combat viability and economic efficiency, not access to content — everything is available to every class.
+All classes also receive the **same universal starter kit** (Carbon ×250, Ferrite Dust ×150, Di-Hydrogen ×60, Sodium ×40, Warp Cell ×2, Health Pack ×3, 3 000 Units, 100 Nanites). Class choice changes your early-game advantages, but every class can explore, build, fight, trade, and progress through the full game.
 
 ---
 

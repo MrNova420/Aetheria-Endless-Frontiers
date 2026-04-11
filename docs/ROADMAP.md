@@ -34,7 +34,7 @@
 - [x] Flora: biome-weighted type selection; per-instance HSL colour jitter
 
 ### Gameplay
-- [x] 3 player classes: Explorer, Warrior, Trader
+- [x] 3 player classes: Runekeeper, Technomancer, Voidhunter
 - [x] 3 independent character save slots with name + suit colour
 - [x] Mining, inventory (48 slots), crafting (40+ recipes)
 - [x] Tech tree upgrades (shield, jetpack, mining, life support, scan)

@@ -1108,7 +1108,35 @@ class Game {
       const primaryRes = this._currentPlanet?.resourceWeights
         ? Object.entries(this._currentPlanet.resourceWeights).sort((a,b)=>b[1]-a[1])[0]?.[0] ?? 'Carbon'
         : 'Carbon';
-      this._buildings.update?.(dt, this._inventory, primaryRes);
+      // building.js uses a plain-object inventory (cost-key style: 'carbon', 'nanites', …).
+      // Bridge it to the real Inventory class via a Proxy so automation output
+      // actually lands in the player's inventory slots.
+      const inv = this._inventory;
+      const nano = () => this._nanites ?? 0;
+      const setNano = (v) => { this._nanites = Math.max(0, v); };
+      const normalizeKey = (k) => (typeof k === 'string' && k.length > 1)
+        ? k.charAt(0).toUpperCase() + k.slice(1) : (k ? String(k) : k);
+      const buildingInventory = new Proxy({}, {
+        get: (_, prop) => {
+          if (prop === 'nanites') return nano();
+          if (prop === 'units')   return this._units ?? 0;
+          if (typeof prop !== 'string') return undefined;
+          return inv?.getAmount?.(normalizeKey(prop)) ?? 0;
+        },
+        set: (_, prop, value) => {
+          const next = Number(value) || 0;
+          if (prop === 'nanites') { setNano(next); return true; }
+          if (prop === 'units')   { this._units = Math.max(0, next); return true; }
+          if (typeof prop !== 'string') return true;
+          const key   = normalizeKey(prop);
+          const cur   = inv?.getAmount?.(key) ?? 0;
+          const delta = next - cur;
+          if (delta > 0)  inv?.addItem?.(key, delta);
+          else if (delta < 0) inv?.removeItem?.(key, -delta);
+          return true;
+        },
+      });
+      this._buildings.update?.(dt, buildingInventory, primaryRes);
     }
 
     // Network state sync (~20 Hz, throttled inside NetworkManager)
@@ -1352,10 +1380,11 @@ class Game {
         const placePos = pos.clone().addScaledVector(fwd, 6);
         if (this._terrain) placePos.y = this._terrain.getHeightAt(placePos.x, placePos.z);
 
-        // Build cost uses real inventory
+        // Build cost proxy using cost keys expected by BuildingSystem.canAfford()
+        // (e.g. 'iron', 'carbon', …) mapped from real inventory display names.
         const invProxy = {};
-        for (const item of (this._inventory.getAllItems?.() || [])) {
-          invProxy[item.type] = item.amount;
+        for (const [costKey, displayName] of Object.entries(BUILD_RESOURCE_MAP)) {
+          invProxy[costKey] = this._inventory.getAmount(displayName);
         }
         const result = this._buildings.place(this._selectedBuildType, placePos, invProxy);
         if (result) {
@@ -1387,7 +1416,7 @@ class Game {
       // Show build preview label
       if (this._selectedBuildType) {
         const def = this._buildings.getBuildingTypes().find(t => t.id === this._selectedBuildType);
-        if (def) this._hud?.showNotification(`🔨 [${def.name}] LMB=place B=exit`, 'info', 0.5);
+        if (def) this._hud?.showNotification(`🔨 [${def.name}] LMB=place B=exit`, 'info', 1000);
       }
     }
 

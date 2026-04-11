@@ -1894,7 +1894,8 @@ suite('Physics Simulation — jetpack, jump, grounding, fall');
 suite('Building System Simulation — automation, power grid, costs, resource gen');
 
 {
-  // Replicate BUILDING_TYPES and BuildingSystem.update() logic without Three.js
+  // Mock mirrors the real src/building.js BUILDING_TYPES shape and update() logic
+  // (minus Three.js scene creation). Aligned with actual implementation.
   const BTYPES = {
     extractor:        { id:'extractor',        powerCost:20, powerGen:0,   maxHp:200 },
     power_generator:  { id:'power_generator',  powerCost:5,  powerGen:100, maxHp:300 },
@@ -1904,7 +1905,7 @@ suite('Building System Simulation — automation, power grid, costs, resource ge
     town_hub:         { id:'town_hub',         powerCost:0,  powerGen:0,   maxHp:500 },
   };
 
-  // Minimal BuildingSystem simulation
+  // Minimal BuildingSystem simulation mirroring src/building.js
   class MockBuildingSystem {
     constructor() {
       this._buildings = new Map();
@@ -1935,14 +1936,18 @@ suite('Building System Simulation — automation, power grid, costs, resource ge
         b.active  = b.powered && b.hp > 0;
       }
     }
-    update(dt, inventory, primaryRes = 'Carbon') {
+    // Matches real building.js update() signature:
+    //   inventory: plain object; primaryResource default 'carbon' (lowercase)
+    //   extractor outputs 2–5 units randomly per 10-s cycle
+    update(dt, inventory, primaryResource = 'carbon') {
       this._recalcPower();
       for (const b of this._buildings.values()) {
         if (b.typeId === 'extractor' && b.powered && b.active) {
           const elapsed = (this._extractorTimers.get(b.id) || 0) + dt;
           this._extractorTimers.set(b.id, elapsed);
           if (elapsed >= 10) {
-            inventory[primaryRes] = (inventory[primaryRes] || 0) + 3;
+            const amount = 2 + Math.floor(Math.random() * 4); // 2–5 (matches real code)
+            inventory[primaryResource] = (inventory[primaryResource] || 0) + amount;
             this._extractorTimers.set(b.id, 0);
           }
         }
@@ -1997,21 +2002,21 @@ suite('Building System Simulation — automation, power grid, costs, resource ge
     const bs  = new MockBuildingSystem();
     bs.addBuilding('power_generator');
     bs.addBuilding('extractor');
-    const inv = { Carbon: 0 };
-    // Simulate 25 seconds (should trigger 2 full cycles)
-    for (let t = 0; t < 250; t++) bs.update(0.1, inv, 'Carbon');
-    assertGte(inv.Carbon, 3, 'Extractor should have generated at least 3 Carbon after 25s');
+    const inv = { carbon: 0 };
+    // Simulate 25 seconds (should trigger 2 full cycles, min 2 units/cycle = ≥4 total)
+    for (let t = 0; t < 250; t++) bs.update(0.1, inv, 'carbon');
+    assertGte(inv.carbon, 4, 'Extractor should have generated at least 4 carbon after 25s (2 cycles × ≥2)');
   });
 
   test('[SIM] Research station generates nanites over 30-second cycles', () => {
     const bs = new MockBuildingSystem();
     bs.addBuilding('power_generator');
     const rs = bs.addBuilding('research_station');
-    // Add a second gen so research station (30 power) is covered
+    // Add extra generators so research station (30 power cost) is fully covered
     bs.addBuilding('power_generator');
     bs.addBuilding('power_generator');
     const inv = { nanites: 0 };
-    for (let t = 0; t < 600; t++) bs.update(0.1, inv, 'Carbon');
+    for (let t = 0; t < 600; t++) bs.update(0.1, inv, 'carbon');
     assertGte(inv.nanites, 5, 'Research station should generate ≥5 nanites after 60s');
   });
 
@@ -2020,7 +2025,7 @@ suite('Building System Simulation — automation, power grid, costs, resource ge
     bs.addBuilding('power_generator');
     bs.addBuilding('farm');
     const inv = { carbon: 0 };
-    for (let t = 0; t < 200; t++) bs.update(0.1, inv, 'Carbon');
+    for (let t = 0; t < 200; t++) bs.update(0.1, inv, 'carbon');
     assertGte(inv.carbon, 3, 'Farm should generate ≥3 carbon after 20s');
   });
 
@@ -2029,10 +2034,10 @@ suite('Building System Simulation — automation, power grid, costs, resource ge
     // 3 generators to power 3 extractors (3×5 + 3×20 = 75 draw, 3×100 = 300 gen)
     for (let i = 0; i < 3; i++) bs.addBuilding('power_generator');
     for (let i = 0; i < 3; i++) bs.addBuilding('extractor');
-    const inv = { Carbon: 0 };
-    for (let t = 0; t < 110; t++) bs.update(0.1, inv, 'Carbon');
-    // ~1 cycle for each extractor = 3 * 3 = 9
-    assertGte(inv.Carbon, 6, `3 extractors should generate more than 6 Carbon in 11s, got ${inv.Carbon}`);
+    const inv = { carbon: 0 };
+    for (let t = 0; t < 110; t++) bs.update(0.1, inv, 'carbon');
+    // ~1 cycle for each extractor; min 2 units/cycle × 3 = 6 minimum
+    assertGte(inv.carbon, 6, `3 extractors should generate ≥6 carbon in 11s, got ${inv.carbon}`);
   });
 
   test('[SIM] Empire simulation: 5 minutes of base operation', () => {
@@ -2042,11 +2047,13 @@ suite('Building System Simulation — automation, power grid, costs, resource ge
     for (let i = 0; i < 2; i++) bs.addBuilding('extractor');
     bs.addBuilding('farm');
     bs.addBuilding('research_station');
-    const inv = { Carbon: 0, carbon: 0, nanites: 0 };
+    // Use lowercase keys (matching real building.js default)
+    const inv = { carbon: 0, nanites: 0 };
     // 300 seconds = 5 minutes
-    for (let t = 0; t < 3000; t++) bs.update(0.1, inv, 'Carbon');
-    const totalCarbon = (inv.Carbon || 0) + (inv.carbon || 0);
-    assertGte(totalCarbon, 30, `5-minute base should produce ≥30 Carbon, got ${totalCarbon}`);
+    for (let t = 0; t < 3000; t++) bs.update(0.1, inv, 'carbon');
+    // 2 extractors × 30 cycles (300s/10s) × min 2 units = 120 min from extractors
+    // + farm 20 cycles (300s/15s) × 3 = 60 → ≥120 total carbon conservatively
+    assertGte(inv.carbon, 120, `5-minute base should produce ≥120 carbon, got ${inv.carbon}`);
     assertGte(inv.nanites, 40, `5-minute base should produce ≥40 nanites, got ${inv.nanites}`);
   });
 }

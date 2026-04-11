@@ -108,7 +108,7 @@ Character Creation (index.html + game.js)
   ├─ Up to 3 independent save slots (aetheria_save_0 / _1 / _2)
   ├─ Character name input (free text, shown in HUD and multiplayer)
   ├─ 8 suit colour swatches → sets _suitColor hex on all 11 player mesh zones
-  └─ Class selection (Explorer / Warrior / Trader)
+  └─ Class selection (Runekeeper / Technomancer / Voidhunter)
 
 Player (src/player.js)
   ├─ 11 material zones (MeshStandardMaterial, PBR)
@@ -228,7 +228,7 @@ Three independent save slots stored in `localStorage`:
 Each slot's JSON shape:
 ```json
 {
-  "version": 4,
+  "version": 5,
   "charName": "Nova",
   "systemId": "0_0_0",
   "planetSeed": 10001,

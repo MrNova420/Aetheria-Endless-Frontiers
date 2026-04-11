@@ -132,7 +132,7 @@ python3 -m http.server 8080
 
 ### Characters & NPCs
 - **Player**: 11 material zones (helmet, visor, chest, torso, shirt, shoulders, arms, gloves, hips, legs/boots, belt, jetpack) driven by class colour palette
-- **3 player classes**: Explorer, Warrior, Trader — each with unique stats and starter gear
+- **3 player classes**: Runekeeper, Technomancer, Voidhunter — each with a unique starter kit and play style
 - **NPCs**: seeded genome — 4 alien species (humanoid, tall/lanky, squat/broad, four-armed), 12 skin/chitin tones, 7 role-based outfit palettes with per-zone colour variation, emissive eyes, faction insignia ring, role accessories
 - **NPC roles**: merchant, guard, wanderer, quest giver, faction agent, bounty hunter, settler
 - **Settlements**: 0–3 per planet, seeded deterministically — city, trading post, research base, space port, mining camp, outpost, ruins

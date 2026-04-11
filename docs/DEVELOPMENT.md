@@ -209,12 +209,21 @@ export class NpcManager {
 export class BuildingSystem {
   constructor(scene)
   place(typeId, pos, invProxy)   // → building object | null
-  // invProxy: object with resource amounts { 'Ferrite Dust': 150, 'Carbon': 250, … }
+  // invProxy: plain object keyed by building COST KEYS (not display names)
+  //   e.g. { iron: 50, carbon: 120, gold: 0, … }
+  // Use BUILD_RESOURCE_MAP (game.js) to convert inventory display names to cost keys:
+  //   const invProxy = {};
+  //   for (const [costKey, displayName] of Object.entries(BUILD_RESOURCE_MAP))
+  //     invProxy[costKey] = inventory.getAmount(displayName);
   // Returns null if invProxy doesn't have sufficient resources
   remove(id)
   update(dt, inventory, primaryRes?)
-  // primaryRes: string resource name for extractor output (default 'Carbon')
-  // Automation: extractors →10s, research_stations →30s, farms →15s
+  // inventory: plain object (or Proxy) keyed by LOWERCASE resource names
+  //   extractor writes  → inventory[primaryResource]  (default 'carbon')
+  //   research_station  → inventory.nanites
+  //   farm              → inventory.carbon
+  // primaryRes: lowercase resource name for extractor output (default 'carbon')
+  // Automation cycles: extractor→10s (2-5 units), research_station→30s (+5 nanites), farm→15s (+3 carbon)
   getPowerStatus()   // → { produced, consumed, surplus }
   getBuildingTypes() // → array of { id, name, cost, powerCost, powerGen, maxHp }
   serialize() / load(data)
@@ -224,7 +233,7 @@ export class BuildingSystem {
   //         'research_station'|'turret'|'town_hub'|'wall'|'door'|'farm'
 }
 
-// Resource name mapping (game.js BUILD_RESOURCE_MAP):
+// Building cost keys (src/building.js BUILDING_TYPES) → inventory display names (BUILD_RESOURCE_MAP in game.js):
 // 'iron'     → 'Ferrite Dust'
 // 'carbon'   → 'Carbon'
 // 'sodium'   → 'Sodium'
@@ -268,7 +277,7 @@ game.startNewCharacter(slot, name, suitColor, classId)
   // slot:      0 | 1 | 2
   // name:      string  (displayed in HUD)
   // suitColor: number  (hex e.g. 0x4488ff)
-  // classId:   'explorer' | 'warrior' | 'trader'
+  // classId:   'runekeeper' | 'technomancer' | 'voidhunter'
 
 game.loadSave(slot)
   // Loads the save at the given slot index; sets _charSlot, _charName, _suitColor
