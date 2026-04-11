@@ -364,7 +364,8 @@ test('Equipment getStats accumulates bonuses', () => {
   const stats = eq.getStats();
   assertEqual(stats.maxHP, 20);
   assertEqual(stats.shieldMax, 30);
-  assertEqual(stats.weaponDamage, 2.0);
+  // weaponDamage starts at 1.0 (base multiplier) and adds the equipped weapon's +2.0 → 3.0
+  assertEqual(stats.weaponDamage, 3.0);
 });
 
 test('Equipment serialize/load round-trip', () => {
@@ -1177,8 +1178,10 @@ test('noise2D differs between seeds', () => {
   const a = new SimplexNoise(1);
   const b = new SimplexNoise(2);
   let same = 0;
+  // Use fractional coordinates to avoid integer-coord collision artifacts
   for (let i = 0; i < 100; i++) {
-    if (a.noise2D(i, i) === b.noise2D(i, i)) same++;
+    const x = i * 0.137, y = i * 0.271;
+    if (Math.abs(a.noise2D(x, y) - b.noise2D(x, y)) < 1e-10) same++;
   }
   assert(same < 10, 'Different seeds should produce mostly different values');
 });

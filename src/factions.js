@@ -190,10 +190,13 @@ export class FactionManager {
 
   declareWar(fA, fB) {
     const key = pairKey(fA, fB);
+    const alreadyAtWar = this._wars.has(key);
     this._allies.delete(key);
     this._wars.add(key);
-    this.addRep(fA, -20);
-    this.addRep(fB, -20);
+    if (!alreadyAtWar) {
+      this.addRep(fA, -20);
+      this.addRep(fB, -20);
+    }
     console.log(`[Factions] War declared: ${fA} ↔ ${fB}`);
   }
 

@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "test": "node tests/run-all.js",
     "dev": "node server.js",
     "android": "node server.js",
     "setup": "node scripts/setup-game.js",
