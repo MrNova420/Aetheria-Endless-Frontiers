@@ -13,6 +13,7 @@ const WIND_DISPLAY_THRESHOLD = 1.5;  // m/s – show wind speed label above this
 const PULSE_BASE              = 0.03; // minimum vignette opacity base
 const PULSE_SPEED             = 2.0;  // radians/sec for vignette pulse sine wave
 const PULSE_AMPLITUDE         = 0.07; // max additional opacity from pulse
+const CONNECTION_STATUS_CHECK_DELAY_MS = 2000; // ms to wait before checking connect status
 
 // ─── Tiny DOM helpers ─────────────────────────────────────────────────────────
 function el(tag, cls, txt) {
@@ -126,6 +127,52 @@ export class GameHUD {
     if (btnCtrl) btnCtrl.addEventListener('click', () => this._toggleControls());
     const btnBack = document.getElementById('btn-back-ctrl');
     if (btnBack) btnBack.addEventListener('click', () => this._toggleControls(false));
+
+    // Server connect — using the smart _autoConnect which handles rename if already connected
+    const btnConnect = document.getElementById('btn-connect-server');
+    const serverInput = document.getElementById('mm-server-url');
+    const netStatus = document.getElementById('mm-net-status');
+    if (btnConnect) {
+      btnConnect.addEventListener('click', () => {
+        const customUrl = serverInput?.value?.trim() || null;
+        if (netStatus) { netStatus.textContent = 'Connecting…'; netStatus.className = 'mm-net-status connecting'; }
+        if (window.game) {
+          if (customUrl) {
+            // User specified a custom URL — use it directly
+            window.game.connectToServer(customUrl, window.game._getOrCreatePlayerName?.());
+          } else {
+            // Auto-detect from page hostname (works for both localhost and LAN)
+            window.game._autoConnect?.();
+          }
+        }
+        setTimeout(() => {
+          if (window.game?._network?.isConnected()) {
+            const count = window.game._network._playerCount ?? 1;
+            if (netStatus) { netStatus.textContent = `🟢 Connected — ${count} player(s) online`; netStatus.className = 'mm-net-status connected'; }
+          } else {
+            if (netStatus) { netStatus.textContent = '🔴 Server not reachable — solo play active'; netStatus.className = 'mm-net-status error'; }
+          }
+        }, CONNECTION_STATUS_CHECK_DELAY_MS);
+      });
+    }
+
+    // Load game button
+    const btnLoad = document.getElementById('btn-load-game');
+    if (btnLoad) {
+      if (localStorage.getItem('aetheria_save')) btnLoad.style.display = '';
+      btnLoad.addEventListener('click', () => {
+        if (window.game) {
+          // _loadGame() restores state and triggers _autoConnect with the saved
+          // player name — do NOT call selectClass() here as well, since that
+          // would fire a second _autoConnect before the first socket opens.
+          window.game._loadGame();
+        }
+      });
+    }
+
+    // Help button
+    const btnHelp = document.getElementById('btn-help');
+    if (btnHelp) btnHelp.addEventListener('click', () => window.game?._help?.show());
   }
 
   showMainMenu() {
@@ -280,6 +327,12 @@ export class GameHUD {
       wxRow.append(el('span', 'haz-icon', '🌤'), el('span', 'haz-lbl', 'WEATHER'), this._el.weatherLbl);
       hazardWrap.appendChild(wxRow);
     }
+
+    // Network status indicator (top-right, next to level box)
+    this._el.netStatus = document.createElement('div');
+    this._el.netStatus.className = 'net-status-hud hidden';
+    this._el.netStatus.innerHTML = '<span class="net-dot">●</span><span class="net-info">OFFLINE</span>';
+    document.getElementById('hud')?.appendChild(this._el.netStatus);
   }
 
   _buildArcSVG(id, strokeColor, trackColor) {
@@ -618,6 +671,8 @@ export class GameHUD {
     if (resume) resume.addEventListener('click', () => window.game && window.game.resume());
     const mmBtn = document.getElementById('btn-main-menu-from-pause');
     if (mmBtn) mmBtn.addEventListener('click', () => window.game && window.game.goToMainMenu());
+    const helpPause = document.getElementById('btn-help-pause');
+    if (helpPause) helpPause.addEventListener('click', () => window.game?._help?.show());
   }
 
   showPause() { if (this._el.pauseScreen) this._el.pauseScreen.classList.remove('hidden'); }
@@ -641,7 +696,13 @@ export class GameHUD {
   hideDeath() { this._el.deathScreen.classList.add('hidden'); }
 
   // ─── Bind menu buttons ────────────────────────────────────────────────────────
-  _bindMenuButtons() {}
+  _bindMenuButtons() {
+    const btnSave = document.getElementById('btn-save-from-pause');
+    if (btnSave) btnSave.addEventListener('click', () => {
+      window.game?._saveGame();
+      this.showNotification('💾 Game saved!', 'success', 2000);
+    });
+  }
 
   // ─── Main update ──────────────────────────────────────────────────────────────
   update(dt, player, planet, ship, terrain, gameState, creatures, mining) {
@@ -1167,6 +1228,23 @@ export class GameHUD {
 
   hideHelpOverlay() {
     if (this._el.helpOverlay) this._el.helpOverlay.classList.add('hidden');
+  }
+
+  // ─── Network Status HUD ─────────────────────────────────────────────────────
+  updateNetStatus(connected, playerCount = 0, ping = 0) {
+    const el = this._el.netStatus;
+    if (!el) return;
+    el.classList.remove('hidden', 'online', 'offline');
+    if (connected) {
+      el.classList.add('online');
+      const info = playerCount > 1
+        ? `${playerCount} ONLINE · ${ping}ms`
+        : `ONLINE · ${ping}ms`;
+      el.querySelector('.net-info').textContent = info;
+    } else {
+      el.classList.add('offline');
+      el.querySelector('.net-info').textContent = 'OFFLINE';
+    }
   }
 
   dispose() {}

@@ -1,605 +1,313 @@
-# 🏗️ Development Guide – Aetheria: Endless Frontiers
+# Aetheria: Endless Frontiers — Development Guide
 
-This document covers the full architecture, system interactions, module API, and how to work on each part of the codebase.
-
----
-
-## Table of Contents
-
-1. [Architecture Overview](#1-architecture-overview)
-2. [Game State Machine](#2-game-state-machine)
-3. [Module Reference](#3-module-reference)
-4. [Asset Pipeline](#4-asset-pipeline)
-5. [Shader System](#5-shader-system)
-6. [Adding a New Planet Biome](#6-adding-a-new-planet-biome)
-7. [Adding a New Crafting Recipe](#7-adding-a-new-crafting-recipe)
-8. [Adding a New Creature](#8-adding-a-new-creature)
-9. [Running Locally](#9-running-locally)
-10. [Termux / Android Terminal](#10-termux--android-terminal)
-11. [Performance Tuning](#11-performance-tuning)
-12. [Debugging](#12-debugging)
+> Per-module API reference, conventions, and how to extend the game.
 
 ---
 
-## 1. Architecture Overview
+## Conventions
 
-```
-index.html
-  └── src/game.js          ← master orchestrator (RAF loop, state machine)
-        ├── src/assets.js  ← loads GLB/textures; procedural fallback
-        ├── src/planet.js  ← generates planet data (seed → config object)
-        ├── src/terrain.js ← chunks terrain mesh from planet config
-        ├── src/flora.js   ← instanced plants spawned on terrain
-        ├── src/creatures.js ← AI fauna spawned per chunk (+ boss variant)
-        ├── src/mining.js  ← resource nodes + extraction
-        ├── src/extractor.js ← Auto-Extractor factory elements (Satisfactory-style)
-        ├── src/quests.js  ← quest/objective system with chain support
-        ├── src/status.js  ← player status effects (burning, frozen, poisoned, …)
-        ├── src/player.js  ← input → physics → camera
-        ├── src/ship.js    ← 3-mode flight (LANDED/ATM/SPACE)
-        ├── src/space.js   ← space scene (stars, planets, station)
-        ├── src/galaxy.js  ← 100-system map
-        ├── src/inventory.js ← 48-slot item grid
-        ├── src/crafting.js  ← recipes + tech tree
-        ├── src/audio.js   ← Web Audio API sounds
-        ├── src/ui.js      ← HUD, menus, notifications, quest tracker, boss bar
-        ├── src/shaders.js ← custom GLSL (terrain, atm, water, flora, space)
-        ├── src/noise.js   ← simplex/perlin noise utils
-        └── src/config.js  ← all numeric constants
-```
-
-**Key design principles:**
-- Every module is self-contained and only talks to others through `game.js`.
-- `game.js` passes references down on construction (e.g. `new Player(scene, camera)`).
-- All Three.js geometry is built once and reused via instancing wherever possible.
-- Assets are loaded through `AssetManager` which returns `null` on failure so every caller must have a procedural fallback.
-- No build step required for web — Three.js is loaded from CDN via import-map.
-
----
-
-## 2. Game State Machine
-
-```
-LOADING
-  └─► MAIN_MENU
-        └─► PLANET_SURFACE  ←→  SHIP_ATM  ←→  SPACE_LOCAL
-              │                    │                 │
-              └────────────────────┴─────────────────┘
-                                   │
-                              GALAXY_MAP (overlay)
-                              PAUSED     (overlay)
-                              DEAD       (overlay)
-```
-
-State is held in `game.state` (string enum `GS.*`).  
-`game._setState(newState)` handles transitions and updates sub-system visibility.
-
-| State | What's active |
+| Rule | Detail |
 |---|---|
-| `LOADING` | Loading screen, asset preload |
-| `MAIN_MENU` | Class select, controls panel |
-| `PLANET_SURFACE` | Terrain, flora, creatures, mining, player on foot |
-| `SHIP_ATM` | Ship atmospheric flight, terrain still active |
-| `SPACE_LOCAL` | Space scene, planet meshes, no terrain |
-| `GALAXY_MAP` | Overlay canvas, pauses simulation |
-| `PAUSED` | Overlay, simulation frozen |
-| `DEAD` | Death screen, player frozen |
+| One file per system | All systems live in `src/`, one `.js` per system |
+| ES modules only | `import`/`export`, no bundler, no CommonJS |
+| No build step | Verify with brace-balance check (see ARCHITECTURE.md) |
+| Seeded RNG everywhere | Use `seededRng(seed)` for all procedural content |
+| PBR materials | Use `MeshStandardMaterial` with `roughness`/`metalness` |
+| Dispose everything | Call `geometry.dispose()`, `material.dispose()` on remove |
+| Constants at top | Game-balance numbers go in named constants at file top |
+| `_sv1/_sv2/_sv3` | Scratch Vector3s in game.js — never store references |
 
 ---
 
-## 3. Module Reference
+## Module APIs
 
-### `src/config.js`
-All game constants. Edit here to tune gameplay without touching logic files.
-
+### config.js
 ```js
-PLAYER_CONFIG.WALK_SPEED      // m/s on foot
-PLAYER_CONFIG.JETPACK_FUEL    // max fuel (drains at 30/s while thrusting)
-WORLD.GRAVITY                 // m/s² downward acceleration
-PLANET_TYPES[n]               // 8 biome definitions
-RESOURCES[name]               // resource definitions with rarity + colours
+export const WORLD        // chunk size, LOD, gravity, height scale, day duration
+export const PLANET_TYPES // { LUSH, BARREN, TOXIC, … }  (14 types)
+export const BIOME_COLORS // { LUSH:{low,mid,high,…}, … }  (single fallback palette)
+export const PLANET_GRAVITY   // { LUSH:1.0, BARREN:0.9, … }
+export const PLANET_HAZARD_RATES
+export const CLASSES      // { EXPLORER, WARRIOR, TRADER }
 ```
 
-### `src/noise.js`
-Exports:
-- `simplex2(x, y)` → `[-1, 1]`
-- `simplex3(x, y, z)` → `[-1, 1]`
-- `warpedFbm(x, y, octaves, lacunarity, gain)` → domain-warped fractal noise
-
-### `src/planet.js`
+### universe.js
 ```js
-// Static factory – call with a seed integer
-const planet = PlanetGenerator.generate(seed);
-// Returns: { type, name, biomeIndex, waterLevel, fogColor, sunColor,
-//            atmosphereColor, faunaDensity, floraDensity,
-//            toxicity, radiation, temperature, ... }
+export class UniverseSystem {
+  getCurrentSystem()         // → system descriptor
+  getLoadedSystems()         // → array of 1000 system descriptors in current region
+  getAdjacentSystems(n=8)    // → n nearest systems sorted by distance
+  warpTo(systemId)           // → bool; systemId = "g_r_s"
+  warpGalaxy()               // → advance to next galaxy (increments galaxyIdx)
+  getGalaxyName()            // → string
+  getStats()                 // → { galaxyName, galaxyIdx, visitedCount, … }
+  serialize() / load(data)
+}
 
-// Atmosphere rendering
-const atm = new PlanetAtmosphere(scene, planet);
-atm.update(dt, sunDirection, playerPos);
-atm.dispose();
+export function getGalaxyTier(galaxyIdx)   // → { tier, label, col, unlock, … }
+export function getGalaxyLore(galaxyIdx)   // → string
+export const GALAXY_TIERS                  // array of 6 tier definitions
 ```
 
-### `src/terrain.js`
-```js
-const terrain = new TerrainManager(scene, planet, sunLight);
-terrain.setManagers(floraManager, miningSystem); // call before first update
-terrain.update(playerWorldPos);   // call every frame – handles chunk streaming
-terrain.getHeightAt(x, z);        // returns world Y at any XZ position
-terrain.dispose();
-```
-Chunk size: 192 world units. LOD: 3 levels (high/med/low detail).
-
-### `src/flora.js`
-```js
-const flora = new FloraManager(scene, planet);
-flora.update(dt, windTime);  // animates wind sway
-flora.dispose();
-// FloraManager is called by TerrainManager internally via setManagers()
-```
-
-### `src/creatures.js`
-```js
-const mgr = new CreatureManager(scene, planet);
-mgr.update(dt, playerPos, getHeightAt);
-mgr.getNearbyCreatures(pos, radius);  // returns Creature[]
-mgr.dispose();
-// Spawning is called by TerrainManager internally
-```
-
-### `src/mining.js`
-```js
-const mining = new MiningSystem(scene, inventory);
-mining.update(dt, playerPos, isMining, miningDir, getHeightAt);
-mining.getNodesNear(pos, radius);  // returns ResourceNode[]
-mining.mine(nodeId, amount);       // extract resources
-mining.dispose();
-```
-
-### `src/player.js`
-```js
-const player = new Player(scene, camera);
-player.update(dt, input, terrain, mining);
-player.getPosition();          // THREE.Vector3 clone
-player.setPosition(v3);
-player.applyDamage(amount, type);
-player.heal(amount);
-player.getStats();             // { hp, maxHp, shield, maxShield, jetpack, lifeSup }
-player.serializeState();       // save/load object
-player.loadState(data);
-player.dispose();
-```
-
-Input object shape:
+**System descriptor shape:**
 ```js
 {
-  forward, back, left, right,   // booleans
-  sprint, jump, mine, scan,      // booleans
-  interact,
-  mouseDX, mouseDY,              // raw mouse delta (reset each frame)
-  shipThrust, shipYaw, shipPitch, shipRoll,  // -1..1 floats
+  id, galaxyIdx, regionIdx, systemIdx, seed, name,
+  position: { x, y },
+  starType, starColor, starGlow, starSize, starIntensity,
+  economy, economyIcon, economyDescr, conflictLevel,
+  hasBinary, binaryCompanion,
+  planets: [{ seed, typeOverride, orbitRadius, moonCount }],
+  traits,    // string[]  0-2 from TRAIT_POOL
+  wealth,    // 0-5
+  danger,    // 0-5
+  galaxyTier, galaxyTierLabel,
+  visited,   // bool
 }
 ```
 
-### `src/ship.js`
+### planet.js
 ```js
-const ship = new Ship(scene);
-ship.update(dt, input, terrain);
-ship.isPlayerNear(playerPos);  // true if within 5 units
-ship.enterShip(player);        // hides player model, sets _playerInside
-ship.exitShip(player);         // shows player model, moves to door
-ship.takeOff();
-ship.land(targetY);
-ship.getPosition();
-ship.dispose();
-```
+export class PlanetGenerator {
+  static generate(seed, typeOverride?, { isHomeworld?, galaxyIdx? })
+    // → planet descriptor (50+ fields, see below)
 
-### `src/inventory.js`
-```js
-const inv = new Inventory(48);
-inv.addItem(type, amount);           // returns overflow
-inv.removeItem(type, amount);        // returns true on success
-inv.getAmount(type);                 // total count of type
-inv.getSlots();                      // Slot[] array (null = empty)
-inv.hasSpace();                      // boolean
-```
+  static getSystemPlanets(systemSeed, systemData?)
+    // → array of planet descriptors
+}
 
-### `src/crafting.js`
-```js
-const crafting = new CraftingSystem(inventory);
-crafting.getAvailableRecipes();      // Recipe[]
-crafting.canCraft(recipeId);         // boolean
-crafting.craft(recipeId);            // boolean, adds outputs to inventory
-
-const tech = new TechTree();
-tech.isUnlocked(category, id);
-tech.canAfford(category, id, inventory);
-tech.upgrade(category, id, inventory);  // deducts cost, returns boolean
-```
-
-### `src/ui.js`
-```js
-const hud = new GameHUD();
-hud.init();                                 // call once on startup
-hud.update(dt, player, planet, ship, terrain, gameState);  // every frame
-hud.showNotification(text, type, duration);
-hud.showGalaxyMap(galaxy, currentSystemId);
-hud.showInventoryScreen(inventory);
-hud.showCraftingMenu(crafting, inventory);
-hud.setLoadingProgress(pct, message);
-hud.hideLoading();
-hud.showHUD() / hud.hideHUD();
-```
-
-### `src/audio.js`
-```js
-const audio = new AudioManager();
-// Must call init() after a user gesture (browser policy)
-audio.init();
-audio.playAmbient(planetType);    // 'LUSH' | 'BARREN' | 'TOXIC' | etc.
-audio.playSFX(name);              // 'mine' | 'jump' | 'land' | 'warp' | 'craft'
-audio.stopAmbient();
-```
-
-### `src/assets.js`
-```js
-const assets = getAssets();          // singleton
-await assets.loadManifest();         // loads assets/manifest.json
-await assets.preloadAll(onProgress); // loads everything declared in manifest
-assets.cloneModel(key);              // THREE.Group clone or null (fallback)
-assets.getTexture(key);              // THREE.Texture or procedural fallback
-assets.hasRealModel(key);            // false if file was missing
-assets.createMixer(key, clone);      // { mixer, clips } for animations
-```
-
----
-
-## 4. Asset Pipeline
-
-### How it works
-
-1. `assets/manifest.json` declares every asset with `file`, `source`, `fallback`.
-2. `scripts/download-assets.js` downloads zip packs from Kenney.nl / AmbientCG, extracts them, and copies named files to `assets/models/` and `assets/textures/`.
-3. At runtime, `AssetManager.preloadAll()` tries to load each file via `GLTFLoader` / `TextureLoader`. On 404 it silently falls back to procedural geometry.
-4. Calling code checks `assets.cloneModel(key)` — if `null` it builds its own Three.js geometry instead.
-
-### Adding a new model
-
-1. Place the `.glb` in `assets/models/<category>/`.
-2. Add an entry to `assets/manifest.json`:
-```json
-"my_model": {
-  "file": "assets/models/environment/my_model.glb",
-  "fallback": "procedural",
-  "scale": [1.0, 1.0, 1.0]
+export class PlanetAtmosphere {
+  constructor(scene, planetConfig)
+  update(dt, sunDir, playerPos)
+  setSunPosition(dir)
+  dispose()
 }
 ```
-3. Load it in your module:
-```js
-import { getAssets } from './assets.js';
-const mesh = getAssets().cloneModel('my_model') ?? buildFallback();
-```
 
----
-
-## 5. Shader System
-
-All shaders are in `src/shaders.js` as exported objects `{ uniforms, vertexShader, fragmentShader }`.
-
-| Export | Purpose |
-|---|---|
-| `TerrainShader` | Triplanar PBR terrain with 4-texture splatting |
-| `SpaceShader` | Skybox nebula + procedural starfield |
-| `WaterShader` | Fresnel reflective water with wave displacement |
-| `FloraShader` | Vertex wind animation for grass/plants |
-| `AtmosphereShader` | Rayleigh + Mie scattering for planet sky |
-
-To add a shader: export a new object from `shaders.js` and import it where needed.
-
----
-
-## 6. Adding a New Planet Biome
-
-1. Open `src/config.js`, find `PLANET_TYPES`.
-2. Add a new entry:
+**Planet descriptor shape (key fields):**
 ```js
 {
-  name: 'GLITCH',
-  fogColor: '#ff00ff',
-  fogDensity: 0.015,
-  atmosphereColor: '#aa00ff',
-  sunColor: '#ffffff',
-  terrainScale: 0.003,
-  heightAmplitude: 120,
-  waterLevel: -5,
-  floraDensity: 0,
-  faunaDensity: 0.3,
-  toxicity: 0,
-  radiation: 0.8,
-  temperature: 0,
-  groundColors: ['#ff00ff', '#aa00aa', '#660066'],
-}
-```
-3. Add any biome-specific flora/creature rules in `flora.js` and `creatures.js` by checking `planet.type === 'GLITCH'`.
-
----
-
-## 7. Adding a New Crafting Recipe
-
-Open `src/crafting.js`, find the `RECIPES` object:
-
-```js
-my_new_item: {
-  id: 'my_new_item',
-  name: 'Plasma Core',
-  category: 'tech',      // 'materials' | 'fuel' | 'tech' | 'food'
-  inputs:  { 'Chromatic Metal': 50, 'Di-Hydrogen': 30 },
-  outputs: { 'Plasma Core': 1 },
+  id, name, seed, type,
+  // Colours (all THREE.Color)
+  atmosphereColor, rayleighColor, fogColor, waterColor,
+  vegetationColor, rockColor, sandColor, snowColor, sunColor, ambientColor,
+  // Terrain
+  waterLevel, hasWater, heightScale, gravity,
+  fogDensity, cloudCoverage,
+  // Life
+  floraDensity, faunaDensity,
+  // Hazards
+  temperature, toxicity, radiation, stormFrequency,
+  hazardType, hazardRates,
+  // Visual extras
+  hasRings, moons: [{ name, color, size, emissive, orbitSpeed, orbitAngle, orbitTilt }],
+  nightGlowColor, emissiveStrength,
+  // Resources
+  resourceWeights: { [resourceType]: weight },
+  // Generation metadata
+  modifier: { id, tag, … } | null,
+  habitability,   // 0-10
+  dominantFaction,
+  settlements: [{ id, type, x, z, faction, npcCount, seed }],
+  ownedBy: null | playerId,
 }
 ```
 
-No further changes needed — `CraftingSystem` reads the `RECIPES` object automatically.
-
----
-
-## 8. Adding a New Creature
-
-Creature genomes are fully procedural via seed in `src/creatures.js`. To add a new body type:
-
-1. In `generateGenome()`, extend the `legCounts` array or add new genome properties.
-2. In `buildCreatureMesh()`, add new geometry cases for those properties.
-3. To add a creature with a real GLB model, add it to `assets/manifest.json` as `creature_<name>` and check `assets.cloneModel('creature_<name>')` at the top of `buildCreatureMesh()`.
-
----
-
-## 9. Running Locally
-
-```bash
-# Any platform
-npm install
-npm start          # → http://localhost:8080
-
-# Custom port
-PORT=3000 npm start
-
-# With assets
-npm run assets:quick   # download essential CC0 models + textures
-npm start
-```
-
-No build step. The browser loads ES modules directly via CDN import-map.
-
----
-
-## 10. Termux / Android Terminal
-
-See `setup-termux.sh` and `docs/MOBILE_RELEASE.md` for full details.
-
-Quick start in Termux:
-```bash
-pkg install git nodejs -y
-git clone https://github.com/MrNova420/Aetheria-Endless-Frontiers.git
-cd Aetheria-Endless-Frontiers
-bash setup-termux.sh
-```
-Then open `http://localhost:8080` in Chrome on the same device.
-
----
-
-## 11. Performance Tuning
-
-These settings in `src/config.js` have the biggest FPS impact:
-
-| Setting | Default | Low-end suggestion |
-|---|---|---|
-| `WORLD.CHUNK_VIEW_DIST` | 3 | 2 |
-| `WORLD.FLORA_DENSITY` | 1.0 | 0.3 |
-| `WORLD.CREATURE_DENSITY` | 1.0 | 0.2 |
-| Bloom `strength` in `game.js` | 0.9 | 0.4 or disabled |
-| Shadow map size | 2048×2048 | 1024×1024 |
-| `renderer.setPixelRatio` | `min(dpr, 2)` | `min(dpr, 1)` |
-
-On mobile/Termux-served devices the game auto-detects `navigator.hardwareConcurrency` to adjust density. You can also append `?quality=low` to the URL (implement in `config.js`).
-
----
-
-## 12. Debugging
-
-Open browser DevTools (F12) and check the Console for:
-
-- `[assets] Model 'x' not found – using procedural fallback` — normal if assets not downloaded.
-- `THREE.WebGLRenderer: Context Lost` — GPU memory pressure; reduce quality settings.
-- Any `SyntaxError` in `src/*.js` — check the import path is correct in the failing file.
-
-Useful dev commands in browser console:
+### terrain.js
 ```js
-window.game.state              // current game state string
-window.game._player.hp         // player HP
-window.game._level             // current player level
-window.game._xp                // current XP
-window.game._inventory         // inventory object
-window.game._currentPlanet     // current planet config
-window.game._assets.stats      // { total, loaded, failed, real }
-window.game._weather?.getWeatherName()  // active weather
-// Give yourself items:
-window.game._inventory.addItem('Gold', 50);
-// Award XP:
-window.game._awardXP(500);
-// Warp to a specific system:
-window.game._galaxy.getSystems()[3]  // pick a system
+export class TerrainManager {
+  constructor(scene, planet, noise)
+  setManagers(floraManager, resourceManager)
+  update(playerPos, dt)
+  updateLighting(sunDir, sunColor, ambientColor)
+  getHeightAt(x, z)   // → float
+  getBiomeAt(x, z)    // → { type, height, norm }
+  setWetness(wet)     // 0-1
+  dispose()
+}
+```
+
+### flora.js
+```js
+export class FloraManager {
+  constructor(scene, planet)
+  spawnForChunk(cx, cz, chunkSize, getHeightAt, getBiomeAt, rng)
+  removeForChunk(cx, cz)
+  update(dt, windTime)
+  dispose()
+}
+```
+
+### creatures.js
+```js
+export class CreatureManager {
+  constructor(scene, planet, physics)
+  update(dt, playerPos, inp)
+  spawnInChunk(cx, cz, chunkSize, getHeightAt, getBiomeAt)
+  despawnForChunk(cx, cz)
+  getNearbyCreatures(pos, radius)   // → Creature[]
+  getDamageables(pos, radius)       // → Creature[]
+  dispose()
+}
+
+class Creature {
+  getPosition()           // → THREE.Vector3
+  takeDamage(amount)      // → bool (true = died)
+  isBoss()                // → bool
+  isAlive()               // → bool
+  drainPendingHits()      // → number (pending damage from player)
+  getLoot()               // → { [type]: amount }
+  genome: { isBoss, bodySize, aggression, maxHp, … }
+}
+```
+
+### player.js
+```js
+export class Player {
+  constructor(scene, camera, classId?)
+  update(inputs, dt, terrain, physicsWorld)
+  getPosition()       // → THREE.Vector3
+  applyDamage(amount, source)   // → actual damage after shield
+  heal(amount)
+  setHazardProtection(mult)
+  serializeState()
+  loadState(data)
+  // Public properties:
+  hp, maxHp, shield, maxShield, jetpackFuel, lifeSupportDrainMult
+}
+```
+
+### ship.js
+```js
+export class Ship {
+  constructor(scene, planet, physics, shipClass?)
+  update(dt, inputs, terrain)
+  // shipClass: 'explorer'|'fighter'|'freighter'|'scout'|'alien'
+  // inputs: { shipThrust, shipYaw, shipPitch }
+  getPosition()
+  setPosition(pos)
+  flightMode   // 'LANDED'|'ATMOSPHERIC'|'SPACE'
+}
+```
+
+### npcs.js
+```js
+export class NpcManager {
+  constructor(scene, factions)
+  spawnNpc(type, pos, factionId?)
+  // type: 'merchant'|'guard'|'wanderer'|'quest_giver'|'faction_agent'|'bounty_hunter'|'settler'
+  spawnSettlement(basePos, factionId, size)
+  // size: 'city'|'town'|'village'|'camp'
+  update(dt, playerPos)
+  interact(playerPos, radius)   // → NPC | null
+  dispose()
+}
+```
+
+### building.js
+```js
+export class BuildingSystem {
+  constructor(scene)
+  place(typeId, pos, quaternion)   // → building id
+  remove(id)
+  update(dt)
+  getPowerStatus()   // → { produced, consumed, surplus }
+  serialize() / load(data)
+  dispose()
+  static buildMesh(typeId)   // preview mesh for build mode
+  // typeId: 'extractor'|'conveyor'|'storage'|'power_generator'|
+  //         'research_station'|'turret'|'town_hub'|'wall'|'door'|'farm'
+}
+```
+
+### inventory.js
+```js
+export class Inventory {
+  addItem(type, amount)     // → overflow count
+  removeItem(type, amount)  // → bool success
+  getAmount(type)           // → number
+  getAllItems()              // → [{ type, amount }]
+  serialize() / load(data)
+}
+```
+
+### physics.js
+```js
+export class PhysicsWorld {
+  addBody(body)
+  removeBody(body)
+  fireProjectile(origin, direction, ownerId, scene, color)
+  step(dt)
+  dispose(scene)
+}
 ```
 
 ---
 
-## 13. Combat System
+## Adding a New Planet Type
 
-The player fires a blaster shot on **right-click** (or gamepad R2). The weapon:
-- Deals `ATTACK_DAMAGE = 25` points per hit
-- Has `ATTACK_COOLDOWN = 0.5s` between shots
-- Targets the nearest alive creature within `ATTACK_RANGE = 12` units
-- Plays `attack_shoot` SFX, then `creature_kill` SFX on death
-- Awards `XP_PER_KILL = 35` XP per kill
-- Has a 55 % chance to drop a loot resource node at the kill site
-
-Hostile creatures counter-attack automatically every `COMBAT_TICK_INTERVAL` seconds if within melee range.
-
----
-
-## 14. XP & Leveling
-
-```
-XP awarded by:
-  Mine cycle completion  → +30 XP per cycle
-  Creature kill          → +35 XP
-  System warp            → +50 XP
-  Scanner discovery      → (future)
-
-Level formula:
-  xpToNext(n) = floor(100 × 1.35^(n-1))
-
-Level-up effects:
-  • +30 HP heal
-  • Fanfare SFX + level-up flash
-  • Notification toast
-```
-
-To add new XP sources, call `game._awardXP(amount)` from any tick method.
+1. Add entry to `PLANET_TYPES` in `config.js`
+2. Add `BIOME_COLORS[NEWTYPE]` in `config.js`
+3. Add `PLANET_GRAVITY[NEWTYPE]` in `config.js`
+4. Add `PLANET_HAZARD_RATES[NEWTYPE]` in `config.js`
+5. Add `TYPE_DEFAULTS[NEWTYPE]` in `planet.js`
+6. Add `RESOURCE_WEIGHTS_BY_TYPE[NEWTYPE]` in `planet.js`
+7. Add `TYPE_PALETTES[NEWTYPE]` in `planet.js` (array of 4+ palettes)
+8. Add `BIOME_TINTS[NEWTYPE]` in `creatures.js`
+9. Add `BIOME_FLORA_WEIGHTS[NEWTYPE]` in `flora.js`
+10. Add lore entries in `lore.js` `PLANET_DESCRIPTIONS[NEWTYPE]`
+11. Add to `habBase`, `SETTLE_POOLS`, `FACTION_BY_TYPE` in `planet.js`
+12. Update `STAR_PLANET_BIAS` in `universe.js` to include the new type
 
 ---
 
-## 15. Weather Gameplay Effects
+## Adding a New Building Type
 
-| Weather | Speed Mult | Life Support Drain |
-|---------|-----------|-------------------|
-| Normal  | 1.0 ×     | —                 |
-| Storm   | 0.7 ×     | —                 |
-| Sandstorm | 0.45 ×  | —                 |
-| Blizzard  | 0.45 ×  | −2/s              |
-| Toxic Fog | 1.0 ×   | −4/s              |
-
-Effects are applied each tick in `_tickSurface()` and propagated via `inp._weatherSpeedMult` to the player controller.
+1. Add entry to `BUILDING_TYPES` in `building.js`
+2. Add `BUILDING_PALETTES[typeId]` in `building.js`
+3. Implement geometry in `_createMesh(typeId, preview)` switch statement
+4. Wire into power grid if needed (`powerDraw` / `powerProduce`)
 
 ---
 
-## 16. Status Effects System (`src/status.js`)
+## Adding a New Ship Class
 
-`StatusEffectManager` handles short-term buffs/debuffs applied by environment or combat.
-
-```
-apply(effectId)          – apply or refresh effect
-remove(effectId)         – manually clear
-has(effectId)            – check active
-update(dt, player)       – tick DoT, decrement duration, return expired list
-getSpeedMult()           – combined movement speed multiplier from all effects
-getHudIcons()            – array of { icon, label, remaining } for HUD chips
-serialize() / load()     – persist/restore
-```
-
-| Effect    | Duration | HP DoT | LS Drain | Speed | Applied by               |
-|-----------|----------|--------|----------|-------|--------------------------|
-| burning   | 6 s      | 8/s    | —        | 1.0 × | BURNING planet type       |
-| frozen    | 8 s      | —      | 1.5/s    | 0.5 × | Blizzard weather          |
-| poisoned  | 10 s     | 4/s    | 3/s      | 0.9 × | Toxic Fog weather         |
-| energised | 15 s     | —      | —        | 1.4 × | EXOTIC planet Aurora      |
-| shielded  | 12 s     | —      | —        | 1.0 × | craft Shield Battery (TBD)|
+1. Add entry to `CLASS_PALETTES` in `ship.js` with HSL values for all 5 zones
+2. Add geometry variant in `buildShipMesh(seed, shipClass)` switch/if block
+3. Add to ship class selection in `game.js` `_setupShip()`
 
 ---
 
-## 17. Quest System (`src/quests.js`)
+## Adding a Quest
 
-`QuestSystem` tracks multi-objective quests and fires events for the HUD.
-
+In `src/quests.js`, add to the `QUEST_DEFS` array:
+```js
+{
+  id: 'my_quest',
+  title: 'Quest Title',
+  steps: [
+    { event: 'event_name', target: 3, desc: 'Do X three times' },
+    { event: 'other_event', target: 1, desc: 'Do Y once' },
+  ],
+  reward: { xp: 500, units: 1000, items: [{ type: 'Gold', amount: 5 }] },
+}
 ```
-start(questId)                    – activate quest; auto-chains on complete
-reportEvent(type, payload)        – feed game events (kill/collect/scan/warp/craft)
-getHudSummary()                   – first incomplete objective for quest tracker HUD
-on('started'|'progress'|'completed', handler)
-serialize() / load()
-```
 
-**Starter quest chain:**
-1. `first_steps` – Collect 100 Carbon + 50 Ferrite Dust → reward 200 XP + Di-Hydrogen
-2. `survival_basics` – Kill 3 creatures + craft Warp Cell → reward 500 XP + Chromatic Metal
-3. `explorer_path` – Scan 5 times + warp to new system → reward 1000 XP + Emeril/Indium
+Trigger progress from anywhere with: `this._quests.reportEvent('event_name')`
 
 ---
 
-## 18. Auto-Extractor (`src/extractor.js`)
+## Brace-Balance Check (Required Before PR)
 
-Satisfactory-inspired factory module. Deploy near resource nodes to auto-harvest.
-
-**Crafting cost:** 80 Pure Ferrite + 2 Carbon Nanotubes + 40 Copper  
-**Deploy:** Press `B` on planet surface  
-**Harvest:** 5 units every 10 seconds from nearest node within 14 world-units  
-**Visual:** Animated piston + spinning drill head + tether beam to target node  
-**Persistence:** Extractor positions saved as `extractors[]` in save slot v3
-
+```bash
+node --input-type=module -e '
+import fs from "fs";
+let ok=true;
+for(const f of fs.readdirSync("src").filter(f=>f.endsWith(".js")).map(f=>"src/"+f)){
+  const s=fs.readFileSync(f,"utf8");
+  const d=(s.match(/\{/g)||[]).length-(s.match(/\}/g)||[]).length;
+  if(d){console.log("WARN",f,d);ok=false;}
+}
+if(ok)console.log("All balanced");
+' && node -c server.js
 ```
-ExtractorManager.place(position, playerInventory, miningSystem)
-ExtractorManager.update(dt, miningSystem)
-ExtractorManager.serialize() / load(data, miningSystem)
-ExtractorManager.getCraftCost()
-```
-
----
-
-## 19. Boss Creatures
-
-Boss creatures spawn with 5% probability per chunk on planets with `faunaDensity > 0`.
-
-| Property     | Value                               |
-|--------------|-------------------------------------|
-| Scale        | 3.0 – 4.5 ×                         |
-| HP           | 500 – 1000                          |
-| Aggression   | Always hostile                      |
-| Biome tint   | Vivid planet-palette color          |
-| Bioluminescent | Always                           |
-| Boss bar     | Shown when within 60 world-units   |
-| HP bar color | Green → Orange → Red as HP drops  |
-
-Boss XP = 35 (same as normal, bosses are rare; designed to feel rewarding via loot drop).
-
----
-
-## 20. Creature Enhancements
-
-| Feature              | Detail                                                       |
-|----------------------|--------------------------------------------------------------|
-| Biome tinting        | `tintGenomeForBiome()` lerps hue+saturation toward BIOME_TINTS |
-| Damage flash         | 180ms red overlay via `_updateFlash(dt)` in `Creature.update()` |
-| Death greyscale      | All materials set to #444 on `die()`                         |
-| `getHpPct()`         | Returns 0–1 for boss bar                                     |
-| `getNearestBoss()`   | Filters `_all` for alive isBoss creatures within radius      |
-
----
-
-## 21. Integration Pass — AAA Polish (v3.1)
-
-### Bug Fixes
-| File | Bug | Fix |
-|------|-----|-----|
-| `player.js` | Status speed mult ignored — only weather mult applied | Combined `_weatherSpeedMult * _statusSpeedMult` |
-| `mining.js` | `_updateBeam` recreated `THREE.Line` every frame (GC leak) | Persistent beam geometry updated in-place |
-| `crafting.js` | `CraftingSystem.craft()` had no callback — quests never knew | Added `onCraft(recipeId, recipe)` callback hook |
-| `crafting.js` | `TechTree` missing `isUnlocked`, `canAfford`, `tree`; `upgrade()` missing config | Added all missing methods; `setConfig()` stores TECH_UPGRADES |
-| `game.js` | Tech upgrade bonuses never applied to Player stats | `TechTree.onUpgrade` → `_applyTechBonus(bonus)` |
-| `game.js` | `_toggleTech()` bypassed `showTechScreen()` | Now calls `_hud.showTechScreen(techTree, inventory)` |
-| `ui.js` | Quickslot bar never showed inventory items | Added `updateQuickBar(inventory)` called each tick |
-| `ui.js` | Notifications could stack unlimited | Dedup within 2s window; max 5 simultaneous |
-
-### New Features
-| Feature | Detail |
-|---------|--------|
-| **Leg/arm animation** | `buildPlayerModel()` now returns grouped limbs (`_legs`, `_arms`); `update()` rotates them for walk cycle |
-| **Arm counter-swing** | Arms swing in opposite phase to legs for realistic gait |
-| **Breathing idle** | Subtle camera/body sine oscillation when grounded and still |
-| **Footstep audio** | `Player.onFootstep` callback → `AudioManager.playOneShot('footstep')` on interval |
-| **Usable items** | Press quickslot key (1–0): Medkit heals +40 HP, Shield Battery restores +60 Shield |
-| **Resource indicator** | HUD arrow + distance + type label pointing to nearest resource node |
-| **Resource minimap dots** | Orange dots for resource nodes on the minimap |
-| **Tech cost display** | Each tech upgrade shows ingredient cost in the UI |
-| **Loading lore tips** | 10 rotating gameplay tips during loading (fade in/out every 3.5s) |
-| **Scanline overlay** | Subtle CSS scanline texture over HUD for film-grade sci-fi feel |
-| **Notification dedup** | Same notification ignored if shown within last 2 seconds |
-| **Danger notification** | `notif-danger` type has red pulsing glow |
-| **Craft XP** | Crafting awards 15 XP per successful craft |

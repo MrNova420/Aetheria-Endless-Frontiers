@@ -134,7 +134,15 @@
     <!-- Main buttons -->
     <div id="main-buttons">
       <button class="mm-btn primary" id="btn-new-game">▶  NEW GAME</button>
+      <button class="mm-btn" id="btn-load-game" style="display:none">📂  LOAD GAME</button>
       <button class="mm-btn" id="btn-controls">⌨  CONTROLS</button>
+      <button class="mm-btn" id="btn-help">?  HELP / LORE</button>
+      <!-- Server connect row -->
+      <div class="mm-server-row" id="mm-server-row">
+        <input id="mm-server-url" class="mm-input" type="text" placeholder="ws://server-ip:8080  (leave blank = auto)" />
+        <button class="mm-btn sm" id="btn-connect-server">🌐 CONNECT</button>
+      </div>
+      <div class="mm-net-status" id="mm-net-status"></div>
     </div>
 
     <!-- Controls panel -->
@@ -177,7 +185,10 @@
   <div class="pause-panel">
     <div class="pause-logo">⬡</div>
     <h2>PAUSED</h2>
+    <div class="pause-subtitle">AETHERIA: ENDLESS FRONTIERS</div>
     <button class="mm-btn primary" id="btn-resume">▶  RESUME</button>
+    <button class="mm-btn" id="btn-save-from-pause">💾  SAVE GAME</button>
+    <button class="mm-btn" id="btn-help-pause">?  HELP &amp; LORE</button>
     <button class="mm-btn" id="btn-main-menu-from-pause">⌂  MAIN MENU</button>
   </div>
 </div>

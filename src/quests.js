@@ -158,7 +158,8 @@ export class QuestSystem {
             if (obj.type === 'warp_galaxy') inc = 1;
             break;
           case 'craft':
-            if (obj.type === 'craft' && obj.item === payload.item) inc = payload.amount || 1;
+            // When obj.item is undefined the objective counts any craft; otherwise require exact match
+            if (obj.type === 'craft' && (!obj.item || obj.item === payload.item)) inc = payload.amount || 1;
             break;
           case 'build':
             if (obj.type === 'build') {

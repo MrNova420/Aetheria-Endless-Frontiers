@@ -6,154 +6,272 @@
 import * as THREE from 'three';
 import { PLAYER_CONFIG, WORLD } from './config.js';
 import { PhysicsBody, PHYSICS } from './physics.js';
+import { getAssets } from './assets.js';
 
-// ─── Build detailed astronaut / explorer mesh ─────────────────────────────────
+// ─── Build detailed astronaut / explorer mesh (11-zone AAA colour palette) ────
 function buildPlayerModel(classColor = 0x4488ff) {
-  const root   = new THREE.Group();
-  const accent = new THREE.MeshStandardMaterial({ color: classColor, emissive: new THREE.Color(classColor), emissiveIntensity: 0.35, roughness: 0.25, metalness: 0.75 });
-  const suit   = new THREE.MeshStandardMaterial({ color: 0x1e2d3d, roughness: 0.55, metalness: 0.60 });
-  const visor  = new THREE.MeshStandardMaterial({ color: classColor, emissive: new THREE.Color(classColor), emissiveIntensity: 1.2, transparent: true, opacity: 0.72, roughness: 0.05, metalness: 0.1 });
-  const dark   = new THREE.MeshStandardMaterial({ color: 0x0a0a0e, roughness: 0.80, metalness: 0.30 });
+  const root = new THREE.Group();
 
-  // Torso
-  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.24, 0.55, 10), suit);
+  // ── Derive a rich 11-zone palette from the class colour ──────────────────
+  const baseC = new THREE.Color(classColor);
+  const hsl   = { h: 0, s: 0, l: 0 };
+  baseC.getHSL(hsl);
+  const compH = (hsl.h + 0.50) % 1;   // complementary hue for trim
+  const analH = (hsl.h + 0.12) % 1;   // analogous hue for secondary details
+
+  // Zone colours
+  const helmetC  = new THREE.Color().setHSL(hsl.h, Math.min(1, hsl.s * 0.90), Math.min(0.50, hsl.l * 0.80));
+  const chestC   = new THREE.Color().setHSL(hsl.h, Math.min(1, hsl.s * 1.10), Math.min(0.85, hsl.l * 1.35));
+  const torsoC   = new THREE.Color().setHSL(hsl.h, 0.35,                       0.12);   // deep suit body
+  const shirtC   = new THREE.Color().setHSL(hsl.h, 0.30,                       0.18);   // inner shirt/arm upper
+  const shoulderC= new THREE.Color().setHSL(hsl.h, 0.50,                       0.22);   // shoulder guard plates
+  const legC     = new THREE.Color().setHSL(hsl.h, 0.28,                       0.14);   // pants / thigh
+  const shinC    = new THREE.Color().setHSL(hsl.h, 0.22,                       0.11);   // shin/lower leg (darker)
+  const gloveC   = new THREE.Color(0x0d0d14);                                            // near-black gloves
+  const bootC    = new THREE.Color().setHSL(hsl.h, 0.20,                       0.09);   // dark tactical boots
+  const beltC    = new THREE.Color(0x5c3d1e);                                            // warm leather belt
+  const trimC    = new THREE.Color().setHSL(compH, 0.55,                       0.60);   // complementary trim rings
+  const analC    = new THREE.Color().setHSL(analH, 0.65,                       0.50);   // analogous accent pieces
+  const visorC   = new THREE.Color().setHSL(hsl.h, Math.min(1, hsl.s * 1.2),  Math.min(0.9, hsl.l * 1.5));
+  const packC    = new THREE.Color().setHSL(hsl.h, 0.40,                       0.16);   // jetpack housing
+
+  // ── 14 PBR materials ─────────────────────────────────────────────────────
+  const helmetMat  = new THREE.MeshStandardMaterial({ color: helmetC,   roughness: 0.35, metalness: 0.80 });
+  const visorMat   = new THREE.MeshStandardMaterial({ color: visorC, emissive: visorC, emissiveIntensity: 1.2,
+                                                       transparent: true, opacity: 0.72, roughness: 0.04, metalness: 0.10 });
+  const chestMat   = new THREE.MeshStandardMaterial({ color: chestC, emissive: chestC, emissiveIntensity: 0.25,
+                                                       roughness: 0.20, metalness: 0.80 });
+  const torsoMat   = new THREE.MeshStandardMaterial({ color: torsoC,    roughness: 0.60, metalness: 0.55 });
+  const shirtMat   = new THREE.MeshStandardMaterial({ color: shirtC,    roughness: 0.70, metalness: 0.35 });
+  const shoulderMat= new THREE.MeshStandardMaterial({ color: shoulderC, roughness: 0.40, metalness: 0.70 });
+  const legMat     = new THREE.MeshStandardMaterial({ color: legC,      roughness: 0.72, metalness: 0.28 });
+  const shinMat    = new THREE.MeshStandardMaterial({ color: shinC,     roughness: 0.78, metalness: 0.22 });
+  const gloveMat   = new THREE.MeshStandardMaterial({ color: gloveC,    roughness: 0.88, metalness: 0.18 });
+  const bootMat    = new THREE.MeshStandardMaterial({ color: bootC,     roughness: 0.92, metalness: 0.20 });
+  const beltMat    = new THREE.MeshStandardMaterial({ color: beltC,     roughness: 0.92, metalness: 0.08 });
+  const trimMat    = new THREE.MeshStandardMaterial({ color: trimC,     roughness: 0.28, metalness: 0.82 });
+  const analMat    = new THREE.MeshStandardMaterial({ color: analC,  emissive: analC, emissiveIntensity: 0.18,
+                                                       roughness: 0.30, metalness: 0.75 });
+  const packMat    = new THREE.MeshStandardMaterial({ color: packC,     roughness: 0.50, metalness: 0.65 });
+
+  // ── Torso ─────────────────────────────────────────────────────────────────
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.24, 0.55, 10), torsoMat);
   torso.position.y = 0.9;
   torso.castShadow = true;
   root.add(torso);
 
-  // Chest plate detail
-  const chest = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.38, 0.12), accent);
-  chest.position.set(0, 0.95, 0.22);
-  root.add(chest);
+  // Inner shirt visible at sides/back
+  const shirt = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.23, 0.53, 10), shirtMat);
+  shirt.position.y = 0.9;
+  root.add(shirt);
 
-  // Helmet
-  const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10), suit);
+  // Chest plate (front only)
+  const chestPlate = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.38, 0.12), chestMat);
+  chestPlate.position.set(0, 0.95, 0.22);
+  root.add(chestPlate);
+
+  // Chest insignia light bar
+  const insignia = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.06, 0.04), analMat);
+  insignia.position.set(0, 1.02, 0.29);
+  root.add(insignia);
+
+  // Collar trim ring
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.20, 0.025, 8, 24), trimMat);
+  collar.rotation.x = Math.PI / 2;
+  collar.position.y = 1.15;
+  root.add(collar);
+
+  // ── Helmet ────────────────────────────────────────────────────────────────
+  const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.22, 14, 12), helmetMat);
   helmet.position.y = 1.42;
   helmet.castShadow = true;
+  helmet.userData.isHead = true;
   root.add(helmet);
+
+  // Helmet trim band
+  const helmBand = new THREE.Mesh(new THREE.TorusGeometry(0.215, 0.018, 6, 28), trimMat);
+  helmBand.rotation.x = Math.PI / 2;
+  helmBand.position.y = 1.42;
+  root.add(helmBand);
 
   // Visor
   const visorMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(0.17, 10, 8, 0, Math.PI * 1.4, 0.5, Math.PI * 0.7),
-    visor
+    new THREE.SphereGeometry(0.17, 12, 10, 0, Math.PI * 1.4, 0.5, Math.PI * 0.7),
+    visorMat
   );
   visorMesh.position.set(0.04, 1.42, 0.08);
   visorMesh.rotation.y = -0.1;
+  visorMesh.userData.isHead = true;
   root.add(visorMesh);
 
-  // Arms
-  for (const side of [-1, 1]) {
-    const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), suit);
-    shoulder.position.set(side * 0.38, 1.05, 0);
-    root.add(shoulder);
+  // Antenna nub
+  const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.012, 0.12, 6), analMat);
+  antenna.position.set(0.12, 1.64, 0);
+  root.add(antenna);
 
-    const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.075, 0.3, 8), suit);
-    upper.position.set(side * 0.42, 0.85, 0);
-    root.add(upper);
-
-    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 5), accent);
-    elbow.position.set(side * 0.44, 0.68, 0);
-    root.add(elbow);
-
-    const lower = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.065, 0.28, 8), suit);
-    lower.position.set(side * 0.44, 0.48, 0.04);
-    lower.rotation.x = 0.2;
-    root.add(lower);
-
-    // Glove
-    const glove = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), dark);
-    glove.position.set(side * 0.44, 0.32, 0.06);
-    root.add(glove);
-  }
-
-  // Hips
-  const hip = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.20, 0.22, 10), suit);
+  // ── Hips / Belt ───────────────────────────────────────────────────────────
+  const hip = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.21, 0.22, 10), torsoMat);
   hip.position.y = 0.60;
   root.add(hip);
 
-  // Legs (grouped for animation)
+  const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.255, 0.255, 0.07, 12), beltMat);
+  belt.position.y = 0.65;
+  root.add(belt);
+
+  // Belt buckle
+  const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.04), trimMat);
+  buckle.position.set(0, 0.65, 0.26);
+  root.add(buckle);
+
+  // Side holster/pouch
+  for (const side of [-1, 1]) {
+    const pouch = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.10, 0.06), beltMat);
+    pouch.position.set(side * 0.25, 0.58, 0);
+    root.add(pouch);
+  }
+
+  // ── Legs (grouped for animation) ─────────────────────────────────────────
   const legGroups = [];
   for (let li = 0; li < 2; li++) {
     const side = li === 0 ? -1 : 1;
     const legGroup = new THREE.Group();
-    legGroup.position.set(side * 0.13, 0.50, 0); // pivot at hip
+    legGroup.position.set(side * 0.13, 0.50, 0);
     root.add(legGroup);
 
-    const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.10, 0.34, 8), suit);
+    // Thigh (pants colour)
+    const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.10, 0.34, 8), legMat);
     thigh.position.y = -0.17;
     legGroup.add(thigh);
 
-    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.10, 6, 5), accent);
+    // Thigh side panel (accent)
+    const thighPanel = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.18, 0.04), shoulderMat);
+    thighPanel.position.set(side * 0.10, -0.12, 0);
+    legGroup.add(thighPanel);
+
+    // Knee guard (trim colour)
+    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.105, 7, 6), trimMat);
     knee.position.y = -0.36;
     legGroup.add(knee);
 
-    const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.10, 0.32, 8), suit);
+    // Shin (darker leg colour)
+    const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.10, 0.32, 8), shinMat);
     shin.position.y = -0.54;
     legGroup.add(shin);
 
-    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.24), dark);
+    // Shin armour plate
+    const shinPlate = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.15, 0.04), shoulderMat);
+    shinPlate.position.set(0, -0.52, 0.10);
+    legGroup.add(shinPlate);
+
+    // Boot
+    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.13, 0.26), bootMat);
     boot.position.set(0, -0.74, 0.04);
     legGroup.add(boot);
 
-    legGroups.push({ group: legGroup, phase: li * Math.PI }); // opposite phases
+    // Boot buckle strap
+    const strap = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.02, 0.27), trimMat);
+    strap.position.set(0, -0.69, 0.04);
+    legGroup.add(strap);
+
+    legGroups.push({ group: legGroup, phase: li * Math.PI });
   }
   root._legs = legGroups;
 
-  // Jetpack
-  const pack = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.38, 0.14), accent);
+  // ── Jetpack ───────────────────────────────────────────────────────────────
+  const pack = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.38, 0.14), packMat);
   pack.position.set(0, 0.92, -0.28);
   root.add(pack);
 
-  // Jetpack nozzles
-  for (const side of [-0.08, 0.08]) {
-    const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.055, 0.1, 8), dark);
-    nozzle.position.set(side, 0.72, -0.32);
-    root.add(nozzle);
+  // Jetpack side trim bars
+  for (const side of [-0.11, 0.11]) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.36, 0.04), trimMat);
+    bar.position.set(side, 0.92, -0.26);
+    root.add(bar);
   }
 
-  // Arms (grouped for animation)
+  // Jetpack nozzles (accent colour glow rim)
+  for (const side of [-0.08, 0.08]) {
+    const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.055, 0.10, 8), gloveMat);
+    nozzle.position.set(side, 0.72, -0.32);
+    root.add(nozzle);
+    const nozzleRim = new THREE.Mesh(new THREE.TorusGeometry(0.048, 0.010, 6, 14), analMat);
+    nozzleRim.position.set(side, 0.67, -0.32);
+    nozzleRim.rotation.x = Math.PI / 2;
+    root.add(nozzleRim);
+  }
+
+  // ── Arms (grouped for animation) ─────────────────────────────────────────
   const armGroups = [];
   for (let ai = 0; ai < 2; ai++) {
     const side = ai === 0 ? -1 : 1;
     const armGroup = new THREE.Group();
-    armGroup.position.set(side * 0.38, 1.05, 0); // pivot at shoulder
+    armGroup.position.set(side * 0.38, 1.05, 0);
     root.add(armGroup);
 
-    const shoulder = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), suit);
-    armGroup.add(shoulder);
+    // Shoulder guard (large armour plate)
+    const shoulderPad = new THREE.Mesh(new THREE.SphereGeometry(0.115, 9, 7), shoulderMat);
+    armGroup.add(shoulderPad);
 
-    const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.075, 0.3, 8), suit);
-    upper.position.set(side * 0.04, -0.2, 0);
+    // Shoulder trim ring
+    const sRing = new THREE.Mesh(new THREE.TorusGeometry(0.105, 0.015, 6, 18), trimMat);
+    sRing.position.y = -0.03;
+    sRing.rotation.x = Math.PI / 2;
+    armGroup.add(sRing);
+
+    // Upper arm (shirt colour)
+    const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.075, 0.30, 8), shirtMat);
+    upper.position.set(side * 0.04, -0.20, 0);
     armGroup.add(upper);
 
-    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 5), accent);
+    // Elbow guard (trim colour)
+    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 5), trimMat);
     elbow.position.set(side * 0.06, -0.37, 0);
     armGroup.add(elbow);
 
-    const lower = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.065, 0.28, 8), suit);
+    // Forearm (slightly different shade — armour sleeve)
+    const lower = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.065, 0.28, 8), torsoMat);
     lower.position.set(side * 0.06, -0.54, 0.04);
     armGroup.add(lower);
 
-    const glove = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), dark);
+    // Forearm panel stripe
+    const forePanel = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.14, 0.04), analMat);
+    forePanel.position.set(side * 0.02, -0.52, 0.07);
+    armGroup.add(forePanel);
+
+    // Wrist cuff ring
+    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.075, 0.04, 8), trimMat);
+    cuff.position.set(side * 0.06, -0.64, 0.04);
+    armGroup.add(cuff);
+
+    // Glove (near-black, matte)
+    const glove = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), gloveMat);
     glove.position.set(side * 0.06, -0.70, 0.06);
     armGroup.add(glove);
 
-    armGroups.push({ group: armGroup, phase: ai * Math.PI }); // opposite phases
+    // Knuckle ridge (analMat accent)
+    const knuckle = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.02, 0.04), analMat);
+    knuckle.position.set(side * 0.06, -0.68, 0.11);
+    armGroup.add(knuckle);
+
+    armGroups.push({ group: armGroup, phase: ai * Math.PI });
   }
   root._arms = armGroups;
 
-  // Multitool (right hand – attached to right arm group)
+  // ── Multitool (right hand) ────────────────────────────────────────────────
   const tool = new THREE.Group();
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.35, 8), accent);
+  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.35, 8), chestMat);
   barrel.rotation.z = Math.PI / 2;
   barrel.position.x = 0.17;
-  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.05), dark);
+  const handle = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.12, 0.05), gloveMat);
   handle.position.set(0, -0.06, 0);
-  tool.add(barrel);
-  tool.add(handle);
+  // Barrel trim ring
+  const bRing = new THREE.Mesh(new THREE.TorusGeometry(0.028, 0.008, 6, 12), trimMat);
+  bRing.rotation.y = Math.PI / 2;
+  bRing.position.x = 0.06;
+  tool.add(barrel, handle, bRing);
   tool.position.set(0.06, -0.75, 0.10);
   tool.rotation.y = -0.3;
-  armGroups[1].group.add(tool); // right arm
+  armGroups[1].group.add(tool);
 
   return root;
 }
@@ -184,7 +302,14 @@ export class Player {
     this.classColor   = 0x4488ff;
 
     // ── Mesh ─────────────────────────────────────────────────────────────────
-    this.model = buildPlayerModel(this.classColor);
+    // Try to use downloaded GLB model
+    const modelEntry = getAssets()?.cloneModel('player_explorer');
+    if (modelEntry) {
+      this.model = modelEntry;
+      this.model.scale.setScalar(1.0);
+    } else {
+      this.model = buildPlayerModel(this.classColor);
+    }
     this.scene.add(this.model);
 
     // ── Physics (PhysicsBody) ─────────────────────────────────────────────────
@@ -210,6 +335,9 @@ export class Player {
     this._camYaw    = 0;
     this._camPitch  = -0.18;
     this._camDist   = 5.5;
+    this._camMode   = 'third';      // 'third' | 'first'
+    this._camFOV    = 70;           // current effective FOV
+    this._targetFOV = 70;
     this._camTarget = new THREE.Vector3();
 
     // ── Animation ─────────────────────────────────────────────────────────────
@@ -274,6 +402,18 @@ export class Player {
     this.scene.remove(this.model);
     this.model = buildPlayerModel(this.classColor);
     this.scene.add(this.model);
+  }
+
+  toggleCameraMode() {
+    this._camMode = this._camMode === 'third' ? 'first' : 'third';
+    // Hide the head/helmet parts in first-person so they don't clip the camera
+    if (this.model) {
+      this.model.traverse(c => {
+        if (c.isMesh && c.userData.isHead) c.visible = (this._camMode === 'third');
+      });
+    }
+    this._targetFOV = this._camMode === 'first' ? 80 : 70;
+    return this._camMode;
   }
 
   getPosition()     { return this.model.position.clone(); }
@@ -506,20 +646,51 @@ export class Player {
       }
     }
 
+    this._isWalking = moving;
+
     // ── Camera ───────────────────────────────────────────────────────────────
     this._camYaw   += input.mouseDX * 0.003;
-    this._camPitch  = Math.max(-0.6, Math.min(0.5, this._camPitch + input.mouseDY * 0.003));
+    this._camPitch  = Math.max(-1.2, Math.min(0.8, this._camPitch + input.mouseDY * 0.003));
 
-    const camOffset = new THREE.Vector3(
-      Math.sin(this._camYaw) * Math.cos(this._camPitch) * this._camDist,
-      Math.sin(this._camPitch) * this._camDist + 1.6,
-      Math.cos(this._camYaw) * Math.cos(this._camPitch) * this._camDist
-    );
+    // Smooth FOV transition (sprint swell + mode change)
+    const isSprinting = input.sprint && (input.forward || input.back || input.left || input.right);
+    this._targetFOV = (this._camMode === 'first' ? 80 : 70) + (isSprinting ? 4 : 0);
+    this._camFOV += (this._targetFOV - this._camFOV) * Math.min(1, dt * 6);
+    if (this.camera.fov !== undefined && Math.abs(this.camera.fov - this._camFOV) > 0.1) {
+      this.camera.fov = this._camFOV;
+      this.camera.updateProjectionMatrix();
+    }
 
-    const target = pos.clone().add(new THREE.Vector3(0, 1.4, 0));
-    this._camTarget.lerp(target, 0.15);
-    this.camera.position.lerp(target.clone().add(camOffset), 0.12);
-    this.camera.lookAt(this._camTarget);
+    if (this._camMode === 'first') {
+      // ── First-person: camera sits at eye level inside the player ──────────
+      const eyeY = pos.y + 1.65;
+      this.camera.position.set(pos.x, eyeY, pos.z);
+      this.camera.rotation.order = 'YXZ';
+      this.camera.rotation.y = Math.PI + this._camYaw;
+      this.camera.rotation.x = -this._camPitch;
+      // Head-bob while walking
+      if (this._isWalking && this._grounded) {
+        this.camera.position.y = eyeY + Math.sin(this._walkTime * 12) * 0.03;
+      }
+    } else {
+      // ── Third-person: orbit camera around player ───────────────────────────
+      const dx = Math.sin(this._camYaw) * Math.cos(this._camPitch) * this._camDist;
+      const dy = Math.sin(this._camPitch) * this._camDist + 1.6;
+      const dz = Math.cos(this._camYaw) * Math.cos(this._camPitch) * this._camDist;
+
+      const targetCamPos = new THREE.Vector3(pos.x - dx, pos.y + dy, pos.z - dz);
+
+      // Terrain collision: prevent camera clipping into ground
+      if (terrain) {
+        const groundY = terrain.getHeightAt(targetCamPos.x, targetCamPos.z);
+        if (targetCamPos.y < groundY + 0.6) targetCamPos.y = groundY + 0.6;
+      }
+
+      const target = new THREE.Vector3(pos.x, pos.y + 1.4, pos.z);
+      this._camTarget.lerp(target, 0.18);
+      this.camera.position.lerp(targetCamPos, 0.14);
+      this.camera.lookAt(this._camTarget);
+    }
 
     // Store for external use
     input.mouseDX = 0;

@@ -73,6 +73,16 @@ canvas { display: block; }
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='52'%3E%3Cpolygon points='30,2 58,17 58,35 30,50 2,35 2,17' fill='none' stroke='rgba(0,180,220,0.07)' stroke-width='1'/%3E%3C/svg%3E");
   background-size: auto, 60px 52px;
 }
+.load-hexgrid {
+  position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='52'%3E%3Cpolygon points='30,2 58,17 58,35 30,50 2,35 2,17' fill='none' stroke='rgba(0,200,255,0.08)' stroke-width='1'/%3E%3C/svg%3E");
+  background-size: 60px 52px;
+  animation: hexDrift 20s linear infinite;
+}
+@keyframes hexDrift {
+  0%   { background-position: 0 0; }
+  100% { background-position: 120px 104px; }
+}
 
 #loading-logo {
   font-family: var(--font-head);
@@ -221,6 +231,12 @@ canvas { display: block; }
 .class-card.cls-combat:hover,
 .class-card.cls-combat.selected   { border-color: var(--col-purple); box-shadow: var(--glow-purple); }
 
+/* Hover glow for HTML data-class cards (runekeeper / technomancer / voidhunter) */
+.class-card[data-class="runekeeper"]:hover  { border-color: var(--col-orange); box-shadow: var(--glow-orange); }
+.class-card[data-class="technomancer"]:hover { border-color: var(--col-cyan);  box-shadow: var(--glow-cyan); }
+.class-card[data-class="voidhunter"]:hover  { border-color: var(--col-purple); box-shadow: var(--glow-purple); }
+.class-card.featured { border-color: rgba(0,220,255,0.4); box-shadow: 0 0 18px rgba(0,220,255,0.15); }
+
 .class-card-icon {
   width: 52px; height: 52px;
   margin: 0 auto 12px;
@@ -295,14 +311,77 @@ canvas { display: block; }
   border-color: var(--col-cyan);
 }
 .mm-btn.primary {
-  background: rgba(0,220,255,0.22);
+  background: linear-gradient(135deg, rgba(0,180,220,0.35) 0%, rgba(0,220,255,0.15) 100%);
   border-color: var(--col-cyan);
-  box-shadow: 0 0 12px rgba(0,220,255,0.4);
+  color: var(--col-cyan);
+  text-shadow: var(--glow-cyan);
+  box-shadow: 0 0 20px rgba(0,220,255,0.2), inset 0 1px 0 rgba(255,255,255,0.1);
 }
 .mm-btn.primary:hover {
-  background: rgba(0,220,255,0.38);
-  box-shadow: var(--glow-cyan);
+  background: linear-gradient(135deg, rgba(0,200,240,0.5) 0%, rgba(0,220,255,0.25) 100%);
+  box-shadow: 0 0 35px rgba(0,220,255,0.45), inset 0 1px 0 rgba(255,255,255,0.15);
+  transform: translateY(-2px);
 }
+/* ── Server connect row ────────────────────────────────────────── */
+.mm-server-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.mm-input {
+  background: rgba(0,220,255,0.08);
+  border: 1px solid rgba(0,220,255,0.35);
+  border-radius: var(--radius);
+  color: var(--col-text);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  padding: 8px 14px;
+  width: 280px;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.mm-input:focus {
+  border-color: var(--col-cyan);
+  box-shadow: 0 0 8px rgba(0,220,255,0.4);
+}
+.mm-input::placeholder { color: var(--col-text-dim); }
+.mm-btn.sm { padding: 8px 16px; font-size: 0.78rem; min-width: unset; height: unset; }
+.mm-net-status {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  min-height: 1.4em;
+  text-align: center;
+  transition: color 0.3s;
+  color: var(--col-text-dim);
+  margin-top: 4px;
+  width: 100%;
+}
+.mm-net-status.connected  { color: var(--col-green); }
+.mm-net-status.connecting { color: var(--col-yellow); }
+.mm-net-status.error      { color: var(--col-red); }
+
+/* ── Network Status HUD (top-right, next to level box) ───────────────────── */
+.net-status-hud {
+  position: fixed;
+  top: var(--hud-pad);
+  right: calc(var(--hud-pad) + 130px);
+  background: var(--col-panel);
+  border: var(--border);
+  border-radius: var(--radius);
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  display: flex; align-items: center; gap: 6px;
+  z-index: 100;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.net-dot { font-size: 0.7rem; color: var(--col-text-dim); }
+.net-status-hud.online  .net-dot { color: var(--col-green); }
+.net-status-hud.offline .net-dot { color: var(--col-red); }
+.net-info { font-family: var(--font-mono); color: var(--col-text-dim); letter-spacing: 0.05em; }
 
 /* ── HUD wrapper ─────────────────────────────────────────────────────────── */
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 100; }
@@ -663,13 +742,14 @@ canvas { display: block; }
   color: var(--col-cyan); text-shadow: 0 0 8px rgba(0,220,255,0.5);
 }
 
-/* ── Notifications (top-right stack) ────────────────────────────────────── */
+/* ── Notifications (bottom-centre stack) ────────────────────────────────── */
 .notifications {
-  position: absolute;
-  top: 60px; right: var(--hud-pad);
+  position: fixed;
+  bottom: 100px; left: 50%;
+  transform: translateX(-50%);
   display: flex; flex-direction: column; gap: 6px;
-  max-width: 280px;
-  pointer-events: none;
+  align-items: center; z-index: 500; pointer-events: none;
+  max-width: 420px; width: 90vw;
 }
 /* Base notification – works for both .notif-item and .notif (programmatic) */
 .notif-item, .notif {
@@ -677,16 +757,22 @@ canvas { display: block; }
   border: 1px solid var(--col-panel-border);
   border-left: 3px solid var(--col-cyan);
   border-radius: var(--radius);
-  padding: 8px 12px;
-  font-size: 0.72rem; color: var(--col-text);
-  backdrop-filter: blur(12px);
-  animation: notifSlideIn 0.3s ease, notifFadeOut 0.4s 3s ease forwards;
+  padding: 9px 18px;
+  font-size: 0.82rem; color: var(--col-text);
+  backdrop-filter: blur(10px);
+  animation: notifIn 0.3s ease, notifOut 0.4s ease 2.6s forwards;
+  text-align: center;
+  max-width: 100%;
+  line-height: 1.4;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
 }
-.notif-item.warn,    .notif.notif-warn    { border-left-color: var(--col-yellow); }
-.notif-item.danger,  .notif.notif-error   { border-left-color: var(--col-red); }
-.notif-item.success, .notif.notif-success { border-left-color: var(--col-green); }
+.notif-item.warn,    .notif.notif-warn    { border-left-color: var(--col-yellow); color: var(--col-yellow); }
+.notif-item.danger,  .notif.notif-error   { border-left-color: var(--col-red);    color: var(--col-red); }
+.notif-item.success, .notif.notif-success { border-left-color: var(--col-green);  color: var(--col-green); }
 .notif.notif-info  { border-left-color: var(--col-cyan); }
 .notif.notif-scan  { border-left-color: #a060ff; }
+@keyframes notifIn  { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+@keyframes notifOut { from { opacity:1; } to { opacity:0; transform:translateY(-8px); } }
 
 /* ── Damage numbers ──────────────────────────────────────────────────────── */
 .dmg-layer {
@@ -902,6 +988,14 @@ canvas { display: block; }
 .pause-title {
   font-family: var(--font-head); font-size: 2.2rem; font-weight: 900;
   letter-spacing: 0.1em; color: var(--col-cyan); text-shadow: var(--glow-cyan);
+}
+.pause-subtitle {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.3em;
+  color: var(--col-text-dim);
+  margin-top: -8px;
+  margin-bottom: 20px;
 }
 .death-title {
   font-family: var(--font-head); font-size: 2.4rem; font-weight: 900;

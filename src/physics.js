@@ -161,9 +161,13 @@ export class PhysicsWorld {
     this.bodies      = [];
     this.projectiles = [];
     this.gravityWells = [];
+    this._gravity = 9.8;   // overridden per planet via setGravity()
     this._tmp  = new THREE.Vector3();
     this._tmp2 = new THREE.Vector3();
   }
+
+  /** Set world gravity (m/s²) — call this whenever the player lands on a new planet. */
+  setGravity(g) { this._gravity = Math.max(0.5, g ?? 9.8); }
 
   addBody(body)    { this.bodies.push(body); return body; }
   removeBody(body) { this.bodies = this.bodies.filter(b => b !== body); }
@@ -379,8 +383,10 @@ export class PhysicsWorld {
    * @param {function} getHeightAt
    */
   step(dt, gravity, getHeightAt) {
+    // Use per-planet world gravity if caller doesn't pass one explicitly
+    const g = (gravity != null && gravity > 0) ? gravity : this._gravity;
     for (const body of this.bodies) {
-      this.integrateBody(body, dt, gravity, getHeightAt);
+      this.integrateBody(body, dt, g, getHeightAt);
     }
     // N² separation pass (acceptable for <30 creatures)
     for (let i = 0; i < this.bodies.length; i++) {

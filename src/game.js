@@ -10,6 +10,7 @@ import { RenderPass }         from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass }    from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass }         from 'three/addons/postprocessing/OutputPass.js';
 import { SMAAPass }           from 'three/addons/postprocessing/SMAAPass.js';
+import { ShaderPass }         from 'three/addons/postprocessing/ShaderPass.js';
 
 import { UniverseSystem }       from './universe.js';
 import { LoreSystem }           from './lore.js';
@@ -40,6 +41,7 @@ import { BuildingSystem }  from './building.js';
 import { NetworkManager }  from './network.js';
 import { HelpSystem }      from './help.js';
 import { HardwareMeshContribution, formatMeshStats } from './hardware-mesh.js';
+import { VignetteShader } from './shaders.js';
 
 // ─── Game states ──────────────────────────────────────────────────────────────
 const GS = {
@@ -110,6 +112,7 @@ class Game {
     this._level    = 1;
     this._xp       = 0;
     this._xpToNext = XP_BASE;
+    this._highestGalaxy = 0;
   }
 
   // ─── Async init ─────────────────────────────────────────────────────────────
@@ -150,11 +153,15 @@ class Game {
     // ── Idle hardware mesh contribution ─────────────────────────────────────
     this._meshContrib = new HardwareMeshContribution();
     this._setupMeshContribution();
+    // Auto-connect is deferred until the player selects a class (so we use
+    // the real display name and don't create ghost sessions in the lobby).
     this._setLoad(75, 'Loading star systems…');
     this._currentSystem = this._universe.getCurrentSystem();
     this._setLoad(80, 'Generating planet…');
     const _firstPlanetSeed = this._currentSystem.planets?.[0]?.seed ?? (this._currentSystem.seed + 1337);
-    this._currentPlanet = PlanetGenerator.generate(_firstPlanetSeed, this._currentSystem.planets?.[0]?.typeOverride);
+    // isHomeworld = true for the galaxy/region/system 0/0/0 starting location
+    const _isHomeworld = this._universe._galaxyIdx === 0 && this._universe._regionIdx === 0 && this._universe._systemIdx === 0;
+    this._currentPlanet = PlanetGenerator.generate(_firstPlanetSeed, this._currentSystem.planets?.[0]?.typeOverride, { isHomeworld: _isHomeworld });
     this._setLoad(87, 'Building terrain…');
     this._setupSurface(this._currentPlanet);
     // Assign faction territories now that universe + scene are ready
@@ -204,6 +211,7 @@ class Game {
     this._renderer.setSize(window.innerWidth, window.innerHeight);
     this._renderer.shadowMap.enabled = true;
     this._renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
+    this._renderer.shadowMap.autoUpdate = true;
     this._renderer.toneMapping       = THREE.ACESFilmicToneMapping;
     this._renderer.toneMappingExposure = 1.1;
     this._renderer.outputColorSpace  = THREE.SRGBColorSpace;
@@ -217,25 +225,26 @@ class Game {
   // ─── Scene + post-processing ─────────────────────────────────────────────────
   _setupScene() {
     this._scene = new THREE.Scene();
-    this._scene.fog = new THREE.FogExp2(0x0a1020, 0.008);
+    this._scene.fog = new THREE.FogExp2(0x0a1020, 0.005);
 
     // Hemisphere light: sky → ground gradient
-    this._hemi = new THREE.HemisphereLight(0x88aacc, 0x3a3010, 0.4);
+    this._hemi = new THREE.HemisphereLight(0x88aacc, 0x3a3010, 0.6);
     this._scene.add(this._hemi);
 
     // Ambient (planet-tinted fill)
-    this._ambient = new THREE.AmbientLight(0x223344, 0.35);
+    this._ambient = new THREE.AmbientLight(0x223344, 0.45);
     this._scene.add(this._ambient);
 
     // Sun (primary key light)
     this._sun = new THREE.DirectionalLight(0xfff4e0, 1.6);
     this._sun.position.set(300, 500, 200);
     this._sun.castShadow = true;
-    this._sun.shadow.mapSize.set(2048, 2048);
+    this._sun.shadow.mapSize.set(4096, 4096);
+    this._sun.shadow.normalBias = 0.02;
     this._sun.shadow.camera.near = 0.5;
-    this._sun.shadow.camera.far  = 600;   // tighter = sharper shadows
-    this._sun.shadow.camera.left = this._sun.shadow.camera.bottom = -250;
-    this._sun.shadow.camera.right = this._sun.shadow.camera.top  =  250;
+    this._sun.shadow.camera.far  = 500;   // tighter = sharper shadows
+    this._sun.shadow.camera.left = this._sun.shadow.camera.bottom = -200;
+    this._sun.shadow.camera.right = this._sun.shadow.camera.top  =  200;
     this._sun.shadow.bias = -0.0002;
     this._scene.add(this._sun);
 
@@ -244,11 +253,17 @@ class Game {
     this._fillLight.position.set(-200, 100, -300);
     this._scene.add(this._fillLight);
 
+    // Binary star companion light (only active on binary-star systems)
+    this._sun2 = new THREE.DirectionalLight(0xffaa55, 0.0);
+    this._sun2.castShadow = false;
+    this._scene.add(this._sun2);
+    this._sun2.visible = false;
+
     // Post-processing
     this._composer = new EffectComposer(this._renderer);
     this._composer.addPass(new RenderPass(this._scene, this._camera));
     const bloomRadius = 0.5;
-    const bloomStr    = window.devicePixelRatio <= 1 ? 0.75 : 0.9;
+    const bloomStr    = window.devicePixelRatio <= 1 ? 0.65 : 0.75;
     this._bloomPass = new UnrealBloomPass(
       new THREE.Vector2(window.innerWidth, window.innerHeight),
       bloomStr, bloomRadius, 0.10
@@ -256,6 +271,11 @@ class Game {
     this._composer.addPass(this._bloomPass);
     const smaa = new SMAAPass(window.innerWidth * this._renderer.getPixelRatio(), window.innerHeight * this._renderer.getPixelRatio());
     this._composer.addPass(smaa);
+    this._vignettePass = new ShaderPass(VignetteShader);
+    this._vignettePass.uniforms.uVignetteStr.value    = 0.52;
+    this._vignettePass.uniforms.uVignetteSmooth.value = 0.32;
+    this._vignettePass.uniforms.uChromaStr.value      = 0.0020;
+    this._composer.addPass(this._vignettePass);
     this._composer.addPass(new OutputPass());
   }
 
@@ -273,28 +293,61 @@ class Game {
     this._sun.color.set(sunCol);
     this._sun.intensity = 1.6;
 
-    // Hemisphere light sky/ground colors from planet palette
-    if (this._hemi) {
-      this._hemi.color.set(planet.atmosphereColor || '#88aacc');
-      this._hemi.groundColor.set(planet.ambientColor || '#3a3010');
-      // Volcanic/burning → hot red hemisphere
-      if (planet.type === 'VOLCANIC' || planet.type === 'BURNING') {
-        this._hemi.groundColor.set('#400800');
-        this._hemi.intensity = 0.6;
-      } else if (planet.type === 'CRYSTAL' || planet.type === 'EXOTIC') {
-        this._hemi.intensity = 0.5;
-      } else {
-        this._hemi.intensity = 0.35;
+    // Per-planet hemisphere sky/ground colours for immersive lighting
+    if (this._hemi && planet) {
+      const skyC = new THREE.Color(planet.atmosphereColor || '#88aacc');
+      const gndC = new THREE.Color(planet.vegetationColor  || '#2a4a1a');
+      this._hemi.color.copy(skyC);
+      this._hemi.groundColor.copy(gndC);
+      this._hemi.intensity = 0.55;
+    }
+    // Per-planet ambient base colour
+    if (this._ambient && planet) {
+      this._ambient.color.set(planet.ambientColor || '#223344');
+      this._ambient.intensity = 0.4;
+    }
+    // Per-planet bloom tuning (immediate, before day/night loop kicks in)
+    if (this._bloomPass && planet) {
+      const emissive = planet.emissiveStrength || 0;
+      this._bloomPass.strength  = 0.55 + emissive * 0.55;
+      this._bloomPass.threshold = emissive > 0.5 ? 0.05 : 0.10;
+      this._bloomPass.radius    = 0.45 + emissive * 0.2;
+    }
+
+    // ── Inject star data from system descriptor into planet ─────────────────
+    const sys = this._universe?.getCurrentSystem?.();
+    if (sys && planet) {
+      planet.starType          = sys.starType          ?? 'G';
+      planet.starColor         = new THREE.Color(sys.starColor    ?? '#fff4e0');
+      planet.starIntensity     = sys.starIntensity     ?? 1.0;
+      planet.starAngularSize   = Math.max(0.02, Math.min(0.18, (sys.starSize ?? 1.0) * 0.04));
+      planet.hasBinarySun      = sys.hasBinary         ?? false;
+      if (sys.hasBinary && sys.binaryCompanion) {
+        planet.binarySunColor     = new THREE.Color(sys.binaryCompanion.color ?? '#ffaa55');
+        planet.binarySunIntensity = sys.binaryCompanion.intensity ?? 0.4;
+        planet.binarySunPhase     = sys.binaryCompanion.offset    ?? 2.5;
+      }
+      this._sun.color.copy(planet.starColor);
+      this._sun.intensity = planet.starIntensity * 1.2;
+    }
+
+    // Setup binary sun light
+    if (this._sun2) {
+      this._sun2.visible   = planet.hasBinarySun ?? false;
+      this._sun2.intensity = planet.hasBinarySun ? (planet.binarySunIntensity ?? 0) : 0;
+      if (planet.hasBinarySun) {
+        this._sun2.color.copy(planet.binarySunColor ?? new THREE.Color(0xffaa55));
       }
     }
 
-    // Bloom strength per planet type
-    if (this._bloomPass) {
-      const emissive = planet.emissiveStrength || 0;
-      const base = window.devicePixelRatio <= 1 ? 0.7 : 0.85;
-      this._bloomPass.strength = base + emissive * 0.6;
-      this._bloomPass.threshold = planet.type === 'VOLCANIC' ? 0.05 : 0.10;
+    // Initialise day time from planet's seeded offset
+    const dayDur = planet.dayDuration ?? 1200;
+    if (!this._dayTimeInitialisedFor || this._dayTimeInitialisedFor !== planet.seed) {
+      this._dayTime = (planet.dayTimeOffset ?? 0) * dayDur;
+      this._dayTimeInitialisedFor = planet.seed;
     }
+
+    if (this._space && sys) this._space.updateForSystem(sys);
 
     // Terrain
     this._terrain = new TerrainManager(this._scene, planet, this._sun);
@@ -335,6 +388,61 @@ class Game {
     // Physics world (re-created per planet)
     if (this._physicsWorld) this._physicsWorld.dispose(this._scene);
     this._physicsWorld = new PhysicsWorld();
+
+    // ── Spawn planet settlements (deterministic from planet seed) ────────────
+    this._spawnSettlements(planet);
+  }
+
+  _spawnSettlements(planet) {
+    if (!planet.settlements || planet.settlements.length === 0) return;
+    if (!this._npcs || !this._terrain) return;
+
+    for (const settle of planet.settlements) {
+      if (settle.npcCount === 0) {
+        // Ruins — visual only, nothing to spawn
+        continue;
+      }
+
+      const groundY = this._terrain.getHeightAt(settle.x, settle.z);
+      const basePos  = new THREE.Vector3(settle.x, groundY, settle.z);
+
+      const sizeMap = {
+        city:          'city',
+        trading_post:  'town',
+        research_base: 'village',
+        space_port:    'town',
+        mining_camp:   'camp',
+        outpost:       'camp',
+        ruins:         'camp',
+      };
+      const size = sizeMap[settle.type] || 'camp';
+
+      this._npcs.spawnSettlement(basePos, settle.faction, size);
+
+      if (this._buildings) {
+        const buildingTypes = {
+          city:          ['town_hub','power_generator','research_station','storage','farm','turret'],
+          trading_post:  ['storage','power_generator','town_hub'],
+          research_base: ['research_station','power_generator','storage'],
+          space_port:    ['power_generator','storage','town_hub'],
+          mining_camp:   ['extractor','storage','power_generator'],
+          outpost:       ['storage','power_generator'],
+        };
+        const bTypes = buildingTypes[settle.type] || ['storage'];
+        const r2 = (() => { let s=(settle.seed>>>0)||1; return ()=>{ s=(Math.imul(s,1664525)+1013904223)>>>0; return s/0x100000000; }; })();
+        for (const bt of bTypes) {
+          const angle = r2() * Math.PI * 2;
+          const dist  = 8 + r2() * 12;
+          const bx    = settle.x + Math.cos(angle) * dist;
+          const bz    = settle.z + Math.sin(angle) * dist;
+          const by    = this._terrain.getHeightAt(bx, bz);
+          const pos   = new THREE.Vector3(bx, by, bz);
+          try {
+            this._buildings.place(bt, pos, new THREE.Quaternion());
+          } catch (_) {}
+        }
+      }
+    }
   }
 
   _teardownSurface() {
@@ -366,6 +474,7 @@ class Game {
     // Apply per-planet gravity
     if (this._currentPlanet?.gravity) {
       this._player.setGravity(this._currentPlanet.gravity);
+      if (this._physicsWorld) this._physicsWorld.setGravity(this._currentPlanet.gravity);
     }
     // Spawn on terrain
     const spawnX = 0, spawnZ = 0;
@@ -426,6 +535,7 @@ class Game {
       if (e.code === 'KeyP')          this._saveGame();
       if (e.code === 'KeyO')          this._loadGame();
       if (e.code === 'KeyH') this._hud?.showHelpOverlay?.('controls');
+      if (e.code === 'KeyV' && this.state === GS.PLANET_SURFACE) this._toggleCameraMode();
       if (e.code === 'KeyB' && this.state === GS.PLANET_SURFACE) this._toggleBuildMode();
       if (e.code === 'KeyJ') this.toggleMeshContribution();
       // Quickslot 1–0
@@ -624,12 +734,20 @@ class Game {
       this._giveStarterKit(classId);
     }
 
+    // ── Build display name from class and persist it ─────────────────────────
+    const CLASS_NAMES = { runekeeper: 'Runekeeper', technomancer: 'Technomancer', voidhunter: 'Voidhunter' };
+    const displayName = CLASS_NAMES[classId] || 'Traveller';
+    localStorage.setItem('aetheria_player_name', displayName);
+
     this._hud.hideMainMenu();
     if (!this._audio.initialized) this._audio.init();
     this._audio.playAmbient(this._currentPlanet?.type || 'LUSH');
     this._setState(GS.PLANET_SURFACE);
     const canvas = document.getElementById('game-canvas');
     if (canvas) canvas.requestPointerLock();
+
+    // ── Auto-connect / rename on the primary server ───────────────────────────
+    this._autoConnect(displayName);
   }
 
   /** Hand the player their starting inventory based on chosen class. */
@@ -899,6 +1017,9 @@ class Game {
       if (sentResult?.pendingDamage > 0) {
         this._player?.takeDamage?.(sentResult.pendingDamage);
         this._hud?.flashDamage?.();
+        if (this._vignettePass) {
+          this._vignettePass.uniforms.uDamageFlash.value = 0.9;
+        }
       }
       this._hud?.setWantedLevel?.(
         this._sentinels.getWantedLevel(),
@@ -928,6 +1049,15 @@ class Game {
 
     // Network state sync (~20 Hz, throttled inside NetworkManager)
     this._syncNetworkState();
+
+    // Network HUD status refresh (~1 Hz)
+    if (Math.floor(this._elapsed) !== Math.floor(this._elapsed - dt)) {
+      if (this._network?.isConnected()) {
+        this._hud?.updateNetStatus?.(true, this._network._playerCount ?? 1, this._network.getPing());
+      } else {
+        this._hud?.updateNetStatus?.(false, 0, 0);
+      }
+    }
 
     this._composer.render();
   }
@@ -996,6 +1126,9 @@ class Game {
           if (actual > 0) {
             this._audio?.playOneShot('hit');
             this._hud.flashDamage?.();
+            if (this._vignettePass) {
+              this._vignettePass.uniforms.uDamageFlash.value = 0.9;
+            }
             this._hud.showNotification(`⚔ Attacked! −${Math.floor(actual)} HP`, 'warn', 1500);
             // Show damage number at roughly screen-centre
             this._hud.showDamageNumber(
@@ -1293,7 +1426,7 @@ class Game {
 
     // Follow camera to ship — reuse scratch vector (no allocation)
     const sp = this._ship.getPosition();
-    this._camera.position.lerp(this._sv3.copy(sp).add({ x: 0, y: 8, z: 20 }), 0.1);
+    this._camera.position.lerp(this._sv3.copy(sp).add(new THREE.Vector3(0, 8, 20)), 0.1);
     this._camera.lookAt(sp);
 
     // Transition to surface if landed
@@ -1316,7 +1449,7 @@ class Game {
     if (!this._ship) return;
     this._ship.update(dt, this._input, null);
     const sp = this._ship.getPosition();
-    this._camera.position.lerp(this._sv3.copy(sp).add({ x: 0, y: 4, z: 16 }), 0.1);
+    this._camera.position.lerp(this._sv3.copy(sp).add(new THREE.Vector3(0, 4, 16)), 0.1);
     this._camera.lookAt(sp);
 
     // Move skybox/starfield with ship
@@ -1392,12 +1525,39 @@ class Game {
   _sc4 = new THREE.Color();     // scratch color D (sky night)
   _updateDayNight(dt) {
     this._dayTime = (this._dayTime || 0) + dt;
-    const cycle = this._currentPlanet?.dayDuration || 600;
-    const t  = (this._dayTime % cycle) / cycle;
-    const sunAngle = t * Math.PI * 2;
+    const planet  = this._currentPlanet;
 
-    // Reuse scratch vector — no allocation
-    const sunDir = this._sv1.set(Math.cos(sunAngle), Math.sin(sunAngle), 0.4).normalize();
+    // Per-planet cycle: each planet has its own seeded day duration + axial tilt
+    const cycle  = planet?.dayDuration    || 1200;  // real seconds per full cycle
+    const locked = planet?.isTidallyLocked || false;
+    const tilt   = ((planet?.axialTilt    || 0) * Math.PI) / 180;  // radians
+
+    // Normalised time 0-1; tidally locked planets fix the sun at "noon"
+    const tRaw   = locked ? 0.25 : (this._dayTime % cycle) / cycle;
+
+    // ── Asymmetric day/night: use per-planet dayFraction.
+    //    Default 0.75 → ~15 min day / 5 min night on a 1200 s cycle.
+    //    Dark worlds (Toxic/Dead/Volcanic) average ~0.60; bright worlds ~0.80.
+    const DAY_FRAC   = planet?.dayFraction ?? 0.75;
+    const NIGHT_FRAC = 1.0 - DAY_FRAC;
+    let sunAngle;
+    if (tRaw < DAY_FRAC) {
+      // Day phase: sun sweeps 0 → π (horizon → horizon via zenith)
+      sunAngle = (tRaw / DAY_FRAC) * Math.PI;
+    } else {
+      // Night phase: sun sweeps π → 2π (below horizon)
+      sunAngle = Math.PI + ((tRaw - DAY_FRAC) / NIGHT_FRAC) * Math.PI;
+    }
+
+    // Apply axial tilt: rotate sun orbit plane so the arc height varies per planet
+    const cosT = Math.cos(tilt);
+    const sinT = Math.sin(tilt);
+    const sunDir = this._sv1.set(
+      Math.cos(sunAngle) * cosT,
+      Math.sin(sunAngle),
+      Math.cos(sunAngle) * sinT   // tilt shifts north/south
+    ).normalize();
+
     const playerPos = this._player?.getPosition() ?? this._sv2.set(0, 0, 0);
 
     // Shadow camera follows player for sharp local shadows
@@ -1409,34 +1569,69 @@ class Game {
     this._sun.target.position.copy(playerPos);
     this._sun.target.updateMatrixWorld();
 
-    const dayFactor = Math.max(0, sunDir.y);
-    const nightFactor = 1 - dayFactor;
+    const dayFactor    = Math.max(0, sunDir.y);
+    const nightFactor  = 1 - dayFactor;
+    const horizonWarmth = Math.max(0, 1 - Math.abs(sunDir.y) * 3);
+
+    // ── Binary companion sun (e.g. system has two stars) ─────────────────────
+    if (this._sun2 && planet?.hasBinarySun && this._sun2.visible) {
+      const phase2   = sunAngle + (planet.binarySunPhase ?? 2.5);
+      const sun2Dir  = this._sv2.set(
+        Math.cos(phase2) * cosT,
+        Math.sin(phase2),
+        Math.cos(phase2) * sinT
+      ).normalize();
+      const day2 = Math.max(0, sun2Dir.y);
+      this._sun2.position.set(
+        playerPos.x + sun2Dir.x * 280,
+        playerPos.y + Math.abs(sun2Dir.y) * 380 + 40,
+        playerPos.z + sun2Dir.z * 140
+      );
+      this._sun2.target.position.copy(playerPos);
+      this._sun2.target.updateMatrixWorld();
+      this._sun2.intensity = (planet.binarySunIntensity ?? 0.4) * (0.08 + day2 * 0.92);
+    }
 
     // Smooth ambient transitions
-    this._ambient.intensity = 0.12 + dayFactor * 0.38;
+    this._ambient.intensity = 0.10 + dayFactor * 0.40;
 
-    // Sun warmth: orange at horizon, white at zenith — reuse scratch colors
-    const horizonWarmth = Math.max(0, 1 - Math.abs(sunDir.y) * 3);
+    // Sun colour: use star type colour + horizon orange glow
+    const baseStarCol = planet?.starColor || planet?.sunColor || '#fff4e0';
     this._sun.color.lerpColors(
-      this._sc1.set(this._currentPlanet?.sunColor || '#fff4e0'),
-      this._sc2.setHex(0xff8820),
-      horizonWarmth * 0.4
+      this._sc1.set(baseStarCol),
+      this._sc2.setHex(0xff6600),
+      horizonWarmth * 0.55
     );
-    this._sun.intensity = 0.3 + dayFactor * 1.3;
+    this._sun.intensity = (planet?.starIntensity ?? 1.0) * (0.15 + dayFactor * 1.25);
 
-    // Hemisphere: sky blue at day, deep blue at night — reuse scratch colors
+    // Hemisphere: sky colour at day, deep indigo at night
     if (this._hemi) {
       this._hemi.color.lerpColors(
         this._sc3.set(this._currentPlanet?.atmosphereColor || '#88aacc'),
-        this._sc4.setHex(0x050820),
+        this._sc4.setHex(0x020510),
+        nightFactor * 0.90
+      );
+      this._hemi.groundColor.lerpColors(
+        this._sc1.set(this._currentPlanet?.vegetationColor || '#2a4a1a'),
+        this._sc2.setHex(0x050305),
         nightFactor * 0.85
       );
-      this._hemi.intensity = 0.2 + dayFactor * 0.3;
+      this._hemi.intensity = 0.25 + dayFactor * 0.35;
     }
 
-    // Fill light: blue moonlight at night
+    // Fill light: opposite to sun (sky fill at day, moonlight at night)
     if (this._fillLight) {
-      this._fillLight.intensity = nightFactor * 0.35;
+      this._fillLight.position.set(
+        playerPos.x - sunDir.x * 200,
+        playerPos.y + 150,
+        playerPos.z - sunDir.z * 150
+      );
+      this._fillLight.color.lerpColors(
+        this._sc3.setHex(0x4466aa),   // day fill: sky blue
+        this._sc4.setHex(0x1a2050),   // night fill: deep moonlight
+        nightFactor * 0.8
+      );
+      this._fillLight.intensity = 0.12 + nightFactor * 0.22;
     }
 
     // Sync terrain shader sun direction
@@ -1450,8 +1645,18 @@ class Game {
       this._bloomPass.strength = base + dayFactor * 0.4 + emissive * 0.5;
     }
 
-    // Tone mapping exposure: brighter at day
-    this._renderer.toneMappingExposure = 0.9 + dayFactor * 0.35;
+    // Decay damage flash
+    if (this._vignettePass && this._vignettePass.uniforms.uDamageFlash.value > 0) {
+      this._vignettePass.uniforms.uDamageFlash.value = Math.max(0,
+        this._vignettePass.uniforms.uDamageFlash.value - dt * 3.5
+      );
+      this._vignettePass.uniforms.uTime.value += dt;
+    }
+
+    // Tone mapping exposure: smooth S-curve through day, cinematic dusk/dawn
+    const exposureBase = 0.85 + dayFactor * 0.40;
+    const horizonBoost = horizonWarmth * 0.08;  // slight boost at sunrise/sunset
+    this._renderer.toneMappingExposure = exposureBase + horizonBoost;
 
     // Fog: thicker at night / dusk
     if (this._scene.fog) {
@@ -1568,7 +1773,7 @@ class Game {
   _saveGame(silent = false) {
     try {
       const data = {
-        version: 4,
+        version: 5,
         systemId: this._currentSystem?.id,
         planetSeed: this._currentPlanet?.seed,
         planetType: this._currentPlanet?.type,
@@ -1578,6 +1783,7 @@ class Game {
         level: this._level,
         xp: this._xp,
         xpToNext: this._xpToNext,
+        highestGalaxy: this._highestGalaxy ?? 0,
         techTree: this._techTree?.serialize(),
         quests: this._quests?.serialize(),
         status: this._status?.serialize(),
@@ -1607,6 +1813,7 @@ class Game {
       if (data.level     != null)            this._level   = data.level;
       if (data.xp        != null)            this._xp      = data.xp;
       if (data.xpToNext  != null)            this._xpToNext = data.xpToNext;
+      if (data.highestGalaxy != null) this._highestGalaxy = data.highestGalaxy;
       if (data.techTree  && this._techTree)  this._techTree.load(data.techTree);
       if (data.quests    && this._quests)    this._quests.load(data.quests);
       if (data.status    && this._status)    this._status.load(data.status);
@@ -1618,6 +1825,21 @@ class Game {
       if (data.factions  && this._factions)  this._factions.load?.(data.factions);
       if (data.trading   && this._trading)   this._trading.load?.(data.trading);
       this._hud.showNotification('💾 Game loaded', 'info', 2000);
+
+      // If called from the main menu, transition into gameplay now.
+      // This avoids the need for a separate selectClass() call (which would
+      // trigger a second _autoConnect before the first socket opens).
+      if (this.state === GS.MAIN_MENU) {
+        this._hud.hideMainMenu();
+        if (!this._audio.initialized) this._audio.init();
+        this._audio.playAmbient(this._currentPlanet?.type || 'LUSH');
+        this._setState(GS.PLANET_SURFACE);
+        const canvas = document.getElementById('game-canvas');
+        if (canvas) canvas.requestPointerLock();
+      }
+
+      // Single auto-connect with saved player name
+      this._autoConnect(this._getOrCreatePlayerName());
     } catch (e) {
       console.warn('Load failed:', e);
       this._hud.showNotification('Load failed', 'error', 2000);
@@ -1630,6 +1852,14 @@ class Game {
     } else {
       this._hud?.showNotification('Build Mode: OFF', 'info', 1500);
     }
+  }
+
+  _toggleCameraMode() {
+    if (!this._player) return;
+    const mode = this._player.toggleCameraMode();
+    this._hud?.showNotification(
+      mode === 'first' ? '👁 First-Person View' : '🎥 Third-Person View', 'info', 1500
+    );
   }
 
   // ─── Idle hardware mesh contribution ─────────────────────────────────────
@@ -1696,6 +1926,7 @@ class Game {
 
     net.onConnect(({ playerId, playerCount }) => {
       this._hud?.showNotification(`🌐 Connected — ${playerCount} player(s) online`, 'info', 3000);
+      this._hud?.updateNetStatus?.(true, playerCount, net.getPing());
       // Pass server as a mesh peer so the worker can relay to it
       if (this._meshContrib?.isEnabled() && net._serverUrl) {
         this._meshContrib.setPeers([{ id: 'server', url: net._serverUrl }]);
@@ -1703,7 +1934,8 @@ class Game {
     });
 
     net.onDisconnect(() => {
-      this._hud?.showNotification('🔌 Disconnected from server', 'warn', 3000);
+      this._hud?.showNotification('🔌 Disconnected from server — playing solo', 'warn', 3000);
+      this._hud?.updateNetStatus?.(false, 0, 0);
     });
 
     net.onChatMessage(({ name, text }) => {
@@ -1713,6 +1945,7 @@ class Game {
     net.onServerMessage(({ type, data }) => {
       if (type === 'kicked') {
         this._hud?.showNotification(`🚫 Kicked: ${data.reason || 'No reason given'}`, 'error', 6000);
+        this._hud?.updateNetStatus?.(false, 0, 0);
       }
       if (type === 'announce') {
         this._hud?.showNotification(`📢 ${data.text}`, data.severity === 'danger' ? 'error' : 'warn', 8000);
@@ -1728,11 +1961,31 @@ class Game {
     });
   }
 
-  // ─── Connect to game server (called from UI / main menu) ──────────────────
+  // ─── Connect to game server (called from selectClass / loadGame / UI) ────
+  /** Auto-connect using the page's current hostname (works for localhost and
+   *  LAN IPs alike).  If already connected, sends a rename instead.
+   */
+  _autoConnect(playerName) {
+    const host  = window.location.hostname || 'localhost';
+    const port  = window.location.port     || '8080';
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const url   = `${proto}//${host}:${port}`;
+    const name  = playerName || this._getOrCreatePlayerName();
+
+    if (this._network?.isConnected()) {
+      // Already on the server — just update our display name
+      this._network.send({ type: 'rename', name });
+    } else {
+      // First connection — small delay so the UI is fully ready
+      setTimeout(() => this.connectToServer(url, name), 600);
+    }
+  }
+
   connectToServer(serverUrl, playerName) {
     if (!serverUrl) return;
     const playerId = this._getOrCreatePlayerId();
-    this._network?.connect(serverUrl, playerName || 'Explorer', playerId);
+    const name     = playerName || this._getOrCreatePlayerName();
+    this._network?.connect(serverUrl, name, playerId);
   }
 
   _getOrCreatePlayerId() {
@@ -1742,6 +1995,10 @@ class Game {
       localStorage.setItem('aetheria_player_id', id);
     }
     return id;
+  }
+
+  _getOrCreatePlayerName() {
+    return localStorage.getItem('aetheria_player_name') || 'Traveller';
   }
 
   // ─── Send player state to network peers (called from _tickSurface) ────────

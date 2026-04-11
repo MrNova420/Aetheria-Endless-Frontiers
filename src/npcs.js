@@ -208,24 +208,148 @@ function getFactionMat(factionId) {
   return _matCache[key];
 }
 
-function buildNpcMesh(factionId) {
-  const group    = new THREE.Group();
-  const bodyMat  = new THREE.MeshStandardMaterial({ color: 0x445566, roughness: 0.7, metalness: 0.2 });
-  const headMat  = new THREE.MeshStandardMaterial({ color: 0x88aacc, roughness: 0.5, metalness: 0.1 });
+// ── Alien species definitions ──────────────────────────────────────────────
+// [bodyScaleX, bodyScaleY, bodyScaleZ, headScale, neckLen, limbScale, hasExtraArms]
+const SPECIES = [
+  { name:'humanoid',    bx:1.0, by:1.0, bz:1.0, head:1.0, neck:0.0,  limb:1.0, extra:false },
+  { name:'tall_lanky',  bx:0.7, by:1.4, bz:0.7, head:0.8, neck:0.05, limb:1.2, extra:false },
+  { name:'squat_broad', bx:1.3, by:0.8, bz:1.3, head:1.2, neck:0.0,  limb:0.9, extra:false },
+  { name:'four_armed',  bx:1.1, by:1.0, bz:1.1, head:0.9, neck:0.02, limb:0.9, extra:true  },
+];
 
-  const body = new THREE.Mesh(getBodyGeo(), bodyMat);
-  body.position.y = 0.7;
-  body.castShadow  = true;
+// Role-based outfit palettes [outfitTopH, outfitTopS, outfitTopL, bottomH, bottomS, bottomL, bootH]
+const ROLE_PALETTES = {
+  merchant:      [0.10, 0.60, 0.55,  0.10, 0.50, 0.40,  0.08],
+  guard:         [0.60, 0.35, 0.25,  0.60, 0.30, 0.20,  0.00],
+  wanderer:      [0.08, 0.30, 0.40,  0.10, 0.25, 0.30,  0.06],
+  quest_giver:   [0.55, 0.50, 0.45,  0.55, 0.45, 0.35,  0.00],
+  faction_agent: [0.75, 0.60, 0.35,  0.75, 0.55, 0.25,  0.00],
+  bounty_hunter: [0.02, 0.55, 0.25,  0.00, 0.20, 0.15,  0.00],
+  settler:       [0.12, 0.40, 0.45,  0.10, 0.35, 0.35,  0.10],
+};
 
-  const head = new THREE.Mesh(getHeadGeo(), headMat);
-  head.position.y = 1.7;
-  head.castShadow  = true;
+// Skin/chitin tone palettes (HSL)
+const SKIN_TONES = [
+  [0.07,0.40,0.55], [0.07,0.35,0.45], [0.07,0.30,0.38],
+  [0.55,0.25,0.55], [0.55,0.30,0.45], [0.65,0.35,0.40],
+  [0.35,0.30,0.45], [0.85,0.30,0.50], [0.05,0.15,0.65],
+  [0.00,0.00,0.20], [0.00,0.00,0.55], [0.00,0.00,0.75],
+];
 
-  const ring = new THREE.Mesh(getRingGeo(), getFactionMat(factionId));
+function buildNpcMesh(factionId, seed) {
+  const r    = seededRng(seed || 1);
+  const group = new THREE.Group();
+
+  // Species
+  const sp   = SPECIES[Math.floor(r() * SPECIES.length)];
+
+  // Skin tone
+  const skinT = SKIN_TONES[Math.floor(r() * SKIN_TONES.length)];
+  const skinCol = new THREE.Color().setHSL(
+    (skinT[0] + (r()-0.5)*0.04+1)%1,
+    Math.max(0, skinT[1] + (r()-0.5)*0.06),
+    Math.max(0.15, skinT[2] + (r()-0.5)*0.08)
+  );
+
+  // Role palette
+  const roleKey = ['merchant','guard','wanderer','quest_giver','faction_agent','bounty_hunter','settler'];
+  const role    = roleKey[Math.floor(r() * roleKey.length)];
+  const rp      = ROLE_PALETTES[role] || ROLE_PALETTES.wanderer;
+
+  // Outfit variation
+  const outTopCol  = new THREE.Color().setHSL((rp[0]+(r()-0.5)*0.10+1)%1, Math.min(1,rp[1]+(r()-0.5)*0.12), Math.min(0.85,rp[2]+(r()-0.5)*0.10));
+  const outBotCol  = new THREE.Color().setHSL((rp[3]+(r()-0.5)*0.08+1)%1, Math.min(1,rp[4]+(r()-0.5)*0.10), Math.min(0.85,rp[5]+(r()-0.5)*0.08));
+  const bootCol    = new THREE.Color().setHSL((rp[6]+(r()-0.5)*0.05+1)%1, 0.35+(r()-0.5)*0.10,              0.22+(r()-0.5)*0.08);
+  const beltCol    = new THREE.Color(0x4a2e10);
+  const factionCol = new THREE.Color(FACTIONS[factionId]?.color ?? '#aabbcc');
+
+  // Materials
+  const skinMat    = new THREE.MeshStandardMaterial({ color: skinCol,   roughness:0.75, metalness:0.05 });
+  const topMat     = new THREE.MeshStandardMaterial({ color: outTopCol,  roughness:0.65, metalness:0.15 });
+  const botMat     = new THREE.MeshStandardMaterial({ color: outBotCol,  roughness:0.70, metalness:0.10 });
+  const bootMat    = new THREE.MeshStandardMaterial({ color: bootCol,    roughness:0.85, metalness:0.20 });
+  const beltMat    = new THREE.MeshStandardMaterial({ color: beltCol,    roughness:0.90, metalness:0.08 });
+  const factionMat = new THREE.MeshStandardMaterial({ color: factionCol, emissive: factionCol, emissiveIntensity:0.55, roughness:0.35, metalness:0.30 });
+
+  // ── Body (torso) ──
+  const bodyGeo = new THREE.CapsuleGeometry(0.25 * sp.bx, 0.7 * sp.by, 6, 12);
+  const body    = new THREE.Mesh(bodyGeo, topMat);
+  body.position.y = 0.75 * sp.by;
+  body.scale.set(sp.bx, 1, sp.bz);
+  body.castShadow = true;
+  group.add(body);
+
+  // ── Head ──
+  const headGeo = new THREE.SphereGeometry(0.22 * sp.head, 14, 10);
+  const head    = new THREE.Mesh(headGeo, skinMat);
+  head.position.y = 1.55 * sp.by + sp.neck;
+  head.castShadow = true;
+  group.add(head);
+
+  // ── Eyes (emissive) ──
+  const eyeCol  = new THREE.Color().setHSL(r(), 0.9, 0.6);
+  const eyeMat  = new THREE.MeshStandardMaterial({ color: eyeCol, emissive: eyeCol, emissiveIntensity:1.0, roughness:0.05 });
+  for (const ex of [-0.07, 0.07]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.035*sp.head, 6, 5), eyeMat);
+    eye.position.set(ex, 1.58*sp.by + sp.neck, 0.18*sp.head);
+    group.add(eye);
+  }
+
+  // ── Hips / Pants ──
+  const hipGeo = new THREE.CylinderGeometry(0.20*sp.bx, 0.18*sp.bx, 0.22, 10);
+  const hip    = new THREE.Mesh(hipGeo, botMat);
+  hip.position.y = 0.32;
+  group.add(hip);
+
+  // ── Legs ──
+  for (const lx of [-0.10*sp.bx, 0.10*sp.bx]) {
+    const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.08,0.30*sp.by,8), botMat);
+    thigh.position.set(lx, 0.14, 0);
+    group.add(thigh);
+    const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.08,0.28*sp.by,8), botMat);
+    shin.position.set(lx, -0.16, 0);
+    group.add(shin);
+    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.14,0.10,0.22), bootMat);
+    boot.position.set(lx, -0.34, 0.04);
+    group.add(boot);
+  }
+
+  // ── Belt ──
+  const beltMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.22*sp.bx,0.22*sp.bx,0.06,12), beltMat);
+  beltMesh.position.y = 0.35;
+  group.add(beltMesh);
+
+  // ── Arms ──
+  const armAngles = sp.extra ? [-0.35,-0.15,0.15,0.35] : [-0.28,0.28];
+  for (const ax of armAngles) {
+    const sign = ax < 0 ? -1 : 1;
+    const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.065,0.28*sp.limb,8), topMat);
+    upper.position.set(sign*(0.30*sp.bx + Math.abs(ax)*0.15), 0.95*sp.by, 0);
+    upper.rotation.z = ax * 1.5;
+    group.add(upper);
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.07*sp.limb,7,6), skinMat);
+    hand.position.set(sign*(0.38*sp.bx + Math.abs(ax)*0.25), 0.70*sp.by - 0.08, 0);
+    group.add(hand);
+  }
+
+  // ── Faction insignia ring (ground level) ──
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.36*sp.bx, 0.032, 7, 28), factionMat);
   ring.rotation.x = Math.PI / 2;
-  ring.position.y = 0.05;
+  ring.position.y = 0.04;
+  group.add(ring);
 
-  group.add(body, head, ring);
+  // ── Role accessories ──
+  if (role === 'merchant' || role === 'settler') {
+    const pack = new THREE.Mesh(new THREE.BoxGeometry(0.22*sp.bx,0.28*sp.by,0.12), botMat);
+    pack.position.set(0, 0.90*sp.by, -0.22*sp.bz);
+    group.add(pack);
+  }
+  if (role === 'guard' || role === 'bounty_hunter') {
+    const holster = new THREE.Mesh(new THREE.BoxGeometry(0.06,0.18,0.04), bootMat);
+    holster.position.set(0.24*sp.bx, 0.18, 0);
+    group.add(holster);
+  }
+
   return group;
 }
 
@@ -254,12 +378,13 @@ export class NpcManager {
     const typeData = NPC_TYPES[type] ?? NPC_TYPES.wanderer;
     const resolvedFaction = factionId ?? typeData.factionAffinity ?? 'gek';
 
-    const mesh = buildNpcMesh(resolvedFaction);
+    const npcId = nextId();
+    const mesh = buildNpcMesh(resolvedFaction, (npcId * 1664525 + 1013904223) >>> 0);
     mesh.position.copy(worldPos instanceof THREE.Vector3 ? worldPos : v3(...worldPos));
     this._scene?.add(mesh);
 
     const npc = {
-      id:            nextId(),
+      id:            npcId,
       type,
       pos:           mesh.position,
       factionId:     resolvedFaction,
