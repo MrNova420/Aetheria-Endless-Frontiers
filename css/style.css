@@ -477,6 +477,27 @@ canvas { display: block; }
   box-shadow: 0 0 6px var(--col-cyan);
 }
 
+/* ── Fullscreen button ────────────────────────────────────────────────────── */
+.hud-fs-btn {
+  position: absolute;
+  top: var(--hud-pad);
+  right: calc(var(--hud-pad) + 145px);
+  background: var(--col-panel);
+  border: var(--border);
+  border-radius: var(--radius);
+  color: var(--col-text-dim);
+  font-size: 1.1rem;
+  width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  pointer-events: all;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: color 0.15s, border-color 0.15s;
+  line-height: 1;
+}
+.hud-fs-btn:hover { color: var(--col-cyan); border-color: var(--col-cyan); box-shadow: var(--glow-cyan); }
+
 /* ── Compass ─────────────────────────────────────────────────────────────── */
 .hud-compass-wrap {
   position: absolute;
