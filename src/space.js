@@ -288,9 +288,12 @@ export class SpaceScene {
 
   _clearSystem() {
     for (const m of this.planetMeshes) {
+      // Traverse to dispose all children (e.g. atmosphere glow rings) as well
+      m.traverse(c => {
+        if (c.geometry) c.geometry.dispose();
+        if (c.material) c.material.dispose();
+      });
       this.scene.remove(m);
-      m.geometry.dispose();
-      m.material.dispose();
     }
     this.planetMeshes = [];
     if (this.sunMesh) {

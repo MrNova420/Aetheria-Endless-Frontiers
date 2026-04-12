@@ -1055,7 +1055,6 @@ class Game {
     const planet = PlanetGenerator.generate(_planetSeed, sys.planets?.[0]?.typeOverride) ?? PlanetGenerator.getSystemPlanets(sys.seed, sys)[0];
     this._currentPlanet = planet;
     this._hud.hideGalaxyMap();
-    this._teardownSurface();
     this._setupSurface(planet);
     this._setupPlayer();
     this._setupShip();
@@ -1613,11 +1612,11 @@ class Game {
     if (!this._ship || !this._player) return;
     this._ship.update(dt, this._input, this._terrain);
 
-    // Follow camera behind ship in local space (so camera rotates with ship)
+    // Follow camera behind ship in local space — reuse scratch objects to avoid GC pressure
     const sp = this._ship.getPosition();
-    const behindLocal = new THREE.Vector3(0, 8, 20);
-    const behindWorld = behindLocal.applyEuler(new THREE.Euler(0, this._ship._yaw, 0));
-    this._camera.position.lerp(this._sv3.copy(sp).add(behindWorld), 0.1);
+    this._shipCamEuler.set(0, this._ship._yaw, 0);
+    this._shipCamOffset.set(0, 8, 20).applyEuler(this._shipCamEuler);
+    this._camera.position.lerp(this._sv3.copy(sp).add(this._shipCamOffset), 0.1);
     this._camera.lookAt(sp);
 
     // Transition to surface if landed
@@ -1640,10 +1639,10 @@ class Game {
     if (!this._ship) return;
     this._ship.update(dt, this._input, null);
     const sp = this._ship.getPosition();
-    // Camera follows behind ship in its local space
-    const spBehindLocal = new THREE.Vector3(0, 4, 16);
-    const spBehindWorld = spBehindLocal.applyEuler(new THREE.Euler(0, this._ship._yaw, 0));
-    this._camera.position.lerp(this._sv3.copy(sp).add(spBehindWorld), 0.1);
+    // Camera follows behind ship in its local space — reuse scratch objects to avoid GC pressure
+    this._shipCamEuler.set(0, this._ship._yaw, 0);
+    this._shipCamOffset.set(0, 4, 16).applyEuler(this._shipCamEuler);
+    this._camera.position.lerp(this._sv3.copy(sp).add(this._shipCamOffset), 0.1);
     this._camera.lookAt(sp);
 
     // Move skybox/starfield with ship
@@ -1720,6 +1719,9 @@ class Game {
   _sc2 = new THREE.Color();     // scratch color B (horizon warm)
   _sc3 = new THREE.Color();     // scratch color C (sky day)
   _sc4 = new THREE.Color();     // scratch color D (sky night)
+  // Ship follow-camera scratch objects (reused every tick to avoid GC pressure)
+  _shipCamOffset = new THREE.Vector3();
+  _shipCamEuler  = new THREE.Euler();
   _updateDayNight(dt) {
     this._dayTime = (this._dayTime || 0) + dt;
     const planet  = this._currentPlanet;
